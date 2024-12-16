@@ -36,7 +36,6 @@ jobs:
         id: build-and-push
         uses: docker/build-push-action@v4
         with:
-          context: ohif
           file: Dockerfile
           tags: |
             "${{ env.ECR }}:${{ github.ref_name }}"
