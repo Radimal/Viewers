@@ -1,4 +1,4 @@
-name: Restart Orthanc
+name: Build and Push OHIF container
 
 #on:
 #  workflow_dispatch:
@@ -15,7 +15,6 @@ on:
 #      - 'v3.9.*'
 
 env:
-  ACCOUNT_ID: 668564009563
   ECR: ${{secrets.ECR_OHIF_LOCATION}} 
   AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID_GH_ORTHANC }}
   AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY_GH_ORTHANC }}
