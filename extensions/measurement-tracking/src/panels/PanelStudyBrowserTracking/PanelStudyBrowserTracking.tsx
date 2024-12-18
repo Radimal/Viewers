@@ -134,7 +134,15 @@ export default function PanelStudyBrowserTracking({
       // current study qido
       const qidoForStudyUID = await dataSource.query.studies.search({
         studyInstanceUid: StudyInstanceUID,
-      });
+        includefield: [
+          '00081030', // Study Description
+          '00080060', // Modality
+          '00080080', // Institution Name
+          '00100030', // Patient Birthday
+          '00101040' // Patient Address
+          // Add more fields here if you want them in the result
+        ].join(',')
+      })
 
       if (!qidoForStudyUID?.length) {
         navigate('/notfoundstudy', '_self');
@@ -150,7 +158,6 @@ export default function PanelStudyBrowserTracking({
       } catch (error) {
         console.warn(error);
       }
-
       const mappedStudies = _mapDataSourceStudies(qidoStudiesForPatient);
       const actuallyMappedStudies = mappedStudies.map(qidoStudy => {
         return {
@@ -159,6 +166,8 @@ export default function PanelStudyBrowserTracking({
           description: qidoStudy.StudyDescription,
           modalities: qidoStudy.ModalitiesInStudy,
           numInstances: qidoStudy.NumInstances,
+          birthDate: qidoStudy.BirthDate,
+          institutionName: qidoStudy.InstitutionName
         };
       });
 
@@ -243,6 +252,7 @@ export default function PanelStudyBrowserTracking({
     );
 
     setDisplaySets(mappedDisplaySets);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     displaySetService.activeDisplaySets,
@@ -569,6 +579,8 @@ function _mapDataSourceStudies(studies) {
       PatientName: study.patientName,
       StudyInstanceUID: study.studyInstanceUid,
       StudyTime: study.time,
+      BirthDate: study.birthDate,
+      InstitutionName: study.institutionName
     };
   });
 }
@@ -593,7 +605,6 @@ function _mapDisplaySets(
       const imageSrc = thumbnailImageSrcMap[ds.displaySetInstanceUID];
       const componentType = _getComponentType(ds);
       const numPanes = viewportGridService.getNumViewportPanes();
-
       const array =
         componentType === 'thumbnailTracked' ? thumbnailDisplaySets : thumbnailNoImageDisplaySets;
 

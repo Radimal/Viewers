@@ -94,8 +94,8 @@ function PanelStudyBrowser({
       // current study qido
       const qidoForStudyUID = await dataSource.query.studies.search({
         studyInstanceUid: StudyInstanceUID,
+        includefield: 'all'
       });
-
       if (!qidoForStudyUID?.length) {
         navigate('/notfoundstudy', '_self');
         throw new Error('Invalid study URL');
@@ -119,6 +119,8 @@ function PanelStudyBrowser({
           description: qidoStudy.StudyDescription,
           modalities: qidoStudy.ModalitiesInStudy,
           numInstances: qidoStudy.NumInstances,
+          birthDate: qidoStudy.BirthDate,
+          institutionName: qidoStudy.InstitutionName
         };
       });
 
@@ -163,7 +165,6 @@ function PanelStudyBrowser({
       }
       // When the image arrives, render it and store the result in the thumbnailImgSrcMap
       newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(imageId);
-
       setThumbnailImageSrcMap(prevState => {
         return { ...prevState, ...newImageSrcEntry };
       });
@@ -338,6 +339,8 @@ function _mapDataSourceStudies(studies) {
       PatientName: study.patientName,
       StudyInstanceUID: study.studyInstanceUid,
       StudyTime: study.time,
+      BirthDate: study.birthDate,
+      InstitutionName: study.institutionName
     };
   });
 }
@@ -351,7 +354,6 @@ function _mapDisplaySets(displaySets, thumbnailImageSrcMap) {
     .forEach(ds => {
       const imageSrc = thumbnailImageSrcMap[ds.displaySetInstanceUID];
       const componentType = _getComponentType(ds);
-
       const array =
         componentType === 'thumbnail' ? thumbnailDisplaySets : thumbnailNoImageDisplaySets;
 
