@@ -94,7 +94,14 @@ function PanelStudyBrowser({
       // current study qido
       const qidoForStudyUID = await dataSource.query.studies.search({
         studyInstanceUid: StudyInstanceUID,
-        includefield: 'all'
+        includefield: [
+          '00081030', // Study Description
+          '00080060', // Modality
+          '00080080', // Institution Name
+          '00100030', // Patient Birthday
+          '00101040', // Patient Address
+          // Add more fields here if you want them in the result
+        ],
       });
       if (!qidoForStudyUID?.length) {
         navigate('/notfoundstudy', '_self');
@@ -107,6 +114,7 @@ function PanelStudyBrowser({
       // server can respond.
       try {
         qidoStudiesForPatient = await getStudiesForPatientByMRN(qidoForStudyUID);
+        console.warn('qidoStudiesForPatient', qidoStudiesForPatient);
       } catch (error) {
         console.warn(error);
       }
@@ -120,7 +128,7 @@ function PanelStudyBrowser({
           modalities: qidoStudy.ModalitiesInStudy,
           numInstances: qidoStudy.NumInstances,
           birthDate: qidoStudy.BirthDate,
-          institutionName: qidoStudy.InstitutionName
+          institutionName: qidoStudy.InstitutionName,
         };
       });
 
@@ -340,7 +348,7 @@ function _mapDataSourceStudies(studies) {
       StudyInstanceUID: study.studyInstanceUid,
       StudyTime: study.time,
       BirthDate: study.birthDate,
-      InstitutionName: study.institutionName
+      InstitutionName: study.institutionName,
     };
   });
 }
