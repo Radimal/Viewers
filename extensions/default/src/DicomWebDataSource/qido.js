@@ -132,7 +132,7 @@ export default function searchStudies(server, filter) {
   const options = {
     queryParams,
   };
-
+  console.log(options);
   return dicomWeb.searchForStudies(options).then(resultDataToStudies);
 }
 

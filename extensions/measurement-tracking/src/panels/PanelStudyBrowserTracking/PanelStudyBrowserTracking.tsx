@@ -134,6 +134,14 @@ export default function PanelStudyBrowserTracking({
       // current study qido
       const qidoForStudyUID = await dataSource.query.studies.search({
         studyInstanceUid: StudyInstanceUID,
+        includefield: [
+          '00081030', // Study Description
+          '00080060', // Modality
+          '00080080', // Institution Name
+          '00100030', // Patient Birthday
+          '00101040', // Patient Address
+          // Add more fields here if you want them in the result
+        ].join(','),
       });
 
       if (!qidoForStudyUID?.length) {
@@ -159,9 +167,11 @@ export default function PanelStudyBrowserTracking({
           description: qidoStudy.StudyDescription,
           modalities: qidoStudy.ModalitiesInStudy,
           numInstances: qidoStudy.NumInstances,
+          birthDate: qidoStudy.BirthDate,
+          institutionName: qidoStudy.InstitutionName,
         };
       });
-
+      console.log('actuallyMapped', actuallyMappedStudies);
       setStudyDisplayList(prevArray => {
         const ret = [...prevArray];
         for (const study of actuallyMappedStudies) {
@@ -457,11 +467,7 @@ export default function PanelStudyBrowserTracking({
           </div>
         ),
         actions: [
-          {
-            id: 'cancel',
-            text: 'Cancel',
-            type: ButtonEnums.type.secondary,
-          },
+          { id: 'cancel', text: 'Cancel', type: ButtonEnums.type.secondary },
           {
             id: 'yes',
             text: 'Yes',
@@ -530,9 +536,7 @@ export default function PanelStudyBrowserTracking({
 
 PanelStudyBrowserTracking.propTypes = {
   servicesManager: PropTypes.object.isRequired,
-  dataSource: PropTypes.shape({
-    getImageIdsForDisplaySet: PropTypes.func.isRequired,
-  }).isRequired,
+  dataSource: PropTypes.shape({ getImageIdsForDisplaySet: PropTypes.func.isRequired }).isRequired,
   getImageSrc: PropTypes.func.isRequired,
   getStudiesForPatientByMRN: PropTypes.func.isRequired,
   requestDisplaySetCreationForStudy: PropTypes.func.isRequired,
@@ -569,6 +573,8 @@ function _mapDataSourceStudies(studies) {
       PatientName: study.patientName,
       StudyInstanceUID: study.studyInstanceUid,
       StudyTime: study.time,
+      BirthDate: study.birthDate,
+      InstitutionName: study.institutionName,
     };
   });
 }
@@ -641,11 +647,7 @@ function _mapDisplaySets(
                   </div>
                 ),
                 actions: [
-                  {
-                    id: 'cancel',
-                    text: 'Cancel',
-                    type: ButtonEnums.type.secondary,
-                  },
+                  { id: 'cancel', text: 'Cancel', type: ButtonEnums.type.secondary },
                   {
                     id: 'yes',
                     text: 'Yes',
@@ -718,10 +720,7 @@ function _findTabAndStudyOfDisplaySet(displaySetInstanceUID, tabs) {
         const displaySet = displaySets[d];
 
         if (displaySet.displaySetInstanceUID === displaySetInstanceUID) {
-          return {
-            tabName: tabs[t].name,
-            StudyInstanceUID: studies[s].studyInstanceUid,
-          };
+          return { tabName: tabs[t].name, StudyInstanceUID: studies[s].studyInstanceUid };
         }
       }
     }
