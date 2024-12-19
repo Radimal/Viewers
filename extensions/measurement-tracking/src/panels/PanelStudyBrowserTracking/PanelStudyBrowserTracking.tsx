@@ -139,10 +139,10 @@ export default function PanelStudyBrowserTracking({
           '00080060', // Modality
           '00080080', // Institution Name
           '00100030', // Patient Birthday
-          '00101040' // Patient Address
+          '00101040', // Patient Address
           // Add more fields here if you want them in the result
-        ].join(',')
-      })
+        ].join(','),
+      });
 
       if (!qidoForStudyUID?.length) {
         navigate('/notfoundstudy', '_self');
@@ -167,10 +167,10 @@ export default function PanelStudyBrowserTracking({
           modalities: qidoStudy.ModalitiesInStudy,
           numInstances: qidoStudy.NumInstances,
           birthDate: qidoStudy.BirthDate,
-          institutionName: qidoStudy.InstitutionName
+          institutionName: qidoStudy.InstitutionName,
         };
       });
-
+      console.log('actuallyMapped', actuallyMappedStudies);
       setStudyDisplayList(prevArray => {
         const ret = [...prevArray];
         for (const study of actuallyMappedStudies) {
@@ -580,7 +580,7 @@ function _mapDataSourceStudies(studies) {
       StudyInstanceUID: study.studyInstanceUid,
       StudyTime: study.time,
       BirthDate: study.birthDate,
-      InstitutionName: study.institutionName
+      InstitutionName: study.institutionName,
     };
   });
 }
