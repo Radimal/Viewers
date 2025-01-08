@@ -170,7 +170,6 @@ export default function PanelStudyBrowserTracking({
           institutionName: qidoStudy.InstitutionName,
         };
       });
-      console.warn('actuallyMapped', actuallyMappedStudies);
       setStudyDisplayList(prevArray => {
         const ret = [...prevArray];
         for (const study of actuallyMappedStudies) {

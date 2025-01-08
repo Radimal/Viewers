@@ -56,7 +56,7 @@ function processResults(qidoStudies) {
       description: getString(qidoStudy['00081030']) || '',
       modalities: getString(getModalities(qidoStudy['00080060'], qidoStudy['00080061'])) || '',
       institutionName: getString(qidoStudy['00080080']),
-      birthDate: getString(qidoStudy['00100030'])
+      birthDate: getString(qidoStudy['00100030']),
     })
   );
 
@@ -134,7 +134,6 @@ export default function searchStudies(server, filter) {
   const options = {
     queryParams,
   };
-  console.log(options);
   return dicomWeb.searchForStudies(options).then(resultDataToStudies);
 }
 
@@ -155,7 +154,7 @@ function mapParams(params, options = {}) {
     '00080060', // Modality
     '00080080', // Institution Name
     '00100030', // Patient Birthday
-    '00101040' // Patient Address
+    '00101040', // Patient Address
     // Add more fields here if you want them in the result
   ].join(',');
 

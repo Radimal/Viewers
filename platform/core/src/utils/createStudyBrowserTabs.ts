@@ -65,7 +65,6 @@ export function createStudyBrowserTabs(
           return oldestPrimaryTimeStamp - studyTimeStamp < recentTimeframeMS;
         })
       : [];
-  console.log('patientStudies', patientStudies);
   // Newest first
   const _byDate = (a, b) => {
     const dateA = Date.parse(a);

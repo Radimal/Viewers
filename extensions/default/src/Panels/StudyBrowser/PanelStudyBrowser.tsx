@@ -114,7 +114,6 @@ function PanelStudyBrowser({
       // server can respond.
       try {
         qidoStudiesForPatient = await getStudiesForPatientByMRN(qidoForStudyUID);
-        console.warn('qidoStudiesForPatient', qidoStudiesForPatient);
       } catch (error) {
         console.warn(error);
       }
