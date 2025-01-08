@@ -25,9 +25,7 @@ export function createStudyBrowserTabs(
     const displaySetsForStudy = displaySets.filter(
       ds => ds.StudyInstanceUID === study.studyInstanceUid
     );
-    const tabStudy = Object.assign({}, study, {
-      displaySets: displaySetsForStudy,
-    });
+    const tabStudy = Object.assign({}, study, { displaySets: displaySetsForStudy });
 
     if (primaryStudyInstanceUIDs.includes(study.studyInstanceUid)) {
       primaryStudies.push(tabStudy);
@@ -51,7 +49,6 @@ export function createStudyBrowserTabs(
           return oldestPrimaryTimeStamp - studyTimeStamp < recentTimeframeMS;
         })
       : [];
-
   // Newest first
   const _byDate = (a, b) => {
     const dateA = Date.parse(a);
