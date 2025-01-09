@@ -61,9 +61,9 @@ module.exports = {
         active: '#2c3074',
       },
       bkg: {
-        low: '#050615',
-        med: '#090C29',
-        full: '#041C4A',
+        low: '#000000',
+        med: '#000000',
+        full: '#000000',
       },
       info: {
         primary: '#FFFFFF',
