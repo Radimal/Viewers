@@ -38,13 +38,13 @@
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 0%;
     --popover-foreground: 0 0% 98%;
-    --primary: 214 98% 60%;
+    --primary: 0 0% 73%;
     --primary-foreground: 0 0% 98%;
     --secondary: 214 66% 48%;
     --secondary-foreground: 200 50% 84%;
     --muted: 0 0% 0%;
     --muted-foreground: 211 84% 56%;
-    --accent: 217 79% 24%;
+    --accent: 0 0% 0%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
