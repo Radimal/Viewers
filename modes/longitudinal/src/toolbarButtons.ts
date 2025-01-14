@@ -205,6 +205,22 @@ const toolbarButtons: Button[] = [
       },
     },
   },
+  {
+    id: 'ExternalMonitor',
+    uiType: 'ohif.radioGroup',
+    props: {
+      icon: 'tool-monitor',
+      label: 'External Monitor',
+      commands: 'openNewWindow',
+      evaluate: [
+        'evaluate.action',
+        {
+          name: 'evaluate.viewport.supported',
+          unsupportedViewportTypes: ['video', 'wholeSlide'],
+        },
+      ],
+    },
+  },
 ];
 
 export default toolbarButtons;
