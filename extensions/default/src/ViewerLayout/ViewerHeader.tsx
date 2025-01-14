@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
@@ -21,7 +21,51 @@ function ViewerHeader({
 }: withAppTypes<{ appConfig: AppTypes.Config }>) {
   const navigate = useNavigate();
   const location = useLocation();
+  useEffect(() => {
+    const extractStudyId = searchString => {
+      const params = new URLSearchParams(searchString);
+      return params.get('StudyInstanceUIDs');
+    };
 
+    const currentStudyId = extractStudyId(location.search);
+
+    if (currentStudyId) {
+      const storedStudyId = localStorage.getItem('currentStudyId');
+      if (storedStudyId !== currentStudyId) {
+        localStorage.setItem('currentStudyId', currentStudyId);
+        console.log(currentStudyId);
+      }
+    }
+
+    const refreshTab = newStudyId => {
+      const currentStudyIdInUrl = extractStudyId(window.location.search);
+      if (currentStudyIdInUrl !== newStudyId) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('StudyInstanceUIDs', newStudyId);
+        console.log(`New study selected, navigating to: ${currentUrl.toString()}`);
+        window.location.href = currentUrl.toString();
+      }
+    };
+
+    const handleStorageChange = event => {
+      if (event.key === 'currentStudyId' && event.newValue) {
+        const newStudyId = event.newValue;
+
+        // Only refresh if the new studyId differs from the current one
+        if (newStudyId !== currentStudyId) {
+          refreshTab(newStudyId);
+        }
+      }
+    };
+
+    // Add storage event listener
+    window.addEventListener('storage', handleStorageChange);
+
+    // Cleanup function to remove the event listener
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [location.search]);
   const onClickReturnButton = () => {
     const { pathname } = location;
     const dataSourceIdx = pathname.indexOf('/', 1);

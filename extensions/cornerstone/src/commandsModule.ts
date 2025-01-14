@@ -467,6 +467,9 @@ function commandsModule({
         });
       }
     },
+    openNewWindow: () => {
+      window.open(window.location.href, '_blank');
+    },
     rotateViewport: ({ rotation }) => {
       const enabledElement = _getActiveViewportEnabledElement();
       if (!enabledElement) {
@@ -1327,6 +1330,9 @@ function commandsModule({
     },
     showDownloadViewportModal: {
       commandFn: actions.showDownloadViewportModal,
+    },
+    openNewWindow: {
+      commandFn: actions.openNewWindow,
     },
     toggleCine: {
       commandFn: actions.toggleCine,
