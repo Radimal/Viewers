@@ -29,39 +29,27 @@ function ViewerHeader({
 
     const currentStudyId = extractStudyId(location.search);
 
-    if (currentStudyId) {
-      const storedStudyId = localStorage.getItem('currentStudyId');
-      if (storedStudyId !== currentStudyId) {
-        localStorage.setItem('currentStudyId', currentStudyId);
-        console.log(currentStudyId);
-      }
-    }
-
     const refreshTab = newStudyId => {
-      const currentStudyIdInUrl = extractStudyId(window.location.search);
-      if (currentStudyIdInUrl !== newStudyId) {
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('StudyInstanceUIDs', newStudyId);
-        console.log(`New study selected, navigating to: ${currentUrl.toString()}`);
-        window.location.href = currentUrl.toString();
-      }
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('StudyInstanceUIDs', newStudyId);
+      window.location.href = currentUrl.toString();
     };
 
     const handleStorageChange = event => {
       if (event.key === 'currentStudyId' && event.newValue) {
         const newStudyId = event.newValue;
-
-        // Only refresh if the new studyId differs from the current one
-        if (newStudyId !== currentStudyId) {
+        if (currentStudyId !== newStudyId) {
           refreshTab(newStudyId);
         }
       }
     };
 
-    // Add storage event listener
+    if (currentStudyId && localStorage.getItem('currentStudyId') !== currentStudyId) {
+      localStorage.setItem('currentStudyId', currentStudyId);
+    }
+
     window.addEventListener('storage', handleStorageChange);
 
-    // Cleanup function to remove the event listener
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
