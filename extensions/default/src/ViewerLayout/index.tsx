@@ -107,6 +107,26 @@ function ViewerLayout({
     };
   }, [panelService, hasPanels]);
 
+  useEffect(() => {
+    const saveWindowData = () => {
+      const windowData = {
+        x: window.screenX,
+        y: window.screenY,
+        width: window.outerWidth,
+        height: window.outerHeight,
+      };
+      window.opener?.postMessage(windowData, 'http://localhost:8000');
+    };
+
+    window.addEventListener('resize', saveWindowData);
+    window.addEventListener('move', saveWindowData);
+
+    return () => {
+      window.removeEventListener('resize', saveWindowData);
+      window.removeEventListener('move', saveWindowData);
+    };
+  }, []);
+
   const viewportComponents = viewports.map(getViewportComponentData);
 
   return (
