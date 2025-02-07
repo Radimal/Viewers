@@ -34,7 +34,6 @@ const toggleSyncFunctions = {
   imageSlice: toggleImageSliceSync,
   voi: toggleVOISliceSync,
 };
-
 function commandsModule({
   servicesManager,
   extensionManager,
@@ -468,7 +467,40 @@ function commandsModule({
       }
     },
     openNewWindow: () => {
-      window.open(window.location.href, '_blank');
+      let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+      const existingWindow = windows.find(win => win.closed);
+
+      if (existingWindow) {
+        console.log('Restoring existing window:', existingWindow);
+        const { width, height, x, y, id, closed } = existingWindow;
+
+        const newWin = window.open(
+          window.location.href,
+          id,
+          `width=${width},height=${height},left=${x},top=${y}`
+        );
+
+        if (newWin) {
+          existingWindow.closed = false;
+          localStorage.setItem('windowData', JSON.stringify(windows));
+        }
+      } else {
+        const newId = `viewerWindow-${Date.now()}`;
+        const newWin = window.open(window.location.href, newId);
+        if (newWin) {
+          const newWindowData = {
+            id: newId,
+            x: window.screenX,
+            y: window.screenY,
+            width: window.outerWidth,
+            height: window.outerHeight,
+            closed: false,
+          };
+
+          windows.push(newWindowData);
+          localStorage.setItem('windowData', JSON.stringify(windows));
+        }
+      }
     },
     rotateViewport: ({ rotation }) => {
       const enabledElement = _getActiveViewportEnabledElement();

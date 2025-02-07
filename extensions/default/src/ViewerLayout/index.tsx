@@ -110,16 +110,48 @@ function ViewerLayout({
   useEffect(() => {
     const saveWindowData = () => {
       const windowData = {
+        id: window.name,
         x: window.screenX,
         y: window.screenY,
         width: window.outerWidth,
         height: window.outerHeight,
+        closed: false,
       };
-      window.opener?.postMessage(windowData, 'http://localhost:8000');
+      let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+
+      const index = windows.findIndex(win => win.id === windowData.id);
+
+      if (index !== -1) {
+        windows[index] = windowData;
+      } else {
+        windows.push(windowData);
+      }
+
+      localStorage.setItem('windowData', JSON.stringify(windows));
+
+      if (window.name === 'viewerWindow') {
+        let origin;
+        if (window.location.origin === 'http://localhost:3000') {
+          origin = 'http://localhost:8000';
+        } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
+          origin = 'https://radimal-vet-staging.onrender.com';
+        } else if (window.location.origin === 'https://view.radimal.ai') {
+          origin = 'vet.radimal.ai';
+        }
+        window.opener?.postMessage(windowData, origin);
+      }
     };
 
     window.addEventListener('resize', saveWindowData);
     window.addEventListener('move', saveWindowData);
+    window.addEventListener('beforeunload', () => {
+      let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+      const index = windows.findIndex(win => win.id === window.name);
+      if (index !== -1) {
+        windows[index].closed = true;
+        localStorage.setItem('windowData', JSON.stringify(windows));
+      }
+    });
 
     return () => {
       window.removeEventListener('resize', saveWindowData);
