@@ -34,6 +34,7 @@ function ViewerLayout({
   const [hasLeftPanels, setHasLeftPanels] = useState(hasPanels('left'));
   const [leftPanelClosedState, setLeftPanelClosed] = useState(leftPanelClosed);
   const [rightPanelClosedState, setRightPanelClosed] = useState(rightPanelClosed);
+  const [fade, setFade] = useState(false);
 
   /**
    * Set body classes (tailwindcss) that don't allow vertical
@@ -122,6 +123,16 @@ function ViewerLayout({
       const index = windows.findIndex(win => win.id === windowData.id);
 
       if (index !== -1) {
+        const existingData = windows[index];
+        if (
+          existingData.x === windowData.x &&
+          existingData.y === windowData.y &&
+          existingData.width === windowData.width &&
+          existingData.height === windowData.height
+        ) {
+          return;
+        }
+
         windows[index] = windowData;
       } else {
         windows.push(windowData);
@@ -142,8 +153,11 @@ function ViewerLayout({
       }
     };
 
+    saveWindowData();
+
+    const interval = setInterval(saveWindowData, 1000);
+
     window.addEventListener('resize', saveWindowData);
-    window.addEventListener('move', saveWindowData);
     window.addEventListener('beforeunload', () => {
       let windows = JSON.parse(localStorage.getItem('windowData')) || [];
       const index = windows.findIndex(win => win.id === window.name);
@@ -155,14 +169,58 @@ function ViewerLayout({
 
     return () => {
       window.removeEventListener('resize', saveWindowData);
-      window.removeEventListener('move', saveWindowData);
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const channel = new BroadcastChannel('fade_channel');
+    const handleMessage = (event: MessageEvent) => {
+      const allowedOrigins = [
+        'http://localhost:8000',
+        'https://radimal-vet-staging.onrender.com',
+        'https://vet.radimal.ai',
+      ];
+
+      if (!allowedOrigins.includes(event.origin)) return;
+
+      if (event.data && event.data.type === 'FADE') {
+        channel.postMessage(event.data);
+        setFade(event.data.value);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      channel.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const channel = new BroadcastChannel('fade_channel');
+
+    channel.onmessage = event => {
+      if (event.data.type === 'FADE') {
+        console.log('All children received fade event:', event.data);
+        setFade(event.data.value);
+      }
+    };
+
+    return () => {
+      channel.close();
     };
   }, []);
 
   const viewportComponents = viewports.map(getViewportComponentData);
 
   return (
-    <div>
+    <div
+      className={`absolute inset-0 bg-black transition-opacity duration-1000 ${
+        fade ? 'opacity-10' : 'opacity-100'
+      }`}
+    >
       <ViewerHeader
         hotkeysManager={hotkeysManager}
         extensionManager={extensionManager}
