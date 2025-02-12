@@ -174,8 +174,7 @@ function ViewerLayout({
   }, []);
 
   useEffect(() => {
-    const channel = new BroadcastChannel('fade_channel');
-    channel.postMessage(false);
+    const channel = new BroadcastChannel('window_channel');
     setFade(false);
     const handleMessage = (event: MessageEvent) => {
       const allowedOrigins = [
@@ -191,10 +190,10 @@ function ViewerLayout({
         channel.postMessage(event.data);
         setFade(event.data.value);
       } else if (event.data && event.data.type === 'CLOSE') {
+        console.log('Received close event:', event.data);
         channel.postMessage(event.data);
         window.close();
       } else {
-        channel.postMessage(false);
         setFade(false);
       }
     };
@@ -208,13 +207,14 @@ function ViewerLayout({
   }, []);
 
   useEffect(() => {
-    const channel = new BroadcastChannel('fade_channel');
+    const channel = new BroadcastChannel('window_channel');
     setFade(false);
     channel.onmessage = event => {
       if (event.data.type === 'FADE') {
         console.log('All children received fade event:', event.data);
         setFade(event.data.value);
       } else if (event.data.type === 'CLOSE') {
+        console.log('All children received close event:', event.data);
         window.close();
       }
     };
