@@ -184,7 +184,7 @@ function ViewerLayout({
       ];
 
       if (!allowedOrigins.includes(event.origin)) return;
-
+      console.log('Received message:', event.data);
       if (event.data && event.data.type === 'FADE') {
         console.log('Received fade event:', event.data);
         channel.postMessage(event.data);
@@ -214,7 +214,7 @@ function ViewerLayout({
         console.log('All children received fade event:', event.data);
         setFade(event.data.value);
       } else if (event.data.type === 'CLOSE') {
-        console.log('All children received close event:', event.data);
+        console.log('All children received fade event:', event.data);
         window.close();
       }
     };
