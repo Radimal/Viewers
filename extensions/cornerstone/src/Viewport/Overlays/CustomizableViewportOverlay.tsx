@@ -55,6 +55,26 @@ const studyDateItem = {
     formatDate(referenceInstance.StudyDate),
 };
 
+const patientNameItem = {
+  id: 'PatientName',
+  customizationType: 'ohif.overlayItem',
+  label: '',
+  title: 'Patient Name',
+  condition: ({ referenceInstance }) => referenceInstance?.PatientName,
+  contentF: ({ referenceInstance, formatters: { formatPN } }) =>
+    formatPN(referenceInstance.PatientName),
+};
+
+const physicianNameItem = {
+  id: 'ReferringPhysicianName',
+  customizationType: 'ohif.overlayItem',
+  label: '',
+  title: 'Referring Physician Name',
+  condition: ({ referenceInstance }) => referenceInstance?.ReferringPhysicianName,
+  contentF: ({ referenceInstance, formatters: { formatPN } }) =>
+    formatPN(referenceInstance.ReferringPhysicianName),
+};
+
 const seriesDescriptionItem = {
   id: 'SeriesDescription',
   customizationType: 'ohif.overlayItem',
@@ -68,7 +88,7 @@ const seriesDescriptionItem = {
 
 const topLeftItems = {
   id: 'cornerstoneOverlayTopLeft',
-  items: [studyDateItem, seriesDescriptionItem],
+  items: [studyDateItem, patientNameItem, seriesDescriptionItem, physicianNameItem],
 };
 
 const topRightItems = { id: 'cornerstoneOverlayTopRight', items: [] };
