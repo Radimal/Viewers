@@ -468,7 +468,7 @@ function commandsModule({
     },
     openNewWindow: () => {
       let windows = JSON.parse(localStorage.getItem('windowData')) || [];
-      const existingWindow = windows.find(win => win.closed);
+      const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
 
       if (existingWindow) {
         console.log('Restoring existing window:', existingWindow);
@@ -501,6 +501,18 @@ function commandsModule({
           localStorage.setItem('windowData', JSON.stringify(windows));
         }
       }
+    },
+    closeWindows: () => {
+      let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+      windows.forEach(win => {
+        const childWindow = window.open('', win.id);
+        if (childWindow) {
+          childWindow.close();
+          win.closed = true;
+        }
+      });
+      localStorage.setItem('windowData', JSON.stringify(windows));
+      window.close(); // Close the current window
     },
     rotateViewport: ({ rotation }) => {
       const enabledElement = _getActiveViewportEnabledElement();
@@ -1365,6 +1377,9 @@ function commandsModule({
     },
     openNewWindow: {
       commandFn: actions.openNewWindow,
+    },
+    closeWindows: {
+      commandFn: actions.closeWindows,
     },
     toggleCine: {
       commandFn: actions.toggleCine,
