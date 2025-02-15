@@ -110,6 +110,7 @@ import { ReactComponent as toolRotateRight } from './../../assets/icons/tool-rot
 import { ReactComponent as toolCine } from './../../assets/icons/tool-cine.svg';
 import { ReactComponent as toolCrosshair } from './../../assets/icons/tool-crosshair.svg';
 import { ReactComponent as toolMonitor } from './../../assets/icons/tool-monitor.svg';
+import { ReactComponent as closeWindow } from './../../assets/icons/window-close.svg';
 import { ReactComponent as toolProbe } from './../../assets/icons/focus-frame-target.svg';
 import { ReactComponent as toolAngle } from './../../assets/icons/tool-angle.svg';
 import { ReactComponent as toolReset } from './../../assets/icons/tool-reset.svg';
@@ -308,6 +309,7 @@ const ICONS = {
   'tool-cine': toolCine,
   'tool-crosshair': toolCrosshair,
   'tool-monitor': toolMonitor,
+  'window-close': closeWindow,
   'tool-probe': toolProbe,
   'tool-angle': toolAngle,
   'tool-reset': toolReset,
