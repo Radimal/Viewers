@@ -147,7 +147,7 @@ function ViewerLayout({
         } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
           origin = 'https://radimal-vet-staging.onrender.com';
         } else if (window.location.origin === 'https://view.radimal.ai') {
-          origin = 'vet.radimal.ai';
+          origin = 'https://vet.radimal.ai';
         }
         window.opener?.postMessage(windowData, origin);
       }
