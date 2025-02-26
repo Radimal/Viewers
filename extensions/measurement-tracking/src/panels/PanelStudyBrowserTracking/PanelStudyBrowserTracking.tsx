@@ -526,7 +526,7 @@ export default function PanelStudyBrowserTracking({
         onClickUntrack={displaySetInstanceUID => {
           onClickUntrack(displaySetInstanceUID);
         }}
-        onClickThumbnail={() => {}}
+        onClickThumbnail={onDoubleClickThumbnailHandler}
         onDoubleClickThumbnail={onDoubleClickThumbnailHandler}
         activeDisplaySetInstanceUIDs={activeViewportDisplaySetInstanceUIDs}
         showSettings={actionIcons.find(icon => icon.id === 'settings').value}
