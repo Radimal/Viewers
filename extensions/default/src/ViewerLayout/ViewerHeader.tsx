@@ -38,7 +38,7 @@ function ViewerHeader({
     const handleStorageChange = event => {
       if (event.key === 'currentStudyId' && event.newValue) {
         const newStudyId = event.newValue;
-        if (currentStudyId !== newStudyId && window.name === 'viewerWindow') {
+        if (currentStudyId !== newStudyId && !window.name.includes('secondary')) {
           refreshTab(newStudyId);
         }
       }
