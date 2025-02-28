@@ -38,13 +38,17 @@ function ViewerHeader({
     const handleStorageChange = event => {
       if (event.key === 'currentStudyId' && event.newValue) {
         const newStudyId = event.newValue;
-        if (currentStudyId !== newStudyId && !window.name.includes('secondary')) {
+        if (currentStudyId !== newStudyId && window.name === 'viewerWindow') {
           refreshTab(newStudyId);
         }
       }
     };
 
-    if (currentStudyId && localStorage.getItem('currentStudyId') !== currentStudyId) {
+    if (
+      currentStudyId &&
+      localStorage.getItem('currentStudyId') !== currentStudyId &&
+      !window.name.includes('secondary')
+    ) {
       localStorage.setItem('currentStudyId', currentStudyId);
     }
 
