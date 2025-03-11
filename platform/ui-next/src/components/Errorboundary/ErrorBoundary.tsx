@@ -65,6 +65,8 @@ Stack: ${error.stack}
         },
         duration: 0,
       });
+    } else {
+      console.error(error);
     }
   }, [error]);
 
