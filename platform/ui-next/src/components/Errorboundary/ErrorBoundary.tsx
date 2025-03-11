@@ -56,14 +56,16 @@ Stack: ${error.stack}
   };
 
   useEffect(() => {
-    toast.error(title, {
-      description: subtitle,
-      action: {
-        label: t('Show Details'),
-        onClick: () => setShowDetails(true),
-      },
-      duration: 0,
-    });
+    if (!isProduction) {
+      toast.error(title, {
+        description: subtitle,
+        action: {
+          label: t('Show Details'),
+          onClick: () => setShowDetails(true),
+        },
+        duration: 0,
+      });
+    }
   }, [error]);
 
   if (isProduction) {
