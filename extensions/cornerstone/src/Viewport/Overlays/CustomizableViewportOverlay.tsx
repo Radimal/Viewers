@@ -51,8 +51,8 @@ const studyDateItem = {
   label: '',
   title: 'Study date',
   condition: ({ referenceInstance }) => referenceInstance?.StudyDate,
-  contentF: ({ referenceInstance, formatters: { formatDate } }) =>
-    formatDate(referenceInstance.StudyDate),
+  contentF: ({ referenceInstance, formatters: { formatDate, formatTime } }) =>
+    `${formatDate(referenceInstance.StudyDate)}, ${formatTime(referenceInstance.StudyTime)}`,
 };
 
 const patientNameItem = {
