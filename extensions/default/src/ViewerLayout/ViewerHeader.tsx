@@ -21,6 +21,7 @@ function ViewerHeader({
 }: withAppTypes<{ appConfig: AppTypes.Config }>) {
   const navigate = useNavigate();
   const location = useLocation();
+
   useEffect(() => {
     const extractStudyId = searchString => {
       const params = new URLSearchParams(searchString);
@@ -133,6 +134,65 @@ function ViewerHeader({
     },
   ];
 
+  const monitorOptions = [
+    {
+      title: t('Header:Duplicate Window'),
+      icon: 'tool-monitor',
+      onClick: () => {
+        let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+        const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
+
+        if (existingWindow) {
+          console.log('Restoring existing window:', existingWindow);
+          const { width, height, x, y, id, closed } = existingWindow;
+
+          const newWin = window.open(
+            window.location.href,
+            id,
+            `width=${width},height=${height},left=${x},top=${y}`
+          );
+
+          if (newWin) {
+            existingWindow.closed = false;
+            localStorage.setItem('windowData', JSON.stringify(windows));
+          }
+        } else {
+          const newId = `viewerWindow-${Date.now()}`;
+          const newWin = window.open(window.location.href, newId);
+          if (newWin) {
+            const newWindowData = {
+              id: newId,
+              x: window.screenX,
+              y: window.screenY,
+              width: window.outerWidth,
+              height: window.outerHeight,
+              closed: false,
+            };
+
+            windows.push(newWindowData);
+            localStorage.setItem('windowData', JSON.stringify(windows));
+          }
+        }
+      },
+    },
+    {
+      title: t('Header:Close Windows'),
+      icon: 'close-windows',
+      onClick: () => {
+        let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+        windows.forEach(win => {
+          const childWindow = window.open('', win.id);
+          if (childWindow) {
+            childWindow.close();
+            win.closed = true;
+          }
+        });
+        localStorage.setItem('windowData', JSON.stringify(windows));
+        window.close();
+      },
+    },
+  ];
+
   if (appConfig.oidc) {
     menuOptions.push({
       title: t('Header:Logout'),
@@ -146,6 +206,7 @@ function ViewerHeader({
   return (
     <Header
       menuOptions={menuOptions}
+      monitorOptions={monitorOptions}
       isReturnEnabled={!!appConfig.showStudyList}
       onClickReturnButton={onClickReturnButton}
       WhiteLabeling={appConfig.whiteLabeling}

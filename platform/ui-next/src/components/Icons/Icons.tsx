@@ -2165,6 +2165,102 @@ export const Icons = {
       </g>
     </svg>
   ),
+  ToolMonitor: (props: IconProps) => (
+    <svg
+      width="24px"
+      height="24px"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <g
+        id="ToolMonitor"
+        stroke="none"
+        strokeWidth="1"
+        fill="none"
+        fillRule="evenodd"
+      >
+        <rect
+          id="Rectangle"
+          x="0"
+          y="0"
+          width="24"
+          height="24"
+        ></rect>
+        <path
+          d="M4 4h16v12H4z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+        <path
+          d="M2 20h20M12 16v4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+      </g>
+    </svg>
+  ),
+  CloseWindows: (props: IconProps) => (
+    <svg
+      width="24px"
+      height="24px"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <g
+        id="CloseWindows"
+        stroke="none"
+        strokeWidth="1"
+        fill="none"
+        fillRule="evenodd"
+      >
+        <rect
+          id="Rectangle"
+          x="0"
+          y="0"
+          width="24"
+          height="24"
+        ></rect>
+        <path
+          d="M4 4h16v12H4z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+        <path
+          d="M2 20h20M12 16v4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+        <line
+          x1="8"
+          y1="8"
+          x2="16"
+          y2="16"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></line>
+        <line
+          x1="16"
+          y1="8"
+          x2="8"
+          y2="16"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></line>
+      </g>
+    </svg>
+  ),
   Plus: (props: IconProps) => (
     <svg
       width="21"
@@ -2865,6 +2961,8 @@ export const Icons = {
   'icon-chevron-patient': (props: IconProps) => Icons.ChevronPatient(props),
   info: (props: IconProps) => Icons.Info(props),
   settings: (props: IconProps) => Icons.Settings(props),
+  'tool-monitor': (props: IconProps) => Icons.ToolMonitor(props),
+  'close-windows': (props: IconProps) => Icons.CloseWindows(props),
 
   /** Adds an icon to the set of icons */
   addIcon: (name: string, icon) => {

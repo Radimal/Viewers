@@ -21,6 +21,11 @@ interface HeaderProps {
     icon?: string;
     onClick: () => void;
   }>;
+  monitorOptions: Array<{
+    title: string;
+    icon?: string;
+    onClick: () => void;
+  }>;
   isReturnEnabled?: boolean;
   onClickReturnButton?: () => void;
   isSticky?: boolean;
@@ -34,6 +39,7 @@ interface HeaderProps {
 function Header({
   children,
   menuOptions,
+  monitorOptions,
   isReturnEnabled = true,
   onClickReturnButton,
   isSticky = false,
@@ -112,6 +118,40 @@ function Header({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          <div className="ml-2 flex-shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-primary-active hover:bg-primary-dark mt-2 h-full w-full"
+                >
+                  <Icons.ToolMonitor />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {monitorOptions.map((option, index) => {
+                  const IconComponent = option.icon
+                    ? Icons[option.icon as keyof typeof Icons]
+                    : null;
+                  return (
+                    <DropdownMenuItem
+                      key={index}
+                      onSelect={option.onClick}
+                      className="flex items-center gap-2 py-2"
+                    >
+                      {IconComponent && (
+                        <span className="flex h-4 w-4 items-center justify-center">
+                          <IconComponent className="h-full w-full" />
+                        </span>
+                      )}
+                      <span className="flex-1">{option.title}</span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>{' '}
         </div>
       </div>
     </NavBar>
