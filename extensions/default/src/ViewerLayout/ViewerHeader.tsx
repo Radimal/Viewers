@@ -23,6 +23,7 @@ function ViewerHeader({
   const location = useLocation();
 
   useEffect(() => {
+    if (window.name !== 'viewerWindow') return;
     const extractStudyId = searchString => {
       const params = new URLSearchParams(searchString);
       return params.get('StudyInstanceUIDs');
@@ -143,7 +144,6 @@ function ViewerHeader({
         const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
 
         if (existingWindow) {
-          console.log('Restoring existing window:', existingWindow);
           const { width, height, x, y, id, closed } = existingWindow;
 
           const newWin = window.open(
@@ -173,6 +173,39 @@ function ViewerHeader({
             localStorage.setItem('windowData', JSON.stringify(windows));
           }
         }
+      },
+    },
+    {
+      title: t('Header:Open Saved Windows'),
+      icon: 'open-saved-windows',
+      onClick: () => {
+        let windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
+        windows.forEach((win, index) => {
+          if (win.id === 'viewerWindow') return;
+          setTimeout(() => {
+            window.open(
+              window.location.href,
+              win.id,
+              `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
+            );
+          }, index * 200);
+        });
+      },
+    },
+    {
+      title: t('Header:Save Window(s)'),
+      icon: 'save',
+      onClick: () => {
+        let windowDataArray = [];
+        let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+        windows.forEach(win => {
+          if (win.closed) return;
+          const childWindow = window.open('', win.id);
+          if (childWindow) {
+            windowDataArray.push(win);
+          }
+        });
+        localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
       },
     },
     {

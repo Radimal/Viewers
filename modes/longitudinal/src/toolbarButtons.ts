@@ -205,47 +205,6 @@ const toolbarButtons: Button[] = [
       },
     },
   },
-  {
-    id: 'ExternalMonitor',
-    uiType: 'ohif.splitButton',
-    props: {
-      groupId: 'ExternalMonitor',
-      primary: createButton({
-        id: 'OpenNewWindow',
-        icon: 'tool-monitor',
-        label: 'External Monitor',
-        tooltip: 'Open new window',
-        commands: 'openNewWindow',
-        evaluate: [
-          'evaluate.action',
-          {
-            name: 'evaluate.viewport.supported',
-            unsupportedViewportTypes: ['video', 'wholeSlide'],
-          },
-        ],
-      }),
-      secondary: {
-        icon: 'chevron-down',
-        tooltip: 'More Options',
-      },
-      items: [
-        createButton({
-          id: 'CloseWindows',
-          icon: 'window-close',
-          label: 'Close Windows',
-          tooltip: 'Close all child windows',
-          commands: 'closeWindows',
-          evaluate: [
-            'evaluate.action',
-            {
-              name: 'evaluate.viewport.supported',
-              unsupportedViewportTypes: ['video', 'wholeSlide'],
-            },
-          ],
-        }),
-      ],
-    },
-  },
 ];
 
 export default toolbarButtons;

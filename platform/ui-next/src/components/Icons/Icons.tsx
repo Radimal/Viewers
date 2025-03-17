@@ -2946,6 +2946,95 @@ export const Icons = {
       </g>
     </svg>
   ),
+  OpenSavedWindows: (props: IconProps) => (
+    <svg
+      width="24px"
+      height="24px"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <g
+        id="OpenWindows"
+        stroke="none"
+        strokeWidth="1"
+        fill="none"
+        fillRule="evenodd"
+      >
+        <rect
+          id="Rectangle"
+          x="0"
+          y="0"
+          width="24"
+          height="24"
+        ></rect>
+        <rect
+          x="4"
+          y="4"
+          width="12"
+          height="12"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></rect>
+        <rect
+          x="8"
+          y="8"
+          width="12"
+          height="12"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></rect>
+      </g>
+    </svg>
+  ),
+  SaveWindows: (props: IconProps) => (
+    <svg
+      width="24px"
+      height="24px"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <g
+        id="SaveWindows"
+        stroke="none"
+        strokeWidth="1"
+        fill="none"
+        fillRule="evenodd"
+      >
+        <rect
+          id="Rectangle"
+          x="0"
+          y="0"
+          width="24"
+          height="24"
+        ></rect>
+        <path
+          d="M4 4h12v12H4z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+        <path
+          d="M16 4l4 4v12H4v-4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+        <path
+          d="M12 16v4M8 16h8"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        ></path>
+      </g>
+    </svg>
+  ),
 
   // Aliases
   'tab-segmentation': (props: IconProps) => Icons.TabSegmentation(props),
@@ -2963,6 +3052,9 @@ export const Icons = {
   settings: (props: IconProps) => Icons.Settings(props),
   'tool-monitor': (props: IconProps) => Icons.ToolMonitor(props),
   'close-windows': (props: IconProps) => Icons.CloseWindows(props),
+  export: (props: IconProps) => Icons.Export(props),
+  save: (props: IconProps) => Icons.SaveWindows(props),
+  'open-saved-windows': (props: IconProps) => Icons.OpenSavedWindows(props),
 
   /** Adds an icon to the set of icons */
   addIcon: (name: string, icon) => {
