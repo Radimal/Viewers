@@ -55,6 +55,16 @@ const studyDateItem = {
     `${formatDate(referenceInstance.StudyDate)}, ${formatTime(referenceInstance.StudyTime)}`,
 };
 
+const acqDateItem = {
+  id: 'AcqDate',
+  customizationType: 'ohif.overlayItem',
+  label: '',
+  title: 'Acquisition date',
+  condition: ({ referenceInstance }) => referenceInstance?.AcquisitionDate,
+  contentF: ({ referenceInstance, formatters: { formatDate, formatTime } }) =>
+    `Acq: ${formatDate(referenceInstance.AcquisitionDate)}, ${formatTime(referenceInstance.AcquisitionTime)}`,
+};
+
 const patientNameItem = {
   id: 'PatientName',
   customizationType: 'ohif.overlayItem',
@@ -114,6 +124,7 @@ const topLeftItems = {
     physicianNameItem,
     seriesDescriptionItem,
     studyDateItem,
+    acqDateItem,
   ],
 };
 
