@@ -212,15 +212,20 @@ function ViewerHeader({
       title: t('Header:Close Windows'),
       icon: 'close-windows',
       onClick: () => {
+        let windowDataArray = [];
         let windows = JSON.parse(localStorage.getItem('windowData')) || [];
         windows.forEach(win => {
+          if (win.closed) return;
           const childWindow = window.open('', win.id);
           if (childWindow) {
             childWindow.close();
             win.closed = true;
+            windowDataArray.push(win);
           }
         });
         localStorage.setItem('windowData', JSON.stringify(windows));
+        localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
+
         window.close();
       },
     },
