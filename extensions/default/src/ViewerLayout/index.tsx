@@ -164,6 +164,7 @@ function ViewerLayout({
       if (index !== -1) {
         windows[index].closed = true;
         localStorage.setItem('windowData', JSON.stringify(windows));
+        localStorage.setItem('usingViewer', 'false');
       }
     });
 
@@ -192,7 +193,22 @@ function ViewerLayout({
       } else if (event.data && event.data.type === 'CLOSE') {
         console.log('Received close event:', event.data);
         channel.postMessage(event.data);
-        window.close();
+        {
+          let windowDataArray = [];
+          let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+          windows.forEach(win => {
+            if (win.closed) return;
+            const childWindow = window.open('', win.id);
+            if (childWindow) {
+              childWindow.close();
+              win.closed = true;
+              windowDataArray.push(win);
+            }
+          });
+          localStorage.setItem('windowData', JSON.stringify(windows));
+          localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
+          window.close();
+        }
       } else {
         setFade(false);
       }
@@ -204,6 +220,33 @@ function ViewerLayout({
       window.removeEventListener('message', handleMessage);
       channel.close();
     };
+  }, []);
+
+  useEffect(() => {
+    const resetViewer = localStorage.getItem('resetViewerStorage');
+    if (!resetViewer || resetViewer !== 'false') {
+      localStorage.setItem('resetViewerStorage', 'false');
+      localStorage.removeItem('windowData');
+      localStorage.removeItem('windowsArray');
+    }
+    // on "first" load - delete all windowData + windowsArray from localStorage
+  }, []);
+
+  useEffect(() => {
+    const openSavedWindows = localStorage.getItem('openAdditionalWindowsOnStart');
+    if (!!JSON.parse(openSavedWindows) && window.name === 'viewerWindow') {
+      let windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
+      windows.forEach((win, index) => {
+        if (win.id === 'viewerWindow') return;
+        setTimeout(() => {
+          window.open(
+            window.location.href,
+            win.id,
+            `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
+          );
+        }, index * 200);
+      });
+    }
   }, []);
 
   useEffect(() => {
