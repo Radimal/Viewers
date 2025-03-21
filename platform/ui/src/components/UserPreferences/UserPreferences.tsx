@@ -3,10 +3,12 @@ import PropTypes from 'prop-types';
 import { useTranslation } from 'react-i18next';
 
 import Select from '../Select';
+import CheckBox from '../CheckBox';
 import Typography from '../Typography';
 import Button from '../Button';
 import HotkeysPreferences from '../HotkeysPreferences';
 import { ButtonEnums } from '../Button';
+import Input from '../Input';
 
 const UserPreferences = ({
   availableLanguages,
@@ -21,11 +23,16 @@ const UserPreferences = ({
   hotkeysModule,
 }) => {
   const { t } = useTranslation('UserPreferencesModal');
+  let openAdditionalWindowsOnStart = localStorage.getItem('openAdditionalWindowsOnStart');
+  if (openAdditionalWindowsOnStart) {
+    openAdditionalWindowsOnStart = JSON.parse(openAdditionalWindowsOnStart);
+  }
   const [state, setState] = useState({
     isDisabled: disabled,
     hotkeyErrors: {},
     hotkeyDefinitions,
     language: currentLanguage,
+    openAdditionalWindowsOnStart: !!openAdditionalWindowsOnStart,
   });
 
   const onSubmitHandler = () => {
@@ -50,6 +57,11 @@ const UserPreferences = ({
 
   const onLanguageChangeHandler = value => {
     setState(state => ({ ...state, language: value }));
+  };
+
+  const onWindowChangeHandler = value => {
+    setState(state => ({ ...state, openAdditionalWindowsOnStart: value }));
+    localStorage.setItem('openAdditionalWindowsOnStart', JSON.stringify(value));
   };
 
   const onHotkeysChangeHandler = (id, definition, errors) => {
@@ -95,6 +107,20 @@ const UserPreferences = ({
             options={availableLanguages}
             value={state.language}
           />
+        </div>
+      </Section>
+      <Section title={t('Additional Windows')}>
+        <div className="flex w-72 flex-row items-center justify-center">
+          <Typography
+            variant="subtitle"
+            className="mr-5 h-full text-right"
+          >
+            {t('Open Additional Windows On Start')}
+          </Typography>
+          <CheckBox
+            checked={state.openAdditionalWindowsOnStart}
+            onChange={onWindowChangeHandler}
+          ></CheckBox>
         </div>
       </Section>
       <Section title={t('Hotkeys')}>

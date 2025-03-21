@@ -193,22 +193,6 @@ function ViewerHeader({
       },
     },
     {
-      title: t('Header:Save Window(s)'),
-      icon: 'save',
-      onClick: () => {
-        let windowDataArray = [];
-        let windows = JSON.parse(localStorage.getItem('windowData')) || [];
-        windows.forEach(win => {
-          if (win.closed) return;
-          const childWindow = window.open('', win.id);
-          if (childWindow) {
-            windowDataArray.push(win);
-          }
-        });
-        localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
-      },
-    },
-    {
       title: t('Header:Close Windows'),
       icon: 'close-windows',
       onClick: () => {
@@ -225,7 +209,6 @@ function ViewerHeader({
         });
         localStorage.setItem('windowData', JSON.stringify(windows));
         localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
-
         window.close();
       },
     },
