@@ -130,25 +130,31 @@ function Header({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {monitorOptions.map((option, index) => {
-                  const IconComponent = option.icon
-                    ? Icons[option.icon as keyof typeof Icons]
-                    : null;
-                  return (
-                    <DropdownMenuItem
-                      key={index}
-                      onSelect={option.onClick}
-                      className="flex items-center gap-2 py-2"
-                    >
-                      {IconComponent && (
-                        <span className="flex h-4 w-4 items-center justify-center">
-                          <IconComponent className="h-full w-full" />
-                        </span>
-                      )}
-                      <span className="flex-1">{option.title}</span>
-                    </DropdownMenuItem>
-                  );
-                })}
+                {monitorOptions
+                  .filter(option =>
+                    option.title === 'Close Windows' && window.name !== 'viewerWindow'
+                      ? false
+                      : true
+                  )
+                  .map((option, index) => {
+                    const IconComponent = option.icon
+                      ? Icons[option.icon as keyof typeof Icons]
+                      : null;
+                    return (
+                      <DropdownMenuItem
+                        key={index}
+                        onSelect={option.onClick}
+                        className="flex items-center gap-2 py-2"
+                      >
+                        {IconComponent && (
+                          <span className="flex h-4 w-4 items-center justify-center">
+                            <IconComponent className="h-full w-full" />
+                          </span>
+                        )}
+                        <span className="flex-1">{option.title}</span>
+                      </DropdownMenuItem>
+                    );
+                  })}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>{' '}
