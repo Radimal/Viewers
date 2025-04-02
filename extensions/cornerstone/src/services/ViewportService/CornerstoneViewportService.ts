@@ -96,15 +96,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     this.viewportsById.set(viewportId, viewportInfo);
   }
 
-  private simpleHash(input: string): string {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      hash = (hash << 5) - hash + input.charCodeAt(i);
-      hash |= 0; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(36); // Convert to base36 for shorter keys
-  }
-
   public getViewportIds(): string[] {
     return Array.from(this.viewportsById.keys());
   }
@@ -471,16 +462,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
       viewportInfo,
       presentations
     );
-
-    const imageId = viewport.getCurrentImageIdIndex();
-    const localStorageKey = this.simpleHash(
-      viewportInfo.getViewportData().data[0].imageIds[imageId]
-    );
-    const updatedPresentation = localStorage.getItem(localStorageKey);
-    if (updatedPresentation) {
-      const parsedPresentation = JSON.parse(updatedPresentation);
-      viewport.setViewPresentation(parsedPresentation);
-    }
 
     // The broadcast event here ensures that listeners have a valid, up to date
     // viewport to access.  Doing it too early can result in exceptions or

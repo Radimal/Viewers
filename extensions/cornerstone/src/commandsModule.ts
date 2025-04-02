@@ -64,15 +64,6 @@ function commandsModule({
     return toolGroupService.getToolGroupForViewport(viewport.id);
   }
 
-  function simpleHash(input) {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      hash = (hash << 5) - hash + input.charCodeAt(i);
-      hash |= 0; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(36); // Convert to base36 for shorter keys
-  }
-
   const actions = {
     /**
      * Generates the selector props for the context menu, specific to
@@ -510,15 +501,6 @@ function commandsModule({
           localStorage.setItem('windowData', JSON.stringify(windows));
         }
       }
-      const enabledElement = _getActiveViewportEnabledElement();
-      if (!enabledElement) {
-        return;
-      }
-
-      const { viewport } = enabledElement;
-      const updatedViewport = JSON.parse(localStorage.getItem('viewportData'));
-      viewport.setViewPresentation(updatedViewport);
-      viewport.render();
     },
     closeWindows: () => {
       let windows = JSON.parse(localStorage.getItem('windowData')) || [];
@@ -539,6 +521,7 @@ function commandsModule({
       }
 
       const { viewport } = enabledElement;
+
       if (viewport instanceof BaseVolumeViewport) {
         const camera = viewport.getCamera();
         const rotAngle = (rotation * Math.PI) / 180;
@@ -554,8 +537,6 @@ function commandsModule({
         viewport.setViewPresentation({ rotation: newRotation });
         viewport.render();
       }
-      const localStorageKey = simpleHash(viewport.getCurrentImageId());
-      localStorage.setItem(localStorageKey, JSON.stringify(viewport.getViewPresentation()));
     },
     flipViewportHorizontal: () => {
       const enabledElement = _getActiveViewportEnabledElement();
@@ -569,8 +550,6 @@ function commandsModule({
       const { flipHorizontal } = viewport.getCamera();
       viewport.setCamera({ flipHorizontal: !flipHorizontal });
       viewport.render();
-      const localStorageKey = simpleHash(viewport.getCurrentImageId());
-      localStorage.setItem(localStorageKey, JSON.stringify(viewport.getViewPresentation()));
     },
     flipViewportVertical: () => {
       const enabledElement = _getActiveViewportEnabledElement();
@@ -584,8 +563,6 @@ function commandsModule({
       const { flipVertical } = viewport.getCamera();
       viewport.setCamera({ flipVertical: !flipVertical });
       viewport.render();
-      const localStorageKey = simpleHash(viewport.getCurrentImageId());
-      localStorage.setItem(localStorageKey, JSON.stringify(viewport.getViewPresentation()));
     },
     invertViewport: ({ element }) => {
       let enabledElement;
@@ -605,8 +582,6 @@ function commandsModule({
       const { invert } = viewport.getProperties();
       viewport.setProperties({ invert: !invert });
       viewport.render();
-      const localStorageKey = simpleHash(viewport.getCurrentImageId());
-      localStorage.setItem(localStorageKey, JSON.stringify(viewport.getViewPresentation()));
     },
     resetViewport: () => {
       const enabledElement = _getActiveViewportEnabledElement();
@@ -621,8 +596,6 @@ function commandsModule({
       viewport.resetCamera();
 
       viewport.render();
-      const localStorageKey = simpleHash(viewport.getCurrentImageId());
-      localStorage.setItem(localStorageKey, JSON.stringify(viewport.getViewPresentation()));
     },
     scaleViewport: ({ direction }) => {
       const enabledElement = _getActiveViewportEnabledElement();
@@ -642,8 +615,6 @@ function commandsModule({
           viewport.resetCamera();
           viewport.render();
         }
-        const localStorageKey = simpleHash(viewport.getCurrentImageId());
-        localStorage.setItem(localStorageKey, JSON.stringify(viewport.getViewPresentation()));
       }
     },
 
