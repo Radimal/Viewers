@@ -55,6 +55,20 @@ const moreTools = [
           ],
         }),
         createButton({
+          id: 'rotate-left',
+          icon: 'tool-rotate-left',
+          label: 'Rotate Left',
+          tooltip: 'Rotate -90',
+          commands: 'rotateViewportCCW',
+          evaluate: [
+            'evaluate.action',
+            {
+              name: 'evaluate.viewport.supported',
+              unsupportedViewportTypes: ['video'],
+            },
+          ],
+        }),
+        createButton({
           id: 'flipHorizontal',
           icon: 'tool-flip-horizontal',
           label: 'Flip Horizontal',

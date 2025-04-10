@@ -107,6 +107,7 @@ import { ReactComponent as toolMagnify } from './../../assets/icons/tool-quick-m
 import { ReactComponent as toolFlipHorizontal } from './../../assets/icons/tool-flip-horizontal.svg';
 import { ReactComponent as toolInvert } from './../../assets/icons/tool-invert.svg';
 import { ReactComponent as toolRotateRight } from './../../assets/icons/tool-rotate-right.svg';
+import { ReactComponent as toolRotateLeft } from './../../assets/icons/tool-rotate-left.svg';
 import { ReactComponent as toolCine } from './../../assets/icons/tool-cine.svg';
 import { ReactComponent as toolCrosshair } from './../../assets/icons/tool-crosshair.svg';
 import { ReactComponent as toolMonitor } from './../../assets/icons/tool-monitor.svg';
@@ -306,6 +307,7 @@ const ICONS = {
   'tool-flip-horizontal': toolFlipHorizontal,
   'tool-invert': toolInvert,
   'tool-rotate-right': toolRotateRight,
+  'tool-rotate-left': toolRotateLeft,
   'tool-cine': toolCine,
   'tool-crosshair': toolCrosshair,
   'tool-monitor': toolMonitor,

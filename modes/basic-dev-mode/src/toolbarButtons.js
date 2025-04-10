@@ -213,6 +213,19 @@ const toolbarButtons: Button[] = [
         ],
         evaluate: 'evaluate.action',
       }),
+            ToolbarService.createButton({
+        id: 'RotateLeft',
+        icon: 'tool-rotate-left',
+        label: 'Rotate Left',
+        tooltip: 'Rotate Left -90',
+        commands: [
+          {
+            commandName: 'rotateViewportCCW',
+            context: 'CORNERSTONE',
+          },
+        ],
+        evaluate: 'evaluate.action',
+      }),
       ToolbarService.createButton({
         id: 'FlipHorizontal',
         icon: 'tool-flip-horizontal',
