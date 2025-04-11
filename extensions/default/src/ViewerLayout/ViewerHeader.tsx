@@ -23,7 +23,6 @@ function ViewerHeader({
   const location = useLocation();
 
   useEffect(() => {
-    if (window.name !== 'viewerWindow') return;
     const extractStudyId = searchString => {
       const params = new URLSearchParams(searchString);
       return params.get('StudyInstanceUIDs');
@@ -38,9 +37,10 @@ function ViewerHeader({
     };
 
     const handleStorageChange = event => {
+      console.log('Changing study', event);
       if (event.key === 'currentStudyId' && event.newValue) {
         const newStudyId = event.newValue;
-        if (currentStudyId !== newStudyId && window.name === 'viewerWindow') {
+        if (currentStudyId !== newStudyId) {
           refreshTab(newStudyId);
         }
       }
