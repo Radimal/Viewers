@@ -49,7 +49,7 @@ function ViewerHeader({
     if (
       currentStudyId &&
       localStorage.getItem('currentStudyId') !== currentStudyId &&
-      !window.name.includes('secondary')
+      window.name == 'viewerWindow'
     ) {
       localStorage.setItem('currentStudyId', currentStudyId);
     }
