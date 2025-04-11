@@ -20,11 +20,16 @@ export function createStudyBrowserTabs(
 ) {
   const primaryStudies = [];
   const allStudies = [];
+  const patientStudies = [];
 
   studyDisplayList.forEach(study => {
-    const displaySetsForStudy = displaySets.filter(
-      ds => ds.StudyInstanceUID === study.studyInstanceUid
-    );
+    const displaySetsForStudy = displaySets
+      .filter(ds => ds.StudyInstanceUID === study.studyInstanceUid)
+      .map(ds => ({
+        ...ds,
+        birthDate: study.birthDate,
+        institutionName: study.institutionName,
+      }));
     const tabStudy = Object.assign({}, study, { displaySets: displaySetsForStudy });
 
     if (primaryStudyInstanceUIDs.includes(study.studyInstanceUid)) {
@@ -33,13 +38,22 @@ export function createStudyBrowserTabs(
     allStudies.push(tabStudy);
   });
 
+  allStudies.forEach(study => {
+    if (
+      primaryStudies.some(
+        p => study.institutionName === p.institutionName && study.birthDate === p.birthDate
+      )
+    )
+      patientStudies.push(study);
+  });
+
   const primaryStudiesTimestamps = primaryStudies
     .filter(study => study.date)
     .map(study => new Date(study.date).getTime());
 
   const recentStudies =
     primaryStudiesTimestamps.length > 0
-      ? allStudies.filter(study => {
+      ? patientStudies.filter(study => {
           const oldestPrimaryTimeStamp = Math.min(...primaryStudiesTimestamps);
 
           if (!study.date) {
@@ -70,7 +84,7 @@ export function createStudyBrowserTabs(
     {
       name: 'all',
       label: 'All',
-      studies: allStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: patientStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
     },
   ];
 
