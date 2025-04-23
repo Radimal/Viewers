@@ -174,6 +174,8 @@ export default function getCustomizationModule({ servicesManager, extensionManag
                 const aNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
                 const bNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
                 return aNum - bNum;
+              },
+            },
             {
               label: 'Series Number',
               sortFunction: (a, b) => {
