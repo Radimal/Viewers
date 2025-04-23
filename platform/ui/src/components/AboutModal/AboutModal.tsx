@@ -58,6 +58,7 @@ const Row = ({ title, value, link }) => {
 };
 
 const AboutModal = ({ buildNumber, versionNumber, commitHash }) => {
+  const radimalVersion = `${versionNumber} + Radimalv3.10.0`;
   const { os, version, name } = detect();
   const browser = `${name[0].toUpperCase()}${name.substr(1)} ${version}`;
   const { t } = useTranslation('AboutModal');
@@ -120,7 +121,7 @@ const AboutModal = ({ buildNumber, versionNumber, commitHash }) => {
         /> */}
         <Row
           title={t('Version number')}
-          value={versionNumber}
+          value={radimalVersion}
         />
         {buildNumber && (
           <Row
