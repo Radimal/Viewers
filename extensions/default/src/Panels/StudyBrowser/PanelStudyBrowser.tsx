@@ -360,6 +360,11 @@ function _mapDisplaySets(displaySets, thumbnailImageSrcMap) {
 
   displaySets
     .filter(ds => !ds.excludeFromThumbnailBrowser)
+    .sort((a, b) => {
+      const aNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
+      const bNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
+      return aNum - bNum;
+    })
     .forEach(ds => {
       const imageSrc = thumbnailImageSrcMap[ds.displaySetInstanceUID];
       const componentType = _getComponentType(ds);

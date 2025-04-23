@@ -169,6 +169,12 @@ export default function getCustomizationModule({ servicesManager, extensionManag
           id: 'studyBrowser.sortFunctions',
           values: [
             {
+              label: 'Instance Number',
+              sortFunction: (a, b) => {
+                const aNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
+                const bNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
+                return aNum - bNum;
+            {
               label: 'Series Number',
               sortFunction: (a, b) => {
                 return a?.SeriesNumber - b?.SeriesNumber;
