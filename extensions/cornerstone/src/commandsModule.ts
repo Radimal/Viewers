@@ -288,6 +288,18 @@ function commandsModule({
       viewports.forEach((_, index) => cineService.setCine({ id: index, isPlaying: false }));
     },
 
+    /**
+     * Toggle viewport overlay (the information panel shown on the four corners
+     * of the viewport)
+     * @see ViewportOverlay and CustomizableViewportOverlay components
+     */
+    toggleOverlays: () => {
+      const overlays = document.getElementsByClassName('viewport-overlay');
+      for (let i = 0; i < overlays.length; i++) {
+        overlays.item(i).classList.toggle('hidden');
+      }
+    },
+
     setViewportWindowLevel({ viewportId, window, level }) {
       // convert to numbers
       const windowWidthNum = Number(window);
@@ -1383,6 +1395,9 @@ function commandsModule({
     },
     toggleCine: {
       commandFn: actions.toggleCine,
+    },
+    toggleOverlays: {
+      commandFn: actions.toggleOverlays,
     },
     arrowTextCallback: {
       commandFn: actions.arrowTextCallback,

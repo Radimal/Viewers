@@ -59,6 +59,11 @@ const bindings = [
     keys: ['c'],
   },
   {
+    commandName: 'toggleOverlays',
+    label: 'Overlays',
+    keys: ['o'],
+  },
+  {
     commandName: 'invertViewport',
     label: 'Invert',
     keys: ['i'],

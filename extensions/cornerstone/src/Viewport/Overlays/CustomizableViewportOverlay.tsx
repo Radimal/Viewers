@@ -110,9 +110,14 @@ const seriesDescriptionItem = {
   label: '',
   title: 'Series description',
   condition: ({ referenceInstance }) => {
-    return referenceInstance && referenceInstance.SeriesDescription;
+    return (
+      referenceInstance &&
+      (referenceInstance.BodyPartExamined || referenceInstance.SeriesDescription)
+    );
   },
-  contentF: ({ referenceInstance }) => referenceInstance.SeriesDescription,
+  contentF: ({ referenceInstance }) => {
+    return referenceInstance.BodyPartExamined || referenceInstance.SeriesDescription;
+  },
 };
 
 const topLeftItems = {
