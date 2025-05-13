@@ -26,37 +26,25 @@ if ('function' === typeof importScripts) {
     // Add an event listener to detect when the registered
     // service worker has installed but is waiting to activate.
     wb.addEventListener('waiting', event => {
-      // customize the UI prompt accordingly.
-      const isFirstTimeUpdatedServiceWorkerIsWaiting = event.wasWaitingBeforeRegister === false;
-      console.log(
-        'isFirstTimeUpdatedServiceWorkerIsWaiting',
-        isFirstTimeUpdatedServiceWorkerIsWaiting
-      );
-
-      // Assumes your app has some sort of prompt UI element
-      // that a user can either accept or reject.
-      // const prompt = createUIPrompt({
-      //  onAccept: async () => {
-      // Assuming the user accepted the update, set up a listener
-      // that will reload the page as soon as the previously waiting
-      // service worker has taken control.
-      wb.addEventListener('controlling', event => {
-        window.location.reload();
-      });
-
-      // Send a message telling the service worker to skip waiting.
-      // This will trigger the `controlling` event handler above.
-      // Note: for this to work, you have to add a message
-      // listener in your service worker. See below.
+      // Automatically activate the new service worker
       wb.messageSW({ type: 'SKIP_WAITING' });
-      // },
-
-      // onReject: () => {
-      //   prompt.dismiss();
-      // },
-      // });
     });
 
-    wb.register();
+    // Add an event listener to detect when the new service worker
+    // has taken control and reload the page
+    wb.addEventListener('controlling', event => {
+      window.location.reload();
+    });
+
+    // Register the service worker
+    wb.register().then(registration => {
+      // Check for updates every hour
+      setInterval(
+        () => {
+          registration.update();
+        },
+        60 * 60 * 1000
+      );
+    });
   }
 }

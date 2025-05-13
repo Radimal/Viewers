@@ -7,6 +7,11 @@ navigator.serviceWorker.getRegistrations().then(function (registrations) {
 // https://developers.google.com/web/tools/workbox/guides/troubleshoot-and-debug
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/5.0.0-beta.1/workbox-sw.js');
 
+// Add version-based cache busting
+const CACHE_VERSION = new Date().toISOString().split('T')[0]; // Use date as version
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const FONTS_CACHE = `fonts-${CACHE_VERSION}`;
+
 // Install newest
 // https://developers.google.com/web/tools/workbox/modules/workbox-core
 workbox.core.skipWaiting();
@@ -15,8 +20,14 @@ workbox.core.clientsClaim();
 // Cache static assets that aren't precached
 workbox.routing.registerRoute(
   /\.(?:js|css|json5)$/,
-  new workbox.strategies.StaleWhileRevalidate({
-    cacheName: 'static-resources',
+  new workbox.strategies.NetworkFirst({
+    cacheName: STATIC_CACHE,
+    plugins: [
+      new workbox.expiration.ExpirationPlugin({
+        maxEntries: 50,
+        maxAgeSeconds: 24 * 60 * 60, // 24 hours
+      }),
+    ],
   })
 );
 
@@ -24,7 +35,7 @@ workbox.routing.registerRoute(
 workbox.routing.registerRoute(
   /^https:\/\/fonts\.googleapis\.com/,
   new workbox.strategies.StaleWhileRevalidate({
-    cacheName: 'google-fonts-stylesheets',
+    cacheName: FONTS_CACHE,
   })
 );
 
@@ -32,7 +43,7 @@ workbox.routing.registerRoute(
 workbox.routing.registerRoute(
   /^https:\/\/fonts\.gstatic\.com/,
   new workbox.strategies.CacheFirst({
-    cacheName: 'google-fonts-webfonts',
+    cacheName: FONTS_CACHE,
     plugins: [
       new workbox.cacheableResponse.CacheableResponsePlugin({
         statuses: [0, 200],
@@ -48,20 +59,27 @@ workbox.routing.registerRoute(
 // MESSAGE HANDLER
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
-    switch (event.data.type) {
-      case 'SKIP_WAITING':
-        // TODO: We'll eventually want this to be user prompted
-        // workbox.core.skipWaiting();
-        // workbox.core.clientsClaim();
-        // TODO: Global notification to indicate incoming reload
-        break;
-
-      default:
-        console.warn(`SW: Invalid message type: ${event.data.type}`);
-    }
+    self.skipWaiting();
+    self.clients.claim();
   }
 });
 
+// Clear old caches on activation
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (!cacheName.startsWith(CACHE_VERSION)) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+});
+
+// Use the manifest for precaching
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
 
 // TODO: Cache API
