@@ -231,38 +231,70 @@ class ImageOverlayViewerTool extends AnnotationDisplayTool {
    * @returns
    */
   private _renderOverlayToDataUrl({ width, height }, color, pixelDataRaw) {
-    const pixelDataView = new DataView(pixelDataRaw);
-    const totalBits = width * height;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, width, height); // make it transparent
-    ctx.globalCompositeOperation = 'copy';
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    for (let i = 0, bitIdx = 0, byteIdx = 0; i < totalBits; i++) {
-      if (pixelDataView.getUint8(byteIdx) & (1 << bitIdx)) {
-        data[i * 4] = color[0];
-        data[i * 4 + 1] = color[1];
-        data[i * 4 + 2] = color[2];
-        data[i * 4 + 3] = color[3];
+    try {
+      // Validate input parameters
+      if (!width || !height || !color || !pixelDataRaw) {
+        console.warn('Invalid overlay parameters:', {
+          width,
+          height,
+          hasColor: !!color,
+          hasData: !!pixelDataRaw,
+        });
+        return null;
       }
 
-      // next bit, byte
-      if (bitIdx >= 7) {
-        bitIdx = 0;
-        byteIdx++;
-      } else {
-        bitIdx++;
+      // Calculate expected buffer size and validate
+      const totalBits = width * height;
+      const expectedBytes = Math.ceil(totalBits / 8);
+
+      if (pixelDataRaw.byteLength < expectedBytes) {
+        return null;
       }
+
+      const pixelDataView = new DataView(pixelDataRaw);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'copy';
+
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      // Process data with bounds checking
+      for (let i = 0, bitIdx = 0, byteIdx = 0; i < totalBits; i++) {
+        // Check if we're still within bounds
+        if (byteIdx >= pixelDataRaw.byteLength) {
+          break;
+        }
+
+        if (pixelDataView.getUint8(byteIdx) & (1 << bitIdx)) {
+          const pixelIndex = i * 4;
+          if (pixelIndex + 3 < data.length) {
+            data[pixelIndex] = color[0];
+            data[pixelIndex + 1] = color[1];
+            data[pixelIndex + 2] = color[2];
+            data[pixelIndex + 3] = color[3];
+          }
+        }
+
+        // next bit, byte
+        if (bitIdx >= 7) {
+          bitIdx = 0;
+          byteIdx++;
+        } else {
+          bitIdx++;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      return canvas.toDataURL();
+    } catch (error) {
+      console.warn('Error rendering overlay:', error);
+      return null;
     }
-    ctx.putImageData(imageData, 0, 0);
-
-    return canvas.toDataURL();
   }
 }
 
