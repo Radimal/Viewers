@@ -651,20 +651,25 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     if (!presentations.lutPresentation?.properties) {
       const { voi, voiInverted, colormap } = displaySetOptions[0];
       if (isXray) {
-        console.log('📋 Setting X-ray specific VOI range');
-        const imageId = (viewportData as StackViewportData).data?.[0]?.imageIds?.[0];
-        if (imageId) {
-          const estimatedVOI = await this.estimateVOIFromImageId(imageId);
-          console.log('✅ Applying estimated VOI:', estimatedVOI);
-          const xrayVOI = {
-            windowCenter: estimatedVOI.windowCenter,
-            windowWidth: estimatedVOI.windowWidth,
-          };
-          const { lower, upper } = csUtils.windowLevel.toLowHighRange(
-            xrayVOI.windowWidth,
-            xrayVOI.windowCenter
-          );
-          properties.voiRange = { lower, upper };
+        const firstImage = displaySet.images?.[0];
+
+        const hasPredefinedVOI =
+          firstImage?.WindowCenter != null && firstImage?.WindowWidth != null;
+
+        if (!hasPredefinedVOI) {
+          const imageId = (viewportData as StackViewportData).data?.[0]?.imageIds?.[0];
+          if (imageId) {
+            const estimatedVOI = await this.estimateVOIFromImageId(imageId);
+            const xrayVOI = {
+              windowCenter: estimatedVOI.windowCenter,
+              windowWidth: estimatedVOI.windowWidth,
+            };
+            const { lower, upper } = csUtils.windowLevel.toLowHighRange(
+              xrayVOI.windowWidth,
+              xrayVOI.windowCenter
+            );
+            properties.voiRange = { lower, upper };
+          }
         }
       } else if (voi && (voi.windowWidth || voi.windowCenter)) {
         const { lower, upper } = csUtils.windowLevel.toLowHighRange(
