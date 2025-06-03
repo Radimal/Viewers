@@ -9,6 +9,7 @@ import {
   VolumeViewport,
   VolumeViewport3D,
   cache,
+  imageLoader,
   Enums as csEnums,
   BaseVolumeViewport,
 } from '@cornerstonejs/core';
@@ -94,6 +95,38 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     const viewportInfo = new ViewportInfo(viewportId);
     viewportInfo.setElement(elementRef);
     this.viewportsById.set(viewportId, viewportInfo);
+  }
+
+  public async estimateVOIFromImageId(imageId: string) {
+    let image = cache.getImage(imageId);
+
+    if (!image) {
+      image = await imageLoader.loadImage(imageId);
+    }
+
+    const pixelData = image.getPixelData();
+
+    if (!pixelData?.length) {
+      console.warn('No pixel data found for', imageId);
+      return null;
+    }
+
+    const sorted = Array.from(pixelData).sort((a, b) => a - b);
+    const lowIdx = Math.floor(sorted.length * 0.02);
+    const highIdx = Math.ceil(sorted.length * 0.98);
+
+    const lower = sorted[lowIdx];
+    const upper = sorted[highIdx];
+
+    const windowCenter = (lower + upper) / 2;
+    const windowWidth = upper - lower;
+
+    return {
+      windowCenter,
+      windowWidth,
+      lower,
+      upper,
+    };
   }
 
   public getViewportIds(): string[] {
@@ -589,9 +622,12 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     presentations: Presentations = {}
   ): Promise<void> {
     const displaySetOptions = viewportInfo.getDisplaySetOptions();
-
+    const { displaySetService } = this.servicesManager.services;
+    const displaySet = displaySetService.getDisplaySetByUID(
+      viewportData.data[0].displaySetInstanceUID
+    );
     const displaySetInstanceUIDs = viewportData.data.map(data => data.displaySetInstanceUID);
-
+    const isXray = displaySet?.Modality === 'CR' || displaySet?.Modality === 'DX';
     // based on the cache service construct always the first one is the non-overlay
     // and the rest are overlays
 
@@ -614,12 +650,33 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     const properties = { ...presentations.lutPresentation?.properties };
     if (!presentations.lutPresentation?.properties) {
       const { voi, voiInverted, colormap } = displaySetOptions[0];
-      if (voi && (voi.windowWidth || voi.windowCenter)) {
+      if (isXray) {
+        console.log('📋 Setting X-ray specific VOI range');
+        const imageId = (viewportData as StackViewportData).data?.[0]?.imageIds?.[0];
+        if (imageId) {
+          const estimatedVOI = await this.estimateVOIFromImageId(imageId);
+          console.log('✅ Applying estimated VOI:', estimatedVOI);
+          const xrayVOI = {
+            windowCenter: estimatedVOI.windowCenter,
+            windowWidth: estimatedVOI.windowWidth,
+          };
+          const { lower, upper } = csUtils.windowLevel.toLowHighRange(
+            xrayVOI.windowWidth,
+            xrayVOI.windowCenter
+          );
+          properties.voiRange = { lower, upper };
+        }
+      } else if (voi && (voi.windowWidth || voi.windowCenter)) {
         const { lower, upper } = csUtils.windowLevel.toLowHighRange(
           voi.windowWidth,
           voi.windowCenter
         );
         properties.voiRange = { lower, upper };
+        console.log('🎯 Initial Window/Level:', {
+          width: voi.windowWidth,
+          center: voi.windowCenter,
+          range: { lower, upper },
+        });
       }
 
       properties.invert = voiInverted ?? properties.invert;
@@ -642,6 +699,11 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
 
     return viewport.setStack(imageIdsToSet, initialImageIndexToUse).then(() => {
       viewport.setProperties({ ...properties });
+      console.log('📸 Stack Viewport Properties Set:', {
+        viewportId: viewport.id,
+        properties: viewport.getProperties(),
+        timestamp: new Date().toISOString(),
+      });
       this.setPresentations(viewport.id, presentations, viewportInfo);
       if (displayArea) {
         viewport.setDisplayArea(displayArea);
