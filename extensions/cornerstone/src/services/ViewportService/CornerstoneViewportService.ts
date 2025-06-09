@@ -240,8 +240,25 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
       | Types.IStackViewport
       | Types.IVolumeViewport;
 
-    if (!viewport || !presentations) {
+    if (!viewport) {
+      console.warn('No viewport found for:', viewportId);
       return;
+    }
+
+    const presentationIds = this.getPresentationIds(viewportId);
+    const lutStore = useLutPresentationStore.getState();
+    const positionStore = usePositionPresentationStore.getState();
+
+    if (!presentations.lutPresentation) {
+      presentations.lutPresentation = presentationIds?.lutPresentationId
+        ? lutStore.lutPresentationStore[presentationIds.lutPresentationId]
+        : undefined;
+    }
+
+    if (!presentations.positionPresentation) {
+      presentations.positionPresentation = presentationIds?.positionPresentationId
+        ? positionStore[presentationIds.positionPresentationId]
+        : undefined;
     }
 
     const { lutPresentation, positionPresentation, segmentationPresentation } = presentations;
@@ -264,7 +281,13 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
    * @param viewportId The ID of the viewport.
    */
   public storePresentation({ viewportId }) {
+    const viewport = this.getCornerstoneViewport(viewportId);
+    if (!viewport) return;
+
     const presentationIds = this.getPresentationIds(viewportId);
+    const positionPresentation = this._getPositionPresentation(viewportId);
+    const lutPresentation = this._getLutPresentation(viewportId);
+    const segmentationPresentation = this._getSegmentationPresentation(viewportId);
     const { syncGroupService } = this.servicesManager.services;
     const synchronizers = syncGroupService.getSynchronizersForViewport(viewportId);
 
@@ -275,20 +298,18 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     const { lutPresentationId, positionPresentationId, segmentationPresentationId } =
       presentationIds;
 
-    const positionPresentation = this._getPositionPresentation(viewportId);
-    const lutPresentation = this._getLutPresentation(viewportId);
-    const segmentationPresentation = this._getSegmentationPresentation(viewportId);
-
     const { setLutPresentation } = useLutPresentationStore.getState();
     const { setPositionPresentation } = usePositionPresentationStore.getState();
     const { setSynchronizers } = useSynchronizersStore.getState();
     const { setSegmentationPresentation } = useSegmentationPresentationStore.getState();
 
     if (lutPresentationId) {
+      const { setLutPresentation } = useLutPresentationStore.getState();
       setLutPresentation(lutPresentationId, lutPresentation);
     }
 
     if (positionPresentationId) {
+      const { setPositionPresentation } = usePositionPresentationStore.getState();
       setPositionPresentation(positionPresentationId, positionPresentation);
     }
 
@@ -341,11 +362,17 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     }
 
     const viewportInfo = this.viewportsById.get(viewportId);
+    const camera = csViewport.getCamera();
 
     return {
       viewportType: viewportInfo.getViewportType(),
       viewReference: csViewport instanceof VolumeViewport3D ? null : csViewport.getViewReference(),
-      viewPresentation: csViewport.getViewPresentation({ pan: true, zoom: true }),
+      viewPresentation: {
+        ...csViewport.getViewPresentation({ pan: true, zoom: true }),
+        rotation: camera.rotation || 0,
+        flipHorizontal: camera.flipHorizontal || false,
+        flipVertical: camera.flipVertical || false,
+      },
       viewportId,
     };
   }
@@ -411,7 +438,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     presentations?: Presentations
   ): void {
     const renderingEngine = this.getRenderingEngine();
-
     // if not valid viewportData then return early
     if (viewportData.viewportType === csEnums.ViewportType.STACK) {
       // check if imageIds is valid
@@ -489,17 +515,19 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     this.viewportsById.set(viewportId, viewportInfo);
 
     const viewport = renderingEngine.getViewport(viewportId);
+    const currentPresentations = this.getPresentations(viewportId);
     const displaySetPromise = this._setDisplaySets(
       viewport,
       viewportData,
       viewportInfo,
-      presentations
+      presentations || currentPresentations
     );
 
     // The broadcast event here ensures that listeners have a valid, up to date
     // viewport to access.  Doing it too early can result in exceptions or
     // invalid data.
     displaySetPromise.then(() => {
+      this.storePresentation({ viewportId });
       this._broadcastEvent(this.EVENTS.VIEWPORT_DATA_CHANGED, {
         viewportData,
         viewportId,
@@ -677,11 +705,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
           voi.windowCenter
         );
         properties.voiRange = { lower, upper };
-        console.log('🎯 Initial Window/Level:', {
-          width: voi.windowWidth,
-          center: voi.windowCenter,
-          range: { lower, upper },
-        });
       }
 
       properties.invert = voiInverted ?? properties.invert;
@@ -704,11 +727,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
 
     return viewport.setStack(imageIdsToSet, initialImageIndexToUse).then(() => {
       viewport.setProperties({ ...properties });
-      console.log('📸 Stack Viewport Properties Set:', {
-        viewportId: viewport.id,
-        properties: viewport.getProperties(),
-        timestamp: new Date().toISOString(),
-      });
       this.setPresentations(viewport.id, presentations, viewportInfo);
       if (displayArea) {
         viewport.setDisplayArea(displayArea);
