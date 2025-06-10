@@ -110,13 +110,23 @@ const seriesDescriptionItem = {
   label: '',
   title: 'Series description',
   condition: ({ referenceInstance }) => {
-    return (
-      referenceInstance &&
-      (referenceInstance.BodyPartExamined || referenceInstance.SeriesDescription)
-    );
+    return referenceInstance && (referenceInstance.SeriesDescription || '');
   },
   contentF: ({ referenceInstance }) => {
-    return referenceInstance.BodyPartExamined || referenceInstance.SeriesDescription;
+    return referenceInstance.SeriesDescription || '';
+  },
+};
+
+const bodyPartExamined = {
+  id: 'BodyPartExamined',
+  customizationType: 'ohif.overlayItem',
+  label: '',
+  title: 'Body Part Examined',
+  condition: ({ referenceInstance }) => {
+    return referenceInstance && (referenceInstance.BodyPartExamined || '');
+  },
+  contentF: ({ referenceInstance }) => {
+    return referenceInstance.BodyPartExamined || '';
   },
 };
 
@@ -128,6 +138,7 @@ const topLeftItems = {
     institutionItem,
     physicianNameItem,
     seriesDescriptionItem,
+    bodyPartExamined,
     studyDateItem,
     acqDateItem,
   ],

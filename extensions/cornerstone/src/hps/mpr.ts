@@ -33,7 +33,17 @@ export const mpr: Types.HangingProtocol.Protocol = {
   numberOfPriorsReferenced: 0,
   protocolMatchingRules: [],
   imageLoadStrategy: 'nth',
-  callbacks: {},
+  callbacks: {
+    onProtocolEnter: [
+      {
+        commandName: 'setToolActive',
+        commandOptions: {
+          toolName: 'Crosshairs',
+          toolGroupId: 'mpr',
+        },
+      },
+    ],
+  },
   displaySetSelectors: {
     activeDisplaySet: {
       seriesMatchingRules: [
