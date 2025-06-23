@@ -75,18 +75,16 @@ const StudyBrowser = ({
       data-cy={'studyBrowser-panel'}
     >
       <div>
-        {showSettings && (
-          <div className="w-100 bg-bkg-low flex h-[48px] items-center justify-center gap-[10px] px-[8px] py-[10px]">
-            <>
-              <StudyBrowserViewOptions
-                tabs={tabs}
-                onSelectTab={onClickTab}
-                activeTabName={activeTabName}
-              />
-              <StudyBrowserSort servicesManager={servicesManager} />
-            </>
-          </div>
-        )}
+        <div className="w-100 bg-bkg-low flex h-[48px] items-center justify-center gap-[10px] px-[8px] py-[10px]">
+          <>
+            <StudyBrowserViewOptions
+              tabs={tabs}
+              onSelectTab={onClickTab}
+              activeTabName={activeTabName}
+            />
+            <StudyBrowserSort servicesManager={servicesManager} />
+          </>
+        </div>
         {getTabContent()}
       </div>
     </div>

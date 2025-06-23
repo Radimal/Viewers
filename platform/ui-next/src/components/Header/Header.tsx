@@ -130,7 +130,7 @@ function Header({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {monitorOptions
+                {(monitorOptions || [])
                   .filter(option =>
                     option.title === 'Close Windows' && window.name !== 'viewerWindow'
                       ? false
