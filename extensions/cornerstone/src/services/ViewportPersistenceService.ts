@@ -20,6 +20,8 @@ class ViewportPersistenceService extends PubSubService {
 
   private subscriptions: Array<() => void> = [];
   private isInitialized = false;
+  private isInitialLoad = true;
+  private initialLoadTimer: NodeJS.Timeout | null = null;
 
   constructor({ servicesManager }) {
     super(ViewportPersistenceService.EVENTS);
@@ -29,6 +31,12 @@ class ViewportPersistenceService extends PubSubService {
   init(): void {
     if (this.isInitialized) return;
     this.isInitialized = true;
+
+    // Mark as no longer initial load after a delay
+    this.initialLoadTimer = setTimeout(() => {
+      this.isInitialLoad = false;
+      console.log('📱 Initial load period ended');
+    }, 3000); // 3 seconds should be enough for initial app setup
   }
 
   // Generate a simple hash based on the current image
@@ -107,6 +115,12 @@ class ViewportPersistenceService extends PubSubService {
 
       this._storeViewportState(hash, state);
 
+      console.log('📦 Storing state:', {
+        viewportId,
+        hash,
+        state: state.rotationFlip,
+      });
+
       this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_STORED, {
         viewportId,
         hash,
@@ -118,10 +132,21 @@ class ViewportPersistenceService extends PubSubService {
   }
 
   public attemptViewportRestoration(viewportId: string): void {
-    // Simple, immediate restoration attempt
+    // Use longer delay for initial load, shorter for navigation
+    const delay = this.isInitialLoad ? 800 : 50;
+    console.log(`🔄 Scheduling restoration (delay: ${delay}ms, initial: ${this.isInitialLoad})`);
+
     setTimeout(() => {
       this._restoreViewportState(viewportId);
-    }, 50);
+
+      // For initial load, add an additional restoration attempt
+      if (this.isInitialLoad) {
+        setTimeout(() => {
+          console.log('🔄 Additional restoration attempt for initial load');
+          this._restoreViewportState(viewportId);
+        }, 800);
+      }
+    }, delay);
   }
 
   private _restoreViewportState(viewportId: string): void {
@@ -142,8 +167,16 @@ class ViewportPersistenceService extends PubSubService {
       // Check if the current state matches the stored state
       const currentState = this._extractRotationFlipState(viewport);
       if (this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip)) {
+        console.log('⏭️ State already correct, skipping restoration');
         return;
       }
+
+      console.log('📥 Restoring state:', {
+        viewportId,
+        hash,
+        currentState: currentState?.rotationFlip,
+        storedState: storedState.rotationFlip,
+      });
 
       this._applyViewportState(viewport, storedState);
 
@@ -237,6 +270,7 @@ class ViewportPersistenceService extends PubSubService {
         viewport.setViewPresentation({
           rotation: state.rotationFlip.rotation,
         });
+        console.log('✅ Applied rotation:', state.rotationFlip.rotation);
       }
 
       // Apply flips via camera if available
@@ -253,6 +287,7 @@ class ViewportPersistenceService extends PubSubService {
 
         if (Object.keys(cameraUpdates).length > 0) {
           viewport.setCamera(cameraUpdates);
+          console.log('✅ Applied flips:', cameraUpdates);
         }
       }
 
@@ -327,6 +362,12 @@ class ViewportPersistenceService extends PubSubService {
       }
     });
     this.subscriptions = [];
+
+    if (this.initialLoadTimer) {
+      clearTimeout(this.initialLoadTimer);
+      this.initialLoadTimer = null;
+    }
+
     this.isInitialized = false;
   }
 
