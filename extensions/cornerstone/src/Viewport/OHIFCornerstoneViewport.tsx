@@ -437,6 +437,49 @@ const OHIFCornerstoneViewport = React.memo(
       appConfig,
     ]);
 
+    useEffect(() => {
+      if (!viewportPersistenceService || !cornerstoneViewportService) return;
+
+      // Simple restoration when displaySets change
+      const timer = setTimeout(() => {
+        try {
+          const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+          if (viewport?.getCurrentImageId?.()) {
+            console.log('🔄 Triggering restoration for displaySet change');
+            viewportPersistenceService.attemptViewportRestoration(viewportId);
+          }
+        } catch (error) {
+          console.warn('Error in restoration trigger:', error);
+        }
+      }, 100); // Very short delay, just enough for viewport to be ready
+
+      return () => clearTimeout(timer);
+    }, [viewportId, displaySets, viewportPersistenceService, cornerstoneViewportService]);
+
+    // Also add this restoration trigger when the viewport data is loaded:
+    useEffect(() => {
+      if (!viewportPersistenceService || !cornerstoneViewportService) return;
+
+      const handleViewportDataLoaded = () => {
+        setTimeout(() => {
+          try {
+            const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            if (viewport?.getCurrentImageId?.()) {
+              console.log('🔄 Triggering restoration after data load');
+              viewportPersistenceService.attemptViewportRestoration(viewportId);
+            }
+          } catch (error) {
+            console.warn('Error in data load restoration:', error);
+          }
+        }, 200);
+      };
+
+      // Trigger on initial mount and when displaySets change
+      if (displaySets.length > 0) {
+        handleViewportDataLoaded();
+      }
+    }, [displaySets, viewportId, viewportPersistenceService, cornerstoneViewportService]);
+
     const { ref: resizeRef } = useResizeDetector({
       onResize,
     });
@@ -686,30 +729,64 @@ function areEqual(prevProps, nextProps) {
   for (let i = 0; i < prevDisplaySets.length; i++) {
     const prevDisplaySet = prevDisplaySets[i];
 
+    // More robust displaySet matching - don't fail if displaySet is temporarily unavailable
     const foundDisplaySet = nextDisplaySets.find(
       nextDisplaySet =>
-        nextDisplaySet.displaySetInstanceUID === prevDisplaySet.displaySetInstanceUID
+        nextDisplaySet?.displaySetInstanceUID === prevDisplaySet?.displaySetInstanceUID
     );
 
     if (!foundDisplaySet) {
-      console.debug('OHIFCornerstoneViewport: Rerender caused by: displaySet not found');
+      // Check if this is just a temporary unavailability during navigation
+      // If the displaySetInstanceUID exists but the object is incomplete, wait
+      const hasMatchingUID = nextDisplaySets.some(
+        ds => ds?.displaySetInstanceUID === prevDisplaySet?.displaySetInstanceUID
+      );
+
+      if (hasMatchingUID) {
+        console.debug(
+          'OHIFCornerstoneViewport: DisplaySet temporarily incomplete, allowing re-render'
+        );
+        return false;
+      }
+
+      console.debug('OHIFCornerstoneViewport: Rerender caused by: displaySet not found', {
+        prevUID: prevDisplaySet?.displaySetInstanceUID,
+        nextUIDs: nextDisplaySets.map(ds => ds?.displaySetInstanceUID),
+      });
       return false;
     }
 
-    // check they contain the same image
-    if (foundDisplaySet.images?.length !== prevDisplaySet.images?.length) {
-      console.debug('OHIFCornerstoneViewport: Rerender caused by: images length mismatch');
-      return false;
-    }
+    // Only check image arrays if both displaySets have them
+    if (foundDisplaySet.images?.length && prevDisplaySet.images?.length) {
+      // check they contain the same image count
+      if (foundDisplaySet.images.length !== prevDisplaySet.images.length) {
+        console.debug('OHIFCornerstoneViewport: Rerender caused by: images length mismatch');
+        return false;
+      }
 
-    // check if their imageIds are the same
-    if (foundDisplaySet.images?.length) {
-      for (let j = 0; j < foundDisplaySet.images.length; j++) {
-        if (foundDisplaySet.images[j].imageId !== prevDisplaySet.images[j].imageId) {
-          console.debug('OHIFCornerstoneViewport: Rerender caused by: imageId mismatch');
+      // check if their imageIds are the same (sample check for performance)
+      // Only check first and last images to avoid expensive full array comparison
+      const samplesToCheck = [0];
+      if (foundDisplaySet.images.length > 1) {
+        samplesToCheck.push(foundDisplaySet.images.length - 1);
+      }
+
+      for (const sampleIndex of samplesToCheck) {
+        if (
+          foundDisplaySet.images[sampleIndex]?.imageId !==
+          prevDisplaySet.images[sampleIndex]?.imageId
+        ) {
+          console.debug(
+            'OHIFCornerstoneViewport: Rerender caused by: imageId mismatch at sample',
+            sampleIndex
+          );
           return false;
         }
       }
+    } else if (foundDisplaySet.images?.length !== prevDisplaySet.images?.length) {
+      // Only fail if one has images and the other doesn't, or if lengths are definitively different
+      console.debug('OHIFCornerstoneViewport: Rerender caused by: images array structure change');
+      return false;
     }
   }
 

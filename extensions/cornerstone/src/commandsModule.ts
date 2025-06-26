@@ -552,18 +552,9 @@ function commandsModule({
       try {
         if (servicesManager?.services?.viewportPersistenceService && enabledElement.viewport?.id) {
           const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
-
           if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
-            setTimeout(() => {
-              viewportPersistenceService.storeRotationFlipState(enabledElement.viewport.id);
-            }, 100);
-          } else {
-            console.warn(
-              '❌ storeRotationFlipState method not found on viewportPersistenceService'
-            );
+            viewportPersistenceService.storeRotationFlipState(enabledElement.viewport.id);
           }
-        } else {
-          console.warn('❌ viewportPersistenceService not available or no viewport ID');
         }
       } catch (error) {
         console.warn('❌ Failed to store rotation state:', error);
@@ -585,9 +576,7 @@ function commandsModule({
         if (servicesManager?.services?.viewportPersistenceService && viewport?.id) {
           const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
           if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
-            setTimeout(() => {
-              viewportPersistenceService.storeRotationFlipState(viewport.id);
-            }, 300);
+            viewportPersistenceService.storeRotationFlipState(viewport.id);
           }
         }
       } catch (error) {}
@@ -608,9 +597,7 @@ function commandsModule({
         if (servicesManager?.services?.viewportPersistenceService && viewport?.id) {
           const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
           if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
-            setTimeout(() => {
-              viewportPersistenceService.storeRotationFlipState(viewport.id);
-            }, 300);
+            viewportPersistenceService.storeRotationFlipState(viewport.id);
           }
         }
       } catch (error) {}

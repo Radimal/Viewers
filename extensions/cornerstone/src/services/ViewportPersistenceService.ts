@@ -22,10 +22,6 @@ class ViewportPersistenceService extends PubSubService {
 
   private subscriptions: Array<() => void> = [];
   private isInitialized = false;
-  private debounceTimers = new Map<string, NodeJS.Timeout>();
-  private processedViewports = new Set<string>();
-  private restoredHashes = new Set<string>();
-  private restorationInProgress = new Set<string>();
 
   constructor({ servicesManager }) {
     super(ViewportPersistenceService.EVENTS);
@@ -34,181 +30,50 @@ class ViewportPersistenceService extends PubSubService {
 
   init(): void {
     if (this.isInitialized) return;
-
-    const { cornerstoneViewportService } = this.servicesManager.services;
-    if (cornerstoneViewportService) {
-      this._subscribeToServiceEvents(cornerstoneViewportService);
-      this._subscribeToViewportCreation(cornerstoneViewportService);
-
-      setTimeout(() => {
-        this.cleanupInvalidStates();
-      }, 1000);
-    }
-
     this.isInitialized = true;
   }
 
-  private _subscribeToServiceEvents(cornerstoneViewportService: any): void {
-    try {
-      const eventKey =
         cornerstoneViewportService.EVENTS?.VIEWPORT_DATA_CHANGED || 'VIEWPORT_DATA_CHANGED';
       const subscription = cornerstoneViewportService.subscribe(
         eventKey,
-        this._handleViewportCreated.bind(this)
-      );
-
-      if (subscription) {
-        this.subscriptions.push(subscription);
-      }
-    } catch (error) {}
-  }
 
   private _subscribeToViewportCreation(cornerstoneViewportService: any): void {
-    try {
-      const subscription = cornerstoneViewportService.subscribe(
-        'VIEWPORT_DATA_CHANGED',
-        (eventData: any) => {
-          if (eventData?.viewportId && !this.processedViewports.has(eventData.viewportId)) {
-            this.processedViewports.add(eventData.viewportId);
-            setTimeout(() => this._attemptStateRestoration(eventData.viewportId), 200);
-          }
         }
       );
 
-      if (subscription) {
-        this.subscriptions.push(subscription);
-      }
-    } catch (error) {}
-  }
-
-  private _handleViewportCreated(eventData: any): void {
     const viewportId = eventData?.viewportId;
     if (!viewportId || this.processedViewports.has(viewportId)) return;
 
     this.processedViewports.add(viewportId);
-    setTimeout(() => this._attemptStateRestoration(viewportId), 200);
-  }
-
-  private _attemptStateRestoration(viewportId: string): void {
-    const { cornerstoneViewportService } = this.servicesManager.services;
-
-    try {
       const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
       if (!viewport?.getCurrentImageId?.()) {
         return;
       }
-
-      const hash = this._generateViewportHash(viewport);
-      if (!hash) {
-        return;
-      }
-
-      if (this.restoredHashes.has(hash)) {
         return;
       }
 
       let storedState = this._getViewportState(hash);
-
-      if (!storedState) {
-        storedState = this._findFallbackState(hash);
-      }
-
-      if (!storedState) {
-        this.restoredHashes.add(hash);
         return;
-      }
-
-      this.restorationInProgress.add(viewportId);
-
-      this._applyViewportState(viewport, storedState);
-      this.restoredHashes.add(hash);
-
-      setTimeout(() => {
-        this.restorationInProgress.delete(viewportId);
-      }, 500);
-
-      setTimeout(
         () => this._verifyViewportHealth(viewport, hash, viewportId),
         this.HEALTH_CHECK_DELAY
-      );
-
-      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-        viewportId,
-        hash,
-        state: storedState,
-      });
     } catch (error) {
       this.restorationInProgress.delete(viewportId);
       this._ensureViewportVisible(viewportId);
     }
-  }
-
-  private _findFallbackState(targetHash: string): any | null {
-    try {
-      const [studyUID, seriesUID] = targetHash.split('-');
-      const seriesPrefix = `${studyUID}-${seriesUID}`;
-
       const keys = Object.keys(localStorage).filter(
-        key => key.startsWith(this.STORAGE_KEY_PREFIX) && key.includes(seriesPrefix)
-      );
-
-      if (keys.length > 0) {
-        let mostRecentKey = keys[0];
-        let mostRecentTime = 0;
-
-        for (const key of keys) {
           try {
-            const state = JSON.parse(localStorage.getItem(key) || '{}');
             if (state.timestamp > mostRecentTime) {
               mostRecentTime = state.timestamp;
-              mostRecentKey = key;
-            }
-          } catch (e) {}
-        }
-
-        const fallbackState = localStorage.getItem(mostRecentKey);
-        return fallbackState ? JSON.parse(fallbackState) : null;
-      }
-
       return null;
     } catch (error) {
-      return null;
-    }
-  }
-
-  public storeRotationFlipState(viewportId: string): void {
-    setTimeout(() => {
-      this._storeCurrentViewportState(viewportId);
     }, 250);
   }
 
   private _storeCurrentViewportState(viewportId: string): void {
-    const { cornerstoneViewportService } = this.servicesManager.services;
-
-    try {
-      if (this.restorationInProgress.has(viewportId)) {
-        return;
-      }
-
-      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-      if (!viewport) return;
 
       const hash = this._generateViewportHash(viewport);
-      const state = this._extractRotationFlipState(viewport);
-
-      if (!hash || !state) return;
-
-      this._storeViewportState(hash, state);
-
-      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_STORED, {
-        viewportId,
-        hash,
-        state,
-      });
-    } catch (error) {}
-  }
-
-  private _generateViewportHash(viewport: any): string | null {
+  // Generate a simple hash based on the current image
+  generateViewportHash(viewport: any): string | null {
     try {
       let currentImageId = viewport.getCurrentImageId?.();
 
@@ -225,7 +90,7 @@ class ViewportPersistenceService extends PubSubService {
         return null;
       }
 
-      return `${imageUids.studyUID}-${imageUids.seriesUID}-${imageUids.instanceUID}-${imageUids.frameIndex || 0}`;
+      return `${imageUids.studyUID}-${imageUids.seriesUID}-${imageUids.instanceUID}`;
     } catch {
       return null;
     }
@@ -269,38 +134,115 @@ class ViewportPersistenceService extends PubSubService {
     }
   }
 
+  public storeRotationFlipState(viewportId: string): void {
+    const { cornerstoneViewportService } = this.servicesManager.services;
+
+    try {
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+      if (!viewport) return;
+
+      const hash = this.generateViewportHash(viewport);
+      const state = this._extractRotationFlipState(viewport);
+
+      if (!hash || !state) return;
+
+      this._storeViewportState(hash, state);
+
+      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_STORED, {
+        viewportId,
+        hash,
+        state,
+      });
+    } catch (error) {
+      console.error('Error storing viewport state:', error);
+    }
+  }
+
+  public attemptViewportRestoration(viewportId: string): void {
+    // Simple, immediate restoration attempt
+    setTimeout(() => {
+      this._restoreViewportState(viewportId);
+    }, 50);
+  }
+
+  private _restoreViewportState(viewportId: string): void {
+    const { cornerstoneViewportService } = this.servicesManager.services;
+
+    try {
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+      if (!viewport?.getCurrentImageId?.()) {
+        return;
+      }
+
+      const hash = this.generateViewportHash(viewport);
+      if (!hash) return;
+
+      const storedState = this._getViewportState(hash);
+      if (!storedState?.rotationFlip) return;
+
+      // Check if the current state matches the stored state
+      const currentState = this._extractRotationFlipState(viewport);
+      if (this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip)) {
+        return;
+      }
+
+      this._applyViewportState(viewport, storedState);
+
+      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+        viewportId,
+        hash,
+        state: storedState,
+      });
+    } catch (error) {
+      console.error('Error restoring viewport state:', error);
+    }
+  }
+
+  private _statesMatch(current: any, stored: any): boolean {
+    if (!current || !stored) return false;
+
+    return (
+      current.rotation === stored.rotation &&
+      current.flipHorizontal === stored.flipHorizontal &&
+      current.flipVertical === stored.flipVertical
+    );
+  }
+
   private _extractRotationFlipState(viewport: any): any | null {
     try {
       const state: any = {
         viewportId: viewport.id,
-        timestamp: new Date().toISOString(),
+        timestamp: Date.now(),
         type: 'rotation_flip_only',
       };
 
-      if (viewport.getCamera) {
-        const camera = viewport.getCamera();
-        const rotationFlipState: any = {};
-
-        if (camera.rotation !== undefined) {
-          rotationFlipState.rotation = camera.rotation;
-        }
-
-        if (camera.flipHorizontal !== undefined) {
-          rotationFlipState.flipHorizontal = camera.flipHorizontal;
-        }
-
-        if (camera.flipVertical !== undefined) {
-          rotationFlipState.flipVertical = camera.flipVertical;
-        }
-
-        if (Object.keys(rotationFlipState).length > 0) {
-          state.rotationFlip = rotationFlipState;
+      // Get rotation from view presentation first
+      if (viewport.getViewPresentation) {
+        const presentation = viewport.getViewPresentation();
+        if (presentation?.rotation !== undefined) {
+          state.rotationFlip = state.rotationFlip || {};
+          state.rotationFlip.rotation = presentation.rotation;
         }
       }
 
-      if (viewport.getCurrentImageId) state.currentImageId = viewport.getCurrentImageId();
-      if (viewport.getCurrentImageIdIndex)
-        state.currentImageIdIndex = viewport.getCurrentImageIdIndex();
+      // Get flips and fallback rotation from camera
+      if (viewport.getCamera) {
+        const camera = viewport.getCamera();
+        state.rotationFlip = state.rotationFlip || {};
+
+        if (camera.flipHorizontal !== undefined) {
+          state.rotationFlip.flipHorizontal = camera.flipHorizontal;
+        }
+
+        if (camera.flipVertical !== undefined) {
+          state.rotationFlip.flipVertical = camera.flipVertical;
+        }
+
+        // Fallback rotation from camera if not in presentation
+        if (camera.rotation !== undefined && !state.rotationFlip.rotation) {
+          state.rotationFlip.rotation = camera.rotation;
+        }
+      }
 
       return state.rotationFlip ? state : null;
     } catch (error) {
@@ -311,14 +253,10 @@ class ViewportPersistenceService extends PubSubService {
   private _storeViewportState(hash: string, viewportState: any): void {
     try {
       const storageKey = `${this.STORAGE_KEY_PREFIX}${hash}`;
-      const stateToStore = {
-        ...viewportState,
-        timestamp: Date.now(),
-        hash,
-      };
-
-      localStorage.setItem(storageKey, JSON.stringify(stateToStore));
-    } catch (error) {}
+      localStorage.setItem(storageKey, JSON.stringify(viewportState));
+    } catch (error) {
+      console.error('Error storing to localStorage:', error);
+    }
   }
 
   private _getViewportState(hash: string): any | null {
@@ -333,21 +271,16 @@ class ViewportPersistenceService extends PubSubService {
 
   private _applyViewportState(viewport: any, state: any): void {
     try {
-      if (!state.rotationFlip) {
-        return;
-      }
+      if (!state.rotationFlip) return;
 
-      let applied = false;
-
+      // Apply rotation via setViewPresentation if available
       if (viewport.setViewPresentation && state.rotationFlip.rotation !== undefined) {
-        try {
-          viewport.setViewPresentation({
-            rotation: state.rotationFlip.rotation,
-          });
-          applied = true;
-        } catch (error) {}
+        viewport.setViewPresentation({
+          rotation: state.rotationFlip.rotation,
+        });
       }
 
+      // Apply flips via camera if available
       if (viewport.setCamera) {
         const cameraUpdates: any = {};
 
@@ -359,120 +292,45 @@ class ViewportPersistenceService extends PubSubService {
           cameraUpdates.flipVertical = state.rotationFlip.flipVertical;
         }
 
-        if (!applied && state.rotationFlip.rotation !== undefined) {
-          cameraUpdates.rotation = state.rotationFlip.rotation;
-        }
-
         if (Object.keys(cameraUpdates).length > 0) {
-          try {
-            viewport.setCamera(cameraUpdates);
-            applied = true;
-          } catch (error) {}
+          viewport.setCamera(cameraUpdates);
         }
       }
 
-      if (!applied && viewport.setProperties) {
-        try {
-          viewport.setProperties(state.rotationFlip);
-          applied = true;
-        } catch (error) {}
-      }
-
+      // Render the changes
       if (viewport.render) {
         viewport.render();
-      }
-
-      if (state.currentImageIdIndex !== undefined && viewport.setImageIdIndex) {
-        viewport.setImageIdIndex(state.currentImageIdIndex);
-      }
-    } catch (error) {}
-  }
-
-  private _verifyViewportHealth(viewport: any, hash: string, viewportId: string): void {
-    try {
-      if (!this._checkViewportHasValidImage(viewport)) {
-        this._recoverFromBlackScreen(viewport, hash, viewportId);
       }
     } catch (error) {
-      this._recoverFromBlackScreen(viewport, hash, viewportId);
+      console.error('Error applying viewport state:', error);
     }
-  }
-
-  private _checkViewportHasValidImage(viewport: any): boolean {
-    try {
-      return !!(
-        viewport.getCurrentImageId?.() &&
-        viewport.getCanvas?.() &&
-        viewport.getImageData?.()
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  private _recoverFromBlackScreen(viewport: any, hash: string, viewportId: string): void {
-    try {
-      if (viewport.render) {
-        viewport.render();
-      }
-    } catch (error) {}
-  }
-
-  private _ensureViewportVisible(viewportId: string): void {
-    try {
-      const { cornerstoneViewportService } = this.servicesManager.services;
-      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-      if (viewport && viewport.render) {
-        viewport.render();
-      }
-    } catch (error) {}
-  }
-
-  private _isViewportRestored(viewportId: string): boolean {
-    try {
-      const { cornerstoneViewportService } = this.servicesManager.services;
-      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-      const hash = viewport ? this._generateViewportHash(viewport) : null;
-      return hash ? this.restoredHashes.has(hash) : false;
-    } catch {
-      return false;
-    }
-  }
-
-  handleViewportStateChange(viewportId: string, eventType: string): void {}
-
-  attemptViewportRestoration(viewportId: string): void {
-    this._attemptStateRestoration(viewportId);
-  }
-
-  ensureViewportVisible(viewportId: string): void {
-    this._ensureViewportVisible(viewportId);
   }
 
   cleanupInvalidStates(): void {
     try {
       const keys = Object.keys(localStorage).filter(key => key.startsWith(this.STORAGE_KEY_PREFIX));
-      let cleanedCount = 0;
-
       keys.forEach(key => {
         try {
           const storedState = JSON.parse(localStorage.getItem(key) || '{}');
+          // Remove old format states
           if (storedState.camera && !storedState.type) {
             localStorage.removeItem(key);
-            cleanedCount++;
           }
         } catch (error) {
           localStorage.removeItem(key);
-          cleanedCount++;
         }
       });
-    } catch (error) {}
+    } catch (error) {
+      // Silent error handling
+    }
   }
 
   clearViewportState(hash: string): void {
     try {
       localStorage.removeItem(`${this.STORAGE_KEY_PREFIX}${hash}`);
-    } catch (error) {}
+    } catch (error) {
+      // Silent error handling
+    }
   }
 
   clearAllViewportStates(): void {
@@ -480,7 +338,9 @@ class ViewportPersistenceService extends PubSubService {
       Object.keys(localStorage)
         .filter(key => key.startsWith(this.STORAGE_KEY_PREFIX))
         .forEach(key => localStorage.removeItem(key));
-    } catch (error) {}
+    } catch (error) {
+      // Silent error handling
+    }
   }
 
   getAllViewportStates(): Record<string, any> {
@@ -493,7 +353,9 @@ class ViewportPersistenceService extends PubSubService {
           const state = JSON.parse(localStorage.getItem(key) || '{}');
           states[hash] = state;
         });
-    } catch (error) {}
+    } catch (error) {
+      // Silent error handling
+    }
     return states;
   }
 
@@ -501,17 +363,11 @@ class ViewportPersistenceService extends PubSubService {
     this.subscriptions.forEach(unsubscribe => {
       try {
         unsubscribe();
-      } catch (error) {}
+      } catch (error) {
+        // Silent error handling
+      }
     });
     this.subscriptions = [];
-
-    this.debounceTimers.forEach(timer => clearTimeout(timer));
-    this.debounceTimers.clear();
-
-    this.processedViewports.clear();
-    this.restoredHashes.clear();
-    this.restorationInProgress.clear();
-
     this.isInitialized = false;
   }
 
