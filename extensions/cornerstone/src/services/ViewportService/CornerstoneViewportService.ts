@@ -370,9 +370,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
       viewReference: csViewport instanceof VolumeViewport3D ? null : csViewport.getViewReference(),
       viewPresentation: {
         ...csViewport.getViewPresentation({ pan: true, zoom: true }),
-        rotation: camera.rotation || 0,
-        flipHorizontal: camera.flipHorizontal || false,
-        flipVertical: camera.flipVertical || false,
       },
       viewportId,
     };
@@ -1214,11 +1211,15 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
 
     const viewPresentation = positionPresentation?.viewPresentation;
     if (viewPresentation) {
-      viewport.setViewPresentation(viewPresentation);
+      const cleanViewPresentation = { ...viewPresentation };
+      delete cleanViewPresentation.rotation;
+      delete cleanViewPresentation.flipHorizontal;
+      delete cleanViewPresentation.flipVertical;
+      viewport.setViewPresentation(cleanViewPresentation);
       this._broadcastEvent(EVENTS.VIEWPORT_PROPERTIES_CHANGED, {
         viewportId: viewport.id,
         imageId: viewRef?.referencedImageId,
-        viewportProperties: viewPresentation,
+        viewportProperties: cleanViewPresentation,
         camera: viewport.getCamera(),
         properties: viewport.getProperties(),
         viewReference: viewport.getViewReference(),
