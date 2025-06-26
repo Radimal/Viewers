@@ -17,8 +17,6 @@ class ViewportPersistenceService extends PubSubService {
 
   private servicesManager: any;
   private readonly STORAGE_KEY_PREFIX = 'ohif_viewport_state_';
-  private readonly DEBOUNCE_DELAY = 300;
-  private readonly HEALTH_CHECK_DELAY = 500;
 
   private subscriptions: Array<() => void> = [];
   private isInitialized = false;
@@ -33,45 +31,6 @@ class ViewportPersistenceService extends PubSubService {
     this.isInitialized = true;
   }
 
-        cornerstoneViewportService.EVENTS?.VIEWPORT_DATA_CHANGED || 'VIEWPORT_DATA_CHANGED';
-      const subscription = cornerstoneViewportService.subscribe(
-        eventKey,
-
-  private _subscribeToViewportCreation(cornerstoneViewportService: any): void {
-        }
-      );
-
-    const viewportId = eventData?.viewportId;
-    if (!viewportId || this.processedViewports.has(viewportId)) return;
-
-    this.processedViewports.add(viewportId);
-      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-      if (!viewport?.getCurrentImageId?.()) {
-        return;
-      }
-        return;
-      }
-
-      let storedState = this._getViewportState(hash);
-        return;
-        () => this._verifyViewportHealth(viewport, hash, viewportId),
-        this.HEALTH_CHECK_DELAY
-    } catch (error) {
-      this.restorationInProgress.delete(viewportId);
-      this._ensureViewportVisible(viewportId);
-    }
-      const keys = Object.keys(localStorage).filter(
-          try {
-            if (state.timestamp > mostRecentTime) {
-              mostRecentTime = state.timestamp;
-      return null;
-    } catch (error) {
-    }, 250);
-  }
-
-  private _storeCurrentViewportState(viewportId: string): void {
-
-      const hash = this._generateViewportHash(viewport);
   // Generate a simple hash based on the current image
   generateViewportHash(viewport: any): string | null {
     try {
