@@ -24,6 +24,7 @@ import {
 } from '@ohif/core';
 
 import loadModules, { loadModule as peerImport } from './pluginImports';
+import ViewportPersistenceService from '../../../extensions/cornerstone/src/services/ViewportPersistenceService';
 
 /**
  * @param {object|func} appConfigOrFunc - application configuration, or a function that returns application configuration
@@ -73,6 +74,7 @@ async function appInit(appConfigOrFunc, defaultExtensions, defaultModes) {
     PanelService.REGISTRATION,
     WorkflowStepsService.REGISTRATION,
     [StudyPrefetcherService.REGISTRATION, appConfig.studyPrefetcher],
+    ViewportPersistenceService.REGISTRATION,
   ]);
 
   errorHandler.getHTTPErrorHandler = () => {

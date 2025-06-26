@@ -34,6 +34,7 @@ import * as StudyMetadataTypes from './StudyMetadata';
 import * as ViewportGridTypes from './ViewportGridType';
 
 import { StepOptions, TourOptions } from 'shepherd.js';
+import ViewportPersistenceService from '../../../../extensions/cornerstone/src/services/ViewportPersistenceService';
 
 declare global {
   namespace AppTypes {
@@ -78,6 +79,7 @@ declare global {
       uiViewportDialogService?: UIViewportDialogServiceType;
       panelService?: PanelServiceType;
       studyPrefetcherService?: StudyPrefetcherServiceType;
+      viewportPersistenceService?: any;
     }
 
     export interface Config {
