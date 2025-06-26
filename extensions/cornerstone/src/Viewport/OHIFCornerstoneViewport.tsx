@@ -99,6 +99,7 @@ const OHIFCornerstoneViewport = React.memo(
       segmentationService,
       cornerstoneCacheService,
       viewportActionCornersService,
+      viewportPersistenceService,
     } = servicesManager.services;
 
     const [viewportDialogState] = useViewportDialog();
@@ -202,6 +203,73 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, []);
 
+    useEffect(() => {
+      const element = elementRef.current;
+
+      if (!element || !viewportPersistenceService || !cornerstoneViewportService) return;
+
+      const handleRotationFlip = (evt: Event) => {
+        try {
+          const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+          if (csViewport) {
+            viewportPersistenceService.storeRotationFlipState(viewportId);
+          }
+        } catch (error) {
+          console.error('Error handling rotation/flip change:', error);
+        }
+      };
+
+      const rotationFlipEvents = [
+        'CORNERSTONE_VIEWPORT_ROTATION_CHANGED',
+        'CORNERSTONE_VIEWPORT_FLIP_CHANGED',
+      ];
+
+      rotationFlipEvents.forEach(eventType => {
+        element.addEventListener(eventType, handleRotationFlip);
+      });
+
+      const globalEventTarget = window.cornerstone?.eventTarget;
+      if (globalEventTarget) {
+        rotationFlipEvents.forEach(eventType => {
+          globalEventTarget.addEventListener(eventType, handleRotationFlip);
+        });
+      }
+
+      return () => {
+        rotationFlipEvents.forEach(eventType => {
+          element.removeEventListener(eventType, handleRotationFlip);
+        });
+
+        if (globalEventTarget) {
+          rotationFlipEvents.forEach(eventType => {
+            globalEventTarget.removeEventListener(eventType, handleRotationFlip);
+          });
+        }
+      };
+    }, [viewportId, cornerstoneViewportService, viewportPersistenceService]);
+
+    useEffect(() => {
+      if (!viewportPersistenceService || !cornerstoneViewportService) return;
+
+      const attemptRestoration = () => {
+        try {
+          const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+          if (viewport?.getCurrentImageId?.()) {
+            viewport.getCamera();
+
+            viewportPersistenceService.attemptViewportRestoration(viewportId);
+
+            setTimeout(() => {
+              viewport.getCamera();
+            }, 200);
+          }
+        } catch (error) {
+          console.warn('Error during restoration attempt:', error);
+        }
+      };
+
+      setTimeout(attemptRestoration, 300);
+    }, [viewportId, viewportPersistenceService, cornerstoneViewportService, displaySets]);
     // subscribe to displaySet metadata invalidation (updates)
     // Currently, if the metadata changes we need to re-render the display set
     // for it to take effect in the viewport. As we deal with scaling in the loading,
@@ -503,7 +571,6 @@ function _jumpToMeasurement(measurement, targetElementRef, viewportId, servicesM
 
     const { metadata } = measurement;
     if (!viewport.isReferenceViewable(metadata, { withNavigation: true, withOrientation: true })) {
-      console.log("Reference isn't viewable, postponing until updated");
       return;
     }
 

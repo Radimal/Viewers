@@ -33,6 +33,7 @@ import { measurementMappingUtils } from './utils/measurementServiceMappings';
 import type { PublicViewportOptions } from './services/ViewportService/Viewport';
 import ImageOverlayViewerTool from './tools/ImageOverlayViewerTool';
 import ViewportActionCornersService from './services/ViewportActionCornersService/ViewportActionCornersService';
+import ViewportPersistenceService from './services/ViewportPersistenceService';
 import { ViewportActionCornersProvider } from './contextProviders/ViewportActionCornersProvider';
 import getSOPInstanceAttributes from './utils/measurementServiceMappings/utils/getSOPInstanceAttributes';
 import { findNearbyToolData } from './utils/findNearbyToolData';
@@ -89,6 +90,10 @@ const cornerstoneExtension: Types.Extensions.Extension = {
   onModeEnter: ({ servicesManager }: withAppTypes): void => {
     const { cornerstoneViewportService, toolbarService, segmentationService } =
       servicesManager.services;
+    const { viewportPersistenceService } = servicesManager.services;
+    if (viewportPersistenceService) {
+      viewportPersistenceService.init();
+    }
     toolbarService.registerEventForToolbarUpdate(cornerstoneViewportService, [
       cornerstoneViewportService.EVENTS.VIEWPORT_DATA_CHANGED,
     ]);
@@ -120,6 +125,10 @@ const cornerstoneExtension: Types.Extensions.Extension = {
   getPanelModule,
   onModeExit: ({ servicesManager }: withAppTypes): void => {
     const { cineService, segmentationService } = servicesManager.services;
+    const { viewportPersistenceService } = servicesManager.services;
+    if (viewportPersistenceService) {
+      viewportPersistenceService.destroy();
+    }
     // Empty out the image load and retrieval pools to prevent memory leaks
     // on the mode exits
     Object.values(cs3DEnums.RequestType).forEach(type => {
@@ -153,6 +162,8 @@ const cornerstoneExtension: Types.Extensions.Extension = {
     servicesManager.registerService(CornerstoneCacheService.REGISTRATION);
     servicesManager.registerService(ViewportActionCornersService.REGISTRATION);
     servicesManager.registerService(ColorbarService.REGISTRATION);
+
+    servicesManager.registerService(ViewportPersistenceService.REGISTRATION);
 
     serviceProvidersManager.registerProvider(
       ViewportActionCornersService.REGISTRATION.name,

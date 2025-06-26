@@ -5,6 +5,7 @@ import initToolGroups from './initToolGroups';
 import toolbarButtons from './toolbarButtons';
 import moreTools from './moreTools';
 import { performCustomizations } from './customizations';
+import { defaultRouteInit } from '../../../platform/app/src/routes/Mode/defaultRouteInit';
 
 // Allow this mode by excluding non-imaging modalities such as SR, SEG
 // Also, SM is not a simple imaging modalities, so exclude it.
@@ -174,9 +175,38 @@ function modeFactory({ modeConfiguration }) {
     routes: [
       {
         path: 'longitudinal',
-        /*init: ({ servicesManager, extensionManager }) => {
-          //defaultViewerRouteInit
-        },*/
+        init: async ({ servicesManager, extensionManager, studyInstanceUIDs, dataSource }) => {
+          const { ViewportPersistenceService } = servicesManager.services;
+          const defaultUnsubscriptions = await defaultRouteInit(
+            {
+              servicesManager,
+              studyInstanceUIDs,
+              dataSource,
+            },
+            'default',
+            0
+          );
+          let subscriptions = [];
+          if (ViewportPersistenceService) {
+            ViewportPersistenceService.init();
+            const subscriptions = [
+              ViewportPersistenceService.subscribe(
+                ViewportPersistenceService.EVENTS.VIEWPORT_STATE_STORED,
+                ({ viewportId, hash, state }) => {
+                  console.log('📦 Viewport state stored:', { viewportId, hash, state });
+                }
+              ),
+              ViewportPersistenceService.subscribe(
+                ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED,
+                ({ viewportId, hash, state }) => {
+                  console.log('📥 Viewport state restored:', { viewportId, hash });
+                }
+              ),
+            ];
+
+            return [...defaultUnsubscriptions, ...subscriptions];
+          }
+        },
         layoutTemplate: () => {
           return {
             id: ohif.layout,

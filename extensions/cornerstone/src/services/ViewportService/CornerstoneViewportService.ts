@@ -37,6 +37,7 @@ import { useSegmentationPresentationStore } from '../../stores/useSegmentationPr
 const EVENTS = {
   VIEWPORT_DATA_CHANGED: 'event::cornerstoneViewportService:viewportDataChanged',
   VIEWPORT_VOLUMES_CHANGED: 'event::cornerstoneViewportService:viewportVolumesChanged',
+  VIEWPORT_PROPERTIES_CHANGED: 'event::cornerstoneViewportService:viewportPropertiesChanged',
 };
 
 /**
@@ -1214,6 +1215,15 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     const viewPresentation = positionPresentation?.viewPresentation;
     if (viewPresentation) {
       viewport.setViewPresentation(viewPresentation);
+      this._broadcastEvent(EVENTS.VIEWPORT_PROPERTIES_CHANGED, {
+        viewportId: viewport.id,
+        imageId: viewRef?.referencedImageId,
+        viewportProperties: viewPresentation,
+        camera: viewport.getCamera(),
+        properties: viewport.getProperties(),
+        viewReference: viewport.getViewReference(),
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 

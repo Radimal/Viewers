@@ -483,7 +483,6 @@ function commandsModule({
       const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
 
       if (existingWindow) {
-        console.log('Restoring existing window:', existingWindow);
         const { width, height, x, y, id, closed } = existingWindow;
 
         const newWin = window.open(
@@ -549,32 +548,72 @@ function commandsModule({
         viewport.setViewPresentation({ rotation: newRotation });
         viewport.render();
       }
+
+      try {
+        if (servicesManager?.services?.viewportPersistenceService && enabledElement.viewport?.id) {
+          const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
+
+          if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
+            setTimeout(() => {
+              viewportPersistenceService.storeRotationFlipState(enabledElement.viewport.id);
+            }, 100);
+          } else {
+            console.warn(
+              '❌ storeRotationFlipState method not found on viewportPersistenceService'
+            );
+          }
+        } else {
+          console.warn('❌ viewportPersistenceService not available or no viewport ID');
+        }
+      } catch (error) {
+        console.warn('❌ Failed to store rotation state:', error);
+      }
     },
+
     flipViewportHorizontal: () => {
       const enabledElement = _getActiveViewportEnabledElement();
-
       if (!enabledElement) {
         return;
       }
 
       const { viewport } = enabledElement;
-
       const { flipHorizontal } = viewport.getCamera();
       viewport.setCamera({ flipHorizontal: !flipHorizontal });
       viewport.render();
+
+      try {
+        if (servicesManager?.services?.viewportPersistenceService && viewport?.id) {
+          const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
+          if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
+            setTimeout(() => {
+              viewportPersistenceService.storeRotationFlipState(viewport.id);
+            }, 300);
+          }
+        }
+      } catch (error) {}
     },
+
     flipViewportVertical: () => {
       const enabledElement = _getActiveViewportEnabledElement();
-
       if (!enabledElement) {
         return;
       }
 
       const { viewport } = enabledElement;
-
       const { flipVertical } = viewport.getCamera();
       viewport.setCamera({ flipVertical: !flipVertical });
       viewport.render();
+
+      try {
+        if (servicesManager?.services?.viewportPersistenceService && viewport?.id) {
+          const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
+          if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
+            setTimeout(() => {
+              viewportPersistenceService.storeRotationFlipState(viewport.id);
+            }, 300);
+          }
+        }
+      } catch (error) {}
     },
     invertViewport: ({ element }) => {
       let enabledElement;
@@ -1279,6 +1318,28 @@ function commandsModule({
   const definitions = {
     // The command here is to show the viewer context menu, as being the
     // context menu
+    clearViewportPersistence: {
+      commandFn: ({ servicesManager, viewportId }) => {
+        const { ViewportPersistenceService, ViewportService } = servicesManager.services;
+
+        if (ViewportPersistenceService && viewportId) {
+          const viewport = ViewportService.getViewport(viewportId);
+          if (viewport) {
+            const hash = ViewportPersistenceService.generateViewportHash(viewport);
+            ViewportPersistenceService.clearViewportState(hash);
+          }
+        }
+      },
+    },
+
+    clearAllViewportPersistence: {
+      commandFn: ({ servicesManager }) => {
+        const { ViewportPersistenceService } = servicesManager.services;
+        if (ViewportPersistenceService) {
+          ViewportPersistenceService.clearAllViewportStates();
+        }
+      },
+    },
     showCornerstoneContextMenu: {
       commandFn: actions.showCornerstoneContextMenu,
       options: {
