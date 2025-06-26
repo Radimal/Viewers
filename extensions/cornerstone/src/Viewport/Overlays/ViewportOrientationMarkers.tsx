@@ -14,7 +14,7 @@ function ViewportOrientationMarkers({
   imageSliceData,
   viewportId,
   servicesManager,
-  orientationMarkers = ['top', 'left'],
+  orientationMarkers = ['top', 'bottom', 'left', 'right'],
 }: withAppTypes) {
   // Rotation is in degrees
   const [rotation, setRotation] = useState(0);
