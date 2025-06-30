@@ -50,15 +50,31 @@ class ViewportPersistenceService extends PubSubService {
         currentImageId = imageIds[currentIndex] || imageIds[0];
       }
 
-      if (!currentImageId) return null;
-
-      const imageUids = this._extractUIDsFromImageId(currentImageId);
-      if (!imageUids?.studyUID || !imageUids?.seriesUID || !imageUids?.instanceUID) {
+      if (!currentImageId) {
+        console.log('❌ No current image ID found for hash generation');
         return null;
       }
 
-      return `${imageUids.studyUID}-${imageUids.seriesUID}-${imageUids.instanceUID}`;
-    } catch {
+      console.log('🔍 Hash generation details:', {
+        currentImageId,
+        viewportType: viewport.constructor?.name,
+        currentIndex: viewport.getCurrentImageIdIndex?.() || 'unknown',
+      });
+
+      const imageUids = this._extractUIDsFromImageId(currentImageId);
+      console.log('🔍 Extracted UIDs:', imageUids);
+
+      if (!imageUids?.studyUID || !imageUids?.seriesUID || !imageUids?.instanceUID) {
+        console.log('❌ Missing required UIDs for hash generation');
+        return null;
+      }
+
+      const hash = `${imageUids.studyUID}-${imageUids.seriesUID}-${imageUids.instanceUID}`;
+      console.log('🔍 Generated hash:', hash);
+
+      return hash;
+    } catch (error) {
+      console.error('❌ Error in hash generation:', error);
       return null;
     }
   }
@@ -133,42 +149,144 @@ class ViewportPersistenceService extends PubSubService {
 
   public attemptViewportRestoration(viewportId: string): void {
     // Use longer delay for initial load, shorter for navigation
-    const delay = this.isInitialLoad ? 800 : 50;
+    const delay = this.isInitialLoad ? 1200 : 50; // Increased initial delay for CT/MRI
     console.log(`🔄 Scheduling restoration (delay: ${delay}ms, initial: ${this.isInitialLoad})`);
 
     setTimeout(() => {
-      this._restoreViewportState(viewportId);
+      this._restoreViewportStateWithRetry(viewportId, 0);
+    }, delay);
+  }
 
-      // For initial load, add an additional restoration attempt
-      if (this.isInitialLoad) {
+  private _restoreViewportStateWithRetry(viewportId: string, retryCount: number): void {
+    const maxRetries = 5;
+    const retryDelay = 300;
+
+    console.log(`🔄 Restoration attempt ${retryCount + 1}/${maxRetries + 1} for:`, viewportId);
+
+    if (this._restoreViewportState(viewportId)) {
+      // Success - restoration completed
+      if (this.isInitialLoad && retryCount === 0) {
+        // For initial load, add an additional restoration attempt
         setTimeout(() => {
           console.log('🔄 Additional restoration attempt for initial load');
           this._restoreViewportState(viewportId);
         }, 800);
       }
-    }, delay);
+      return;
+    }
+
+    // If restoration failed and we have retries left
+    if (retryCount < maxRetries) {
+      console.log(`⏳ Retry ${retryCount + 1} in ${retryDelay}ms...`);
+      setTimeout(() => {
+        this._restoreViewportStateWithRetry(viewportId, retryCount + 1);
+      }, retryDelay);
+    } else {
+      console.log('❌ Restoration failed after max retries');
+    }
   }
 
-  private _restoreViewportState(viewportId: string): void {
+  private _restoreViewportState(viewportId: string): boolean {
     const { cornerstoneViewportService } = this.servicesManager.services;
 
     try {
+      console.log('🔍 Attempting restoration for:', viewportId);
+
       const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
       if (!viewport?.getCurrentImageId?.()) {
-        return;
+        console.log('❌ No viewport or current image ID found');
+        return false;
+      }
+
+      // Wait for image data to be available before restoration (fixes CT/MRI issues)
+      const imageData = viewport.getImageData?.();
+      if (!imageData) {
+        console.log('❌ Image data not ready, will retry...');
+        return false;
       }
 
       const hash = this.generateViewportHash(viewport);
-      if (!hash) return;
+      if (!hash) {
+        console.log('❌ Could not generate hash for viewport');
+        return false;
+      }
+
+      console.log('🔍 Looking for stored state with hash:', hash);
+
+      // Debug: check what's actually in localStorage
+      const allStoredKeys = Object.keys(localStorage).filter(key =>
+        key.startsWith(this.STORAGE_KEY_PREFIX)
+      );
+      console.log(
+        '🔍 All stored viewport keys:',
+        allStoredKeys.map(key => key.replace(this.STORAGE_KEY_PREFIX, ''))
+      );
 
       const storedState = this._getViewportState(hash);
-      if (!storedState?.rotationFlip) return;
+      if (!storedState?.rotationFlip) {
+        console.log('❌ No stored state found for hash:', hash);
+
+        // Try to find a close match
+        const partialMatches = allStoredKeys.filter(key => {
+          const storedHash = key.replace(this.STORAGE_KEY_PREFIX, '');
+          const hashParts = hash.split('-');
+          const storedParts = storedHash.split('-');
+
+          // Check if study and series match (ignore instance UID differences)
+          return hashParts[0] === storedParts[0] && hashParts[1] === storedParts[1];
+        });
+
+        if (partialMatches.length > 0) {
+          console.log(
+            '🔍 Found partial matches (same study/series):',
+            partialMatches.map(key => key.replace(this.STORAGE_KEY_PREFIX, ''))
+          );
+
+          // Use the most recent partial match
+          let mostRecentKey = partialMatches[0];
+          let mostRecentTime = 0;
+
+          for (const key of partialMatches) {
+            try {
+              const state = JSON.parse(localStorage.getItem(key) || '{}');
+              if (state.timestamp > mostRecentTime) {
+                mostRecentTime = state.timestamp;
+                mostRecentKey = key;
+              }
+            } catch (e) {
+              // Silent error handling
+            }
+          }
+
+          const fallbackState = localStorage.getItem(mostRecentKey);
+          if (fallbackState) {
+            const parsedState = JSON.parse(fallbackState);
+            console.log(
+              '🔄 Using fallback state from:',
+              mostRecentKey.replace(this.STORAGE_KEY_PREFIX, '')
+            );
+
+            // Update the stored state with the current hash for future use
+            this._storeViewportState(hash, parsedState);
+
+            return parsedState;
+          }
+        }
+
+        return false;
+      }
 
       // Check if the current state matches the stored state
       const currentState = this._extractRotationFlipState(viewport);
+      console.log('🔍 Current vs stored state comparison:', {
+        current: currentState?.rotationFlip,
+        stored: storedState.rotationFlip,
+        matches: this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip),
+      });
+
       if (this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip)) {
         console.log('⏭️ State already correct, skipping restoration');
-        return;
+        return true; // Consider this a success
       }
 
       console.log('📥 Restoring state:', {
@@ -185,8 +303,11 @@ class ViewportPersistenceService extends PubSubService {
         hash,
         state: storedState,
       });
+
+      return true;
     } catch (error) {
       console.error('Error restoring viewport state:', error);
+      return false;
     }
   }
 
@@ -208,36 +329,76 @@ class ViewportPersistenceService extends PubSubService {
         type: 'rotation_flip_only',
       };
 
-      // Get rotation from view presentation first
-      if (viewport.getViewPresentation) {
-        const presentation = viewport.getViewPresentation();
-        if (presentation?.rotation !== undefined) {
-          state.rotationFlip = state.rotationFlip || {};
-          state.rotationFlip.rotation = presentation.rotation;
-        }
-      }
+      const rotationFlipState: any = {};
 
-      // Get flips and fallback rotation from camera
+      // For volume viewports (CT/MRI), check camera first
       if (viewport.getCamera) {
         const camera = viewport.getCamera();
-        state.rotationFlip = state.rotationFlip || {};
 
         if (camera.flipHorizontal !== undefined) {
-          state.rotationFlip.flipHorizontal = camera.flipHorizontal;
+          rotationFlipState.flipHorizontal = camera.flipHorizontal;
         }
 
         if (camera.flipVertical !== undefined) {
-          state.rotationFlip.flipVertical = camera.flipVertical;
+          rotationFlipState.flipVertical = camera.flipVertical;
         }
 
-        // Fallback rotation from camera if not in presentation
-        if (camera.rotation !== undefined && !state.rotationFlip.rotation) {
-          state.rotationFlip.rotation = camera.rotation;
+        // Some volume viewports store rotation in camera
+        if (camera.rotation !== undefined) {
+          rotationFlipState.rotation = camera.rotation;
         }
       }
 
-      return state.rotationFlip ? state : null;
+      // For stack viewports and as fallback, check view presentation
+      if (viewport.getViewPresentation) {
+        const presentation = viewport.getViewPresentation();
+        if (presentation?.rotation !== undefined) {
+          rotationFlipState.rotation = presentation.rotation;
+        }
+
+        // Some viewports store flips in presentation too
+        if (presentation?.flipHorizontal !== undefined) {
+          rotationFlipState.flipHorizontal = presentation.flipHorizontal;
+        }
+        if (presentation?.flipVertical !== undefined) {
+          rotationFlipState.flipVertical = presentation.flipVertical;
+        }
+      }
+
+      // Check properties as another fallback
+      if (viewport.getProperties) {
+        const properties = viewport.getProperties();
+        if (properties?.rotation !== undefined && rotationFlipState.rotation === undefined) {
+          rotationFlipState.rotation = properties.rotation;
+        }
+        if (
+          properties?.flipHorizontal !== undefined &&
+          rotationFlipState.flipHorizontal === undefined
+        ) {
+          rotationFlipState.flipHorizontal = properties.flipHorizontal;
+        }
+        if (
+          properties?.flipVertical !== undefined &&
+          rotationFlipState.flipVertical === undefined
+        ) {
+          rotationFlipState.flipVertical = properties.flipVertical;
+        }
+      }
+
+      console.log('🔍 Extracting state from viewport:', {
+        viewportType: viewport.constructor?.name,
+        extractedState: rotationFlipState,
+        viewportId: viewport.id,
+      });
+
+      if (Object.keys(rotationFlipState).length > 0) {
+        state.rotationFlip = rotationFlipState;
+        return state;
+      }
+
+      return null;
     } catch (error) {
+      console.error('Error extracting rotation/flip state:', error);
       return null;
     }
   }
@@ -265,38 +426,236 @@ class ViewportPersistenceService extends PubSubService {
     try {
       if (!state.rotationFlip) return;
 
-      // Apply rotation via setViewPresentation if available
-      if (viewport.setViewPresentation && state.rotationFlip.rotation !== undefined) {
-        viewport.setViewPresentation({
-          rotation: state.rotationFlip.rotation,
-        });
-        console.log('✅ Applied rotation:', state.rotationFlip.rotation);
-      }
+      console.log('🔧 Applying state to viewport:', {
+        viewportType: viewport.constructor?.name,
+        targetState: state.rotationFlip,
+        viewportId: viewport.id,
+        imageIds: viewport.getImageIds?.()?.length || 'unknown',
+        currentImageIndex: viewport.getCurrentImageIdIndex?.() || 'unknown',
+      });
 
-      // Apply flips via camera if available
-      if (viewport.setCamera) {
-        const cameraUpdates: any = {};
+      // Special handling for stack viewports with multiple images (like CT stacks)
+      const isStackViewport = viewport.constructor?.name === 'StackViewport';
+      const imageIds = viewport.getImageIds?.() || [];
+      const isMultiImageStack = isStackViewport && imageIds.length > 1;
 
-        if (state.rotationFlip.flipHorizontal !== undefined) {
-          cameraUpdates.flipHorizontal = state.rotationFlip.flipHorizontal;
+      if (isMultiImageStack) {
+        console.log('📚 Detected multi-image stack (CT/MRI), using stack-specific application');
+        this._applyStackTransformations(viewport, state.rotationFlip);
+      } else {
+        console.log('🖼️ Single image or volume viewport, using standard application');
+        // Ensure the viewport is ready before applying transformations
+        try {
+          // Force a render first to ensure the viewport is in a good state
+          if (viewport.render) {
+            viewport.render();
+          }
+
+          // Small delay to let the render complete, then apply transformations
+          setTimeout(() => {
+            this._applyTransformations(viewport, state.rotationFlip);
+          }, 50);
+        } catch (error) {
+          console.error('Error in viewport preparation:', error);
+          // Fallback: try applying immediately
+          this._applyTransformations(viewport, state.rotationFlip);
         }
-
-        if (state.rotationFlip.flipVertical !== undefined) {
-          cameraUpdates.flipVertical = state.rotationFlip.flipVertical;
-        }
-
-        if (Object.keys(cameraUpdates).length > 0) {
-          viewport.setCamera(cameraUpdates);
-          console.log('✅ Applied flips:', cameraUpdates);
-        }
-      }
-
-      // Render the changes
-      if (viewport.render) {
-        viewport.render();
       }
     } catch (error) {
       console.error('Error applying viewport state:', error);
+    }
+  }
+
+  private _applyStackTransformations(viewport: any, rotationFlipState: any): void {
+    try {
+      console.log('🔄 Applying transformations to stack viewport...');
+
+      // For stack viewports, we need to be more careful about timing
+      // and ensure transformations apply to the entire stack, not per-image
+
+      let rotationApplied = false;
+      let flipsApplied = false;
+
+      // Method 1: Try setViewPresentation first (most reliable for stacks)
+      if (rotationFlipState.rotation !== undefined && viewport.setViewPresentation) {
+        try {
+          viewport.setViewPresentation({
+            rotation: rotationFlipState.rotation,
+          });
+          console.log(
+            '✅ Applied stack rotation via setViewPresentation:',
+            rotationFlipState.rotation
+          );
+          rotationApplied = true;
+        } catch (error) {
+          console.log('❌ Failed stack setViewPresentation rotation:', error.message);
+        }
+      }
+
+      // Method 2: Try setCamera for flips and fallback rotation
+      if (viewport.setCamera) {
+        const cameraUpdates: any = {};
+
+        if (rotationFlipState.flipHorizontal !== undefined) {
+          cameraUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
+        }
+
+        if (rotationFlipState.flipVertical !== undefined) {
+          cameraUpdates.flipVertical = rotationFlipState.flipVertical;
+        }
+
+        // Add rotation to camera if setViewPresentation failed
+        if (!rotationApplied && rotationFlipState.rotation !== undefined) {
+          cameraUpdates.rotation = rotationFlipState.rotation;
+        }
+
+        if (Object.keys(cameraUpdates).length > 0) {
+          try {
+            viewport.setCamera(cameraUpdates);
+            console.log('✅ Applied stack camera updates:', cameraUpdates);
+            flipsApplied = true;
+            if (!rotationApplied && cameraUpdates.rotation !== undefined) {
+              rotationApplied = true;
+            }
+          } catch (error) {
+            console.log('❌ Failed stack setCamera:', error.message);
+          }
+        }
+      }
+
+      // Force a full re-render to ensure consistency across all images in stack
+      setTimeout(() => {
+        if (viewport.render) {
+          viewport.render();
+        }
+
+        // Additional render after a brief delay to handle any async updates
+        setTimeout(() => {
+          if (viewport.render) {
+            viewport.render();
+          }
+        }, 100);
+      }, 50);
+
+      if (!rotationApplied && !flipsApplied) {
+        console.log(
+          '⚠️ Stack transformation application failed for viewport type:',
+          viewport.constructor?.name
+        );
+      } else {
+        console.log('✅ Stack transformations completed successfully');
+      }
+    } catch (error) {
+      console.error('Error applying stack transformations:', error);
+    }
+  }
+
+  private _applyTransformations(viewport: any, rotationFlipState: any): void {
+    try {
+      let rotationApplied = false;
+      let flipsApplied = false;
+
+      // Try applying rotation via different methods based on viewport type
+      if (rotationFlipState.rotation !== undefined) {
+        // Method 1: setViewPresentation (stack viewports)
+        if (viewport.setViewPresentation) {
+          try {
+            viewport.setViewPresentation({
+              rotation: rotationFlipState.rotation,
+            });
+            console.log('✅ Applied rotation via setViewPresentation:', rotationFlipState.rotation);
+            rotationApplied = true;
+          } catch (error) {
+            console.log('❌ Failed setViewPresentation:', error.message);
+          }
+        }
+
+        // Method 2: setCamera (volume viewports)
+        if (!rotationApplied && viewport.setCamera) {
+          try {
+            viewport.setCamera({ rotation: rotationFlipState.rotation });
+            console.log('✅ Applied rotation via setCamera:', rotationFlipState.rotation);
+            rotationApplied = true;
+          } catch (error) {
+            console.log('❌ Failed setCamera rotation:', error.message);
+          }
+        }
+
+        // Method 3: setProperties (fallback)
+        if (!rotationApplied && viewport.setProperties) {
+          try {
+            viewport.setProperties({ rotation: rotationFlipState.rotation });
+            console.log('✅ Applied rotation via setProperties:', rotationFlipState.rotation);
+            rotationApplied = true;
+          } catch (error) {
+            console.log('❌ Failed setProperties rotation:', error.message);
+          }
+        }
+      }
+
+      // Apply flips via camera (most common method)
+      if (
+        viewport.setCamera &&
+        (rotationFlipState.flipHorizontal !== undefined ||
+          rotationFlipState.flipVertical !== undefined)
+      ) {
+        const cameraUpdates: any = {};
+
+        if (rotationFlipState.flipHorizontal !== undefined) {
+          cameraUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
+        }
+
+        if (rotationFlipState.flipVertical !== undefined) {
+          cameraUpdates.flipVertical = rotationFlipState.flipVertical;
+        }
+
+        try {
+          viewport.setCamera(cameraUpdates);
+          console.log('✅ Applied flips via setCamera:', cameraUpdates);
+          flipsApplied = true;
+        } catch (error) {
+          console.log('❌ Failed setCamera flips:', error.message);
+        }
+      }
+
+      // Fallback: try setViewPresentation for flips
+      if (
+        !flipsApplied &&
+        viewport.setViewPresentation &&
+        (rotationFlipState.flipHorizontal !== undefined ||
+          rotationFlipState.flipVertical !== undefined)
+      ) {
+        try {
+          const presentationUpdates: any = {};
+          if (rotationFlipState.flipHorizontal !== undefined) {
+            presentationUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
+          }
+          if (rotationFlipState.flipVertical !== undefined) {
+            presentationUpdates.flipVertical = rotationFlipState.flipVertical;
+          }
+          viewport.setViewPresentation(presentationUpdates);
+          console.log('✅ Applied flips via setViewPresentation:', presentationUpdates);
+          flipsApplied = true;
+        } catch (error) {
+          console.log('❌ Failed setViewPresentation flips:', error.message);
+        }
+      }
+
+      // Final render after all transformations
+      setTimeout(() => {
+        if (viewport.render) {
+          viewport.render();
+        }
+      }, 10);
+
+      if (!rotationApplied && !flipsApplied) {
+        console.log(
+          '⚠️ No state application method succeeded for viewport type:',
+          viewport.constructor?.name
+        );
+      }
+    } catch (error) {
+      console.error('Error applying transformations:', error);
     }
   }
 
