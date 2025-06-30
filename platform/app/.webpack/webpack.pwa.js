@@ -1,25 +1,19 @@
-// https://developers.google.com/web/tools/workbox/guides/codelabs/webpack
-// ~~ WebPack
 const path = require('path');
 const { merge } = require('webpack-merge');
 const webpack = require('webpack');
 const webpackBase = require('./../../../.webpack/webpack.base.js');
-// ~~ Plugins
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { InjectManifest } = require('workbox-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
-// ~~ Directories
 const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const PUBLIC_DIR = path.join(__dirname, '../public');
-// ~~ Env Vars
 const HTML_TEMPLATE = process.env.HTML_TEMPLATE || 'index.html';
 const PUBLIC_URL = process.env.PUBLIC_URL || '/';
 const APP_CONFIG = process.env.APP_CONFIG || 'config/default.js';
 
-// proxy settings
 const PROXY_TARGET = process.env.PROXY_TARGET;
 const PROXY_DOMAIN = process.env.PROXY_DOMAIN;
 const PROXY_PATH_REWRITE_FROM = process.env.PROXY_PATH_REWRITE_FROM;
@@ -29,7 +23,6 @@ const OHIF_PORT = Number(process.env.OHIF_PORT || 3000);
 const ENTRY_TARGET = process.env.ENTRY_TARGET || `${SRC_DIR}/index.js`;
 const Dotenv = require('dotenv-webpack');
 const writePluginImportFile = require('./writePluginImportsFile.js');
-// const MillionLint = require('@million/lint');
 
 const copyPluginFromExtensions = writePluginImportFile(SRC_DIR, DIST_DIR);
 
@@ -63,7 +56,7 @@ module.exports = (env, argv) => {
       path: DIST_DIR,
       filename: isProdBuild ? '[name].[contenthash].js' : '[name].js',
       chunkFilename: isProdBuild ? '[name].[contenthash].chunk.js' : '[name].chunk.js',
-      publicPath: PUBLIC_URL, // Used by HtmlWebPackPlugin for asset prefix
+      publicPath: PUBLIC_URL,
       devtoolModuleFilenameTemplate: function (info) {
         if (isProdBuild) {
           return `webpack:///${info.resourcePath}`;
@@ -87,20 +80,17 @@ module.exports = (env, argv) => {
     },
     resolve: {
       modules: [
-        // Modules specific to this package
         path.resolve(__dirname, '../node_modules'),
-        // Hoisted Yarn Workspace Modules
         path.resolve(__dirname, '../../../node_modules'),
         SRC_DIR,
       ],
     },
     plugins: [
-      // For debugging re-renders
-      // MillionLint.webpack(),
       new Dotenv(),
-      // Clean output.path
       new CleanWebpackPlugin(),
-      // Copy "Public" Folder to Dist
+      new webpack.ProvidePlugin({
+        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      }),
       new CopyWebpackPlugin({
         patterns: [
           ...copyPluginFromExtensions,
@@ -109,23 +99,17 @@ module.exports = (env, argv) => {
             to: DIST_DIR,
             toType: 'dir',
             globOptions: {
-              // Ignore our HtmlWebpackPlugin template file
-              // Ignore our configuration files
               ignore: ['**/config/**', '**/html-templates/**', '.DS_Store'],
             },
           },
-          // Short term solution to make sure GCloud config is available in output
-          // for our docker implementation
           {
             from: `${PUBLIC_DIR}/config/google.js`,
             to: `${DIST_DIR}/google.js`,
           },
-          // Copy over and rename our target app config file
           {
             from: `${PUBLIC_DIR}/${APP_CONFIG}`,
             to: `${DIST_DIR}/app-config.js`,
           },
-          // Copy Dicom Microscopy Viewer build files
           {
             from: '../../../node_modules/dicom-microscopy-viewer/dist/dynamic-import',
             to: DIST_DIR,
@@ -135,7 +119,6 @@ module.exports = (env, argv) => {
           },
         ],
       }),
-      // Generate "index.html" w/ correct includes/imports
       new HtmlWebpackPlugin({
         template: `${PUBLIC_DIR}/html-templates/${HTML_TEMPLATE}`,
         filename: 'index.html',
@@ -143,23 +126,14 @@ module.exports = (env, argv) => {
           PUBLIC_URL: PUBLIC_URL,
         },
       }),
-      // Generate a service worker for fast local loads
       new InjectManifest({
         swDest: 'sw.js',
         swSrc: path.join(SRC_DIR, 'service-worker.js'),
-        // Need to exclude the theme as it is updated independently
         exclude: [/theme/],
-        // Cache large files for the manifests to avoid warning messages
         maximumFileSizeToCacheInBytes: 1024 * 1024 * 50,
       }),
     ],
-    // https://webpack.js.org/configuration/dev-server/
     devServer: {
-      // gzip compression of everything served
-      // Causes Cypress: `wait-on` issue in CI
-      // compress: true,
-      // http2: true,
-      // https: true,
       open: true,
       port: OHIF_PORT,
       client: {
@@ -180,8 +154,6 @@ module.exports = (env, argv) => {
           publicPath: '/viewer-testdata',
         },
       ],
-      //public: 'http://localhost:' + 3000,
-      //writeToDisk: true,
       historyApiFallback: {
         disableDotRule: true,
         index: PUBLIC_URL + 'index.html',

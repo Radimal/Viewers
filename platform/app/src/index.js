@@ -1,6 +1,7 @@
 /**
  * Entry point for development and production PWA builds.
  */
+import './chunk-error-handler';
 import 'regenerator-runtime/runtime';
 import { createRoot } from 'react-dom/client';
 import App from './App';
