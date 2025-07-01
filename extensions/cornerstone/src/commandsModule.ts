@@ -22,6 +22,7 @@ import {
   colorPickerDialog,
 } from '@ohif/extension-default';
 import { vec3, mat4 } from 'gl-matrix';
+import { Enums as CornerstoneEnums, eventTarget } from '@cornerstonejs/core';
 
 import CornerstoneViewportDownloadForm from './utils/CornerstoneViewportDownloadForm';
 import toggleImageSliceSync from './utils/imageSliceSync/toggleImageSliceSync';
@@ -52,6 +53,53 @@ function commandsModule({
     hangingProtocolService,
     syncGroupService,
   } = servicesManager.services;
+
+  const setupAutoImageSliceSync = () => {
+    const enableImageSliceSyncIfNeeded = () => {
+      const { viewports } = viewportGridService.getState();
+      const totalViewports = viewports.size;
+      
+      if (totalViewports > 1) {
+        setTimeout(() => {
+          toggleImageSliceSync({ servicesManager });
+        }, 100);
+      }
+    };
+
+    const handleLayoutChange = (event) => {
+      const { numRows, numCols } = event;
+      const totalViewports = numRows * numCols;
+      
+      if (totalViewports > 1) {
+        setTimeout(() => {
+          toggleImageSliceSync({ servicesManager });
+        }, 100);
+      }
+    };
+
+    const handleViewportsReady = () => {
+      enableImageSliceSyncIfNeeded();
+    };
+
+    const handleNewImageSet = () => {
+      enableImageSliceSyncIfNeeded();
+    };
+
+    viewportGridService.subscribe(
+      viewportGridService.EVENTS.LAYOUT_CHANGED,
+      handleLayoutChange
+    );
+    
+    viewportGridService.subscribe(
+      viewportGridService.EVENTS.VIEWPORTS_READY,
+      handleViewportsReady
+    );
+
+    eventTarget.addEventListener(
+      CornerstoneEnums.Events.VIEWPORT_NEW_IMAGE_SET,
+      handleNewImageSet
+    );
+  };
 
   const { measurementServiceSource } = this;
 
@@ -579,7 +627,8 @@ function commandsModule({
             viewportPersistenceService.storeRotationFlipState(viewport.id);
           }
         }
-      } catch (error) {}
+      } catch (error) {
+      }
     },
 
     flipViewportVertical: () => {
@@ -600,7 +649,8 @@ function commandsModule({
             viewportPersistenceService.storeRotationFlipState(viewport.id);
           }
         }
-      } catch (error) {}
+      } catch (error) {
+      }
     },
     invertViewport: ({ element }) => {
       let enabledElement;
@@ -1571,6 +1621,8 @@ function commandsModule({
       commandFn: actions.getRenderInactiveSegmentations,
     },
   };
+
+  setupAutoImageSliceSync();
 
   return {
     actions,
