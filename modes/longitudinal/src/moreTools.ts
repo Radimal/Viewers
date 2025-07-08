@@ -140,6 +140,30 @@ const moreTools = [
           ],
         }),
         createButton({
+          id: 'ToggleS3ImageOverlay',
+          icon: 'group-layers',
+          label: 'Toggle S3 Overlay',
+          tooltip: 'Toggle image overlay from S3 (click to add/remove)',
+          commands: {
+            commandName: 'toggleS3ImageOverlay',
+            commandOptions: {
+              s3Url:
+                process.env.NODE_ENV === 'development'
+                  ? '/assets/image_1642854_splenomegaly.png' // Local test image
+                  : 'https://your-bucket.s3.amazonaws.com/image_1642854_splenomegaly.png', // Production S3
+              position: { x: 302, y: 194 },
+              opacity: 0.8,
+            },
+          },
+          evaluate: [
+            'evaluate.action',
+            {
+              name: 'evaluate.viewport.supported',
+              unsupportedViewportTypes: ['video'],
+            },
+          ],
+        }),
+        createButton({
           id: 'StackScroll',
           icon: 'tool-stack-scroll',
           label: 'Stack Scroll',

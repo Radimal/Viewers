@@ -1350,6 +1350,300 @@ function commandsModule({
         viewportGridService.getActiveViewportId()
       );
     },
+
+    /**
+     * Fetches a JPEG from S3 and displays it as an overlay on the active viewport
+     * @param {Object} params - Parameters for the overlay
+     * @param {string} params.s3Url - The S3 URL to fetch the JPEG from
+     * @param {Object} params.position - Position object with x, y coordinates (optional)
+     * @param {number} params.opacity - Opacity value between 0 and 1 (optional, default: 0.8)
+     * @param {Object} params.size - Size object with width, height (optional)
+     */
+    addS3ImageOverlay: async ({ s3Url, position = { x: 50, y: 50 }, opacity = 0.8, size }) => {
+      try {
+        const { viewportGridService, uiNotificationService } = servicesManager.services;
+        const { activeViewportId } = viewportGridService.getState();
+
+        if (!activeViewportId) {
+          uiNotificationService.show({
+            title: 'Image Overlay',
+            message: 'No active viewport found',
+            type: 'error',
+          });
+          return;
+        }
+
+        // Get the active viewport
+        const viewport = cornerstoneViewportService.getCornerstoneViewport(activeViewportId);
+        if (!viewport) {
+          uiNotificationService.show({
+            title: 'Image Overlay',
+            message: 'Could not access viewport',
+            type: 'error',
+          });
+          return;
+        }
+
+        // Show loading notification
+        uiNotificationService.show({
+          title: 'Image Overlay',
+          message: 'Fetching image from S3...',
+          type: 'info',
+          duration: 2000,
+        });
+
+        // Fetch the image from S3
+        const response = await fetch(s3Url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+
+        // Create image element to get dimensions
+        const img = new Image();
+        img.onload = () => {
+          // Get viewport element and create overlay
+          const viewportElement = viewport.element;
+          const overlayContainer = viewportElement.querySelector('.viewport-overlay-container') || 
+            (() => {
+              const container = document.createElement('div');
+              container.className = 'viewport-overlay-container';
+              container.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 1000;
+                user-select: none;
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+              `;
+              viewportElement.style.position = 'relative';
+              viewportElement.appendChild(container);
+              return container;
+            })();
+
+          // Create overlay image element
+          const overlayImg = document.createElement('img');
+          overlayImg.src = imageUrl;
+          overlayImg.className = 's3-image-overlay';
+          
+          // Calculate size based on viewport if not provided
+          const viewportRect = viewportElement.getBoundingClientRect();
+          const imgWidth = size?.width || Math.min(img.naturalWidth, viewportRect.width * 0.3);
+          const imgHeight = size?.height || (imgWidth * img.naturalHeight) / img.naturalWidth;
+
+          overlayImg.style.cssText = `
+            position: absolute;
+            left: ${position.x}px;
+            top: ${position.y}px;
+            width: ${imgWidth}px;
+            height: ${imgHeight}px;
+            opacity: ${opacity};
+            pointer-events: auto;
+            cursor: move;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 1001;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
+          `;
+
+          // Add hover effects
+          overlayImg.addEventListener('mouseenter', () => {
+            overlayImg.style.borderColor = 'rgba(255, 255, 255, 0.9)';
+            overlayImg.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.5)';
+          });
+
+          overlayImg.addEventListener('mouseleave', () => {
+            if (!isDragging) {
+              overlayImg.style.borderColor = 'rgba(255, 255, 255, 0.7)';
+              overlayImg.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+            }
+          });
+
+          // Add drag functionality with improved event handling
+          let isDragging = false;
+          let dragStart = { x: 0, y: 0 };
+
+          const handleMouseMove = (e) => {
+            if (!isDragging) return;
+            
+            // Calculate new position
+            const newX = e.clientX - dragStart.x;
+            const newY = e.clientY - dragStart.y;
+            
+            // Update position
+            position.x = newX;
+            position.y = newY;
+            overlayImg.style.left = `${position.x}px`;
+            overlayImg.style.top = `${position.y}px`;
+            
+            
+            // Prevent event from reaching viewport
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+          };
+
+          const handleMouseUp = (e) => {
+            if (isDragging) {
+              isDragging = false;
+              overlayImg.style.cursor = 'move';
+              
+              
+              // Prevent event from reaching viewport
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+              }
+              
+              // Remove global event listeners to prevent memory leaks
+              document.removeEventListener('mousemove', handleMouseMove);
+              document.removeEventListener('mouseup', handleMouseUp);
+            }
+          };
+
+          overlayImg.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragStart.x = e.clientX - position.x;
+            dragStart.y = e.clientY - position.y;
+            overlayImg.style.cursor = 'grabbing';
+            
+            // Prevent event from reaching viewport (stops windowing interaction)
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            
+            // Add global event listeners for dragging
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+          });
+
+          // Add double-click to remove overlay
+          overlayImg.addEventListener('dblclick', (e) => {
+            // Prevent event from reaching viewport
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            
+            overlayContainer.removeChild(overlayImg);
+            URL.revokeObjectURL(imageUrl);
+            
+            // Remove container if empty
+            if (overlayContainer.children.length === 0) {
+              viewportElement.removeChild(overlayContainer);
+            }
+          });
+
+          // Add overlay to container
+          overlayContainer.appendChild(overlayImg);
+
+
+          // Show success notification
+          uiNotificationService.show({
+            title: 'Image Overlay',
+            message: 'Image overlay added successfully. Double-click to remove.',
+            type: 'success',
+            duration: 3000,
+          });
+
+          // Clean up blob URL after a delay
+          setTimeout(() => {
+            URL.revokeObjectURL(imageUrl);
+          }, 1000);
+        };
+
+        img.onerror = () => {
+          URL.revokeObjectURL(imageUrl);
+          uiNotificationService.show({
+            title: 'Image Overlay',
+            message: 'Failed to load image',
+            type: 'error',
+          });
+        };
+
+        img.src = imageUrl;
+
+      } catch (error) {
+        console.error('Error adding S3 image overlay:', error);
+        uiNotificationService.show({
+          title: 'Image Overlay',
+          message: `Error: ${error.message}`,
+          type: 'error',
+        });
+      }
+    },
+
+    /**
+     * Toggles S3 image overlay on the active viewport - adds if none exist, removes if any exist
+     * @param {Object} params - Parameters for the overlay (used when adding)
+     */
+    toggleS3ImageOverlay: async ({ s3Url, position = { x: 50, y: 50 }, opacity = 0.8, size }) => {
+      const { viewportGridService, uiNotificationService } = servicesManager.services;
+      const { activeViewportId } = viewportGridService.getState();
+
+      if (!activeViewportId) {
+        uiNotificationService.show({
+          title: 'Image Overlay',
+          message: 'No active viewport found',
+          type: 'error',
+        });
+        return;
+      }
+
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(activeViewportId);
+      if (!viewport) {
+        uiNotificationService.show({
+          title: 'Image Overlay',
+          message: 'Could not access viewport',
+          type: 'error',
+        });
+        return;
+      }
+
+      const viewportElement = viewport.element;
+      const overlayContainer = viewportElement.querySelector('.viewport-overlay-container');
+      
+      // Check if overlays already exist
+      if (overlayContainer) {
+        const overlays = overlayContainer.querySelectorAll('.s3-image-overlay');
+        if (overlays.length > 0) {
+          // Remove existing overlays
+          overlays.forEach(overlay => {
+            overlayContainer.removeChild(overlay);
+          });
+
+          // Remove container if empty
+          if (overlayContainer.children.length === 0) {
+            viewportElement.removeChild(overlayContainer);
+          }
+
+          uiNotificationService.show({
+            title: 'Image Overlay',
+            message: `Removed ${overlays.length} overlay(s)`,
+            type: 'info',
+          });
+          return;
+        }
+      }
+
+      // No overlays exist, so add one
+      // Call the existing addS3ImageOverlay logic
+      await actions.addS3ImageOverlay({ s3Url, position, opacity, size });
+    },
   };
 
   const definitions = {
@@ -1619,6 +1913,9 @@ function commandsModule({
     },
     getRenderInactiveSegmentations: {
       commandFn: actions.getRenderInactiveSegmentations,
+    },
+    toggleS3ImageOverlay: {
+      commandFn: actions.toggleS3ImageOverlay,
     },
   };
 
