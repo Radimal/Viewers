@@ -268,7 +268,7 @@ const OHIFCornerstoneViewport = React.memo(
         }
       };
 
-      setTimeout(attemptRestoration, 300);
+      setTimeout(attemptRestoration, 50);
     }, [viewportId, viewportPersistenceService, cornerstoneViewportService, displaySets]);
     // subscribe to displaySet metadata invalidation (updates)
     // Currently, if the metadata changes we need to re-render the display set
@@ -437,48 +437,49 @@ const OHIFCornerstoneViewport = React.memo(
       appConfig,
     ]);
 
-    useEffect(() => {
-      if (!viewportPersistenceService || !cornerstoneViewportService) return;
+    // Disabled redundant restoration trigger for displaySet changes
+    // useEffect(() => {
+    //   if (!viewportPersistenceService || !cornerstoneViewportService) return;
 
-      // Simple restoration when displaySets change
-      const timer = setTimeout(() => {
-        try {
-          const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-          if (viewport?.getCurrentImageId?.()) {
-            console.log('🔄 Triggering restoration for displaySet change');
-            viewportPersistenceService.attemptViewportRestoration(viewportId);
-          }
-        } catch (error) {
-          console.warn('Error in restoration trigger:', error);
-        }
-      }, 100); // Very short delay, just enough for viewport to be ready
+    //   // Simple restoration when displaySets change
+    //   const timer = setTimeout(() => {
+    //     try {
+    //       const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+    //       if (viewport?.getCurrentImageId?.()) {
+    //         console.log('🔄 Triggering restoration for displaySet change');
+    //         viewportPersistenceService.attemptViewportRestoration(viewportId);
+    //       }
+    //     } catch (error) {
+    //       console.warn('Error in restoration trigger:', error);
+    //     }
+    //   }, 100); // Very short delay, just enough for viewport to be ready
 
-      return () => clearTimeout(timer);
-    }, [viewportId, displaySets, viewportPersistenceService, cornerstoneViewportService]);
+    //   return () => clearTimeout(timer);
+    // }, [viewportId, displaySets, viewportPersistenceService, cornerstoneViewportService]);
 
-    // Also add this restoration trigger when the viewport data is loaded:
-    useEffect(() => {
-      if (!viewportPersistenceService || !cornerstoneViewportService) return;
+    // Disabled redundant restoration trigger for data load
+    // useEffect(() => {
+    //   if (!viewportPersistenceService || !cornerstoneViewportService) return;
 
-      const handleViewportDataLoaded = () => {
-        setTimeout(() => {
-          try {
-            const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-            if (viewport?.getCurrentImageId?.()) {
-              console.log('🔄 Triggering restoration after data load');
-              viewportPersistenceService.attemptViewportRestoration(viewportId);
-            }
-          } catch (error) {
-            console.warn('Error in data load restoration:', error);
-          }
-        }, 200);
-      };
+    //   const handleViewportDataLoaded = () => {
+    //     setTimeout(() => {
+    //       try {
+    //         const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+    //         if (viewport?.getCurrentImageId?.()) {
+    //           console.log('🔄 Triggering restoration after data load');
+    //           viewportPersistenceService.attemptViewportRestoration(viewportId);
+    //         }
+    //       } catch (error) {
+    //         console.warn('Error in data load restoration:', error);
+    //       }
+    //     }, 200);
+    //   };
 
-      // Trigger on initial mount and when displaySets change
-      if (displaySets.length > 0) {
-        handleViewportDataLoaded();
-      }
-    }, [displaySets, viewportId, viewportPersistenceService, cornerstoneViewportService]);
+    //   // Trigger on initial mount and when displaySets change
+    //   if (displaySets.length > 0) {
+    //     handleViewportDataLoaded();
+    //   }
+    // }, [displaySets, viewportId, viewportPersistenceService, cornerstoneViewportService]);
 
     const { ref: resizeRef } = useResizeDetector({
       onResize,

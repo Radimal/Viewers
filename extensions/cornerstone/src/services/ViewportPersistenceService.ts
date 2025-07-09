@@ -1,10 +1,12 @@
 import { PubSubService } from '@ohif/core';
+import { Enums, eventTarget } from '@cornerstonejs/core';
 
 class ViewportPersistenceService extends PubSubService {
   public static readonly EVENTS = {
     VIEWPORT_STATE_STORED: 'event::viewportStateStored',
     VIEWPORT_STATE_RESTORED: 'event::viewportStateRestored',
     VIEWPORT_STATE_CLEARED: 'event::viewportStateCleared',
+    VIEWPORT_STATE_RESTORE_START: 'event::viewportStateRestoreStart',
   };
 
   public static REGISTRATION = {
@@ -22,6 +24,7 @@ class ViewportPersistenceService extends PubSubService {
   private isInitialized = false;
   private isInitialLoad = true;
   private initialLoadTimer: NodeJS.Timeout | null = null;
+  private pendingRestorations: Map<string, { viewportId: string; timestamp: number }> = new Map();
 
   constructor({ servicesManager }) {
     super(ViewportPersistenceService.EVENTS);
@@ -32,11 +35,68 @@ class ViewportPersistenceService extends PubSubService {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
+    // Set up event listeners for immediate restoration
+    this._setupEventListeners();
+
     // Mark as no longer initial load after a delay
     this.initialLoadTimer = setTimeout(() => {
       this.isInitialLoad = false;
       console.log('📱 Initial load period ended');
     }, 3000); // 3 seconds should be enough for initial app setup
+  }
+
+  private _setupEventListeners(): void {
+    // Listen for viewport new image set events
+    const viewportNewImageSetHandler = (event: any) => {
+      const { element } = event.detail;
+      if (element?.id) {
+        this._handleViewportReady(element.id);
+      }
+    };
+
+    // Listen for image rendered events
+    const imageRenderedHandler = (event: any) => {
+      const { element } = event.detail;
+      if (element?.id) {
+        this._handleViewportReady(element.id);
+      }
+    };
+
+    // Listen for stack new image events
+    const stackNewImageHandler = (event: any) => {
+      const { element } = event.detail;
+      if (element?.id) {
+        this._handleViewportReady(element.id);
+      }
+    };
+
+    // Add event listeners
+    eventTarget.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler);
+    eventTarget.addEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler);
+    eventTarget.addEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler);
+
+    // Store cleanup functions
+    this.subscriptions.push(
+      () => eventTarget.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler),
+      () => eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler),
+      () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler)
+    );
+  }
+
+  private _handleViewportReady(viewportId: string): void {
+    if (!this.pendingRestorations.has(viewportId)) {
+      return;
+    }
+
+    console.log('🎯 Viewport ready event received for:', viewportId);
+
+    // Small delay to ensure viewport is fully stabilized
+    setTimeout(() => {
+      if (this.pendingRestorations.has(viewportId)) {
+        console.log('🔄 Attempting immediate restoration for:', viewportId);
+        this._restoreViewportStateWithRetry(viewportId, 0);
+      }
+    }, 10);
   }
 
   // Generate a simple hash based on the current image
@@ -148,23 +208,44 @@ class ViewportPersistenceService extends PubSubService {
   }
 
   public attemptViewportRestoration(viewportId: string): void {
-    // Use longer delay for initial load, shorter for navigation
-    const delay = this.isInitialLoad ? 1200 : 50; // Increased initial delay for CT/MRI
-    console.log(`🔄 Scheduling restoration (delay: ${delay}ms, initial: ${this.isInitialLoad})`);
+    console.log('🔄 Scheduling restoration for:', viewportId);
 
+    // Add to pending restorations for event-based handling
+    this.pendingRestorations.set(viewportId, {
+      viewportId,
+      timestamp: Date.now()
+    });
+
+    // Try immediate restoration first
+    if (this._restoreViewportState(viewportId)) {
+      // Success - remove from pending and we're done
+      this.pendingRestorations.delete(viewportId);
+      console.log('✅ Immediate restoration successful for:', viewportId);
+      return;
+    }
+
+    // If immediate restoration fails, the viewport will be restored via events
+    console.log('⏳ Waiting for viewport ready events for:', viewportId);
+
+    // Fallback: remove from pending after timeout to prevent memory leaks
     setTimeout(() => {
-      this._restoreViewportStateWithRetry(viewportId, 0);
-    }, delay);
+      if (this.pendingRestorations.has(viewportId)) {
+        console.log('🕐 Removing stale pending restoration for:', viewportId);
+        this.pendingRestorations.delete(viewportId);
+      }
+    }, 5000); // 5 second timeout
   }
 
   private _restoreViewportStateWithRetry(viewportId: string, retryCount: number): void {
     const maxRetries = 5;
-    const retryDelay = 300;
+    const retryDelay = 25; // Further reduced retry delay for faster restoration
 
     console.log(`🔄 Restoration attempt ${retryCount + 1}/${maxRetries + 1} for:`, viewportId);
 
     if (this._restoreViewportState(viewportId)) {
       // Success - restoration completed
+      this.pendingRestorations.delete(viewportId);
+      
       if (this.isInitialLoad && retryCount === 0) {
         // For initial load, add an additional restoration attempt
         setTimeout(() => {
@@ -269,7 +350,27 @@ class ViewportPersistenceService extends PubSubService {
             // Update the stored state with the current hash for future use
             this._storeViewportState(hash, parsedState);
 
-            return parsedState;
+            // Check if current state matches the fallback state
+            const currentState = this._extractRotationFlipState(viewport);
+            if (this._statesMatch(currentState?.rotationFlip, parsedState.rotationFlip)) {
+              console.log('⏭️ Fallback state already correct, skipping restoration');
+              return true;
+            }
+
+            // Broadcast restoration start event for fallback state
+            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORE_START, {
+              viewportId,
+            });
+
+            this._applyViewportState(viewport, parsedState);
+
+            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+              viewportId,
+              hash,
+              state: parsedState,
+            });
+
+            return true;
           }
         }
 
@@ -294,6 +395,11 @@ class ViewportPersistenceService extends PubSubService {
         hash,
         currentState: currentState?.rotationFlip,
         storedState: storedState.rotationFlip,
+      });
+
+      // Broadcast restoration start event only when we actually need to restore
+      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORE_START, {
+        viewportId,
       });
 
       this._applyViewportState(viewport, storedState);
@@ -726,6 +832,9 @@ class ViewportPersistenceService extends PubSubService {
       clearTimeout(this.initialLoadTimer);
       this.initialLoadTimer = null;
     }
+
+    // Clear pending restorations
+    this.pendingRestorations.clear();
 
     this.isInitialized = false;
   }
