@@ -50,7 +50,7 @@ class ViewportPersistenceService extends PubSubService {
     const viewportNewImageSetHandler = (event: any) => {
       const { element } = event.detail;
       if (element?.id) {
-        this._handleViewportReady(element.id);
+        this._handleViewportImageChange(element.id);
       }
     };
 
@@ -66,7 +66,7 @@ class ViewportPersistenceService extends PubSubService {
     const stackNewImageHandler = (event: any) => {
       const { element } = event.detail;
       if (element?.id) {
-        this._handleViewportReady(element.id);
+        this._handleViewportImageChange(element.id);
       }
     };
 
@@ -81,6 +81,14 @@ class ViewportPersistenceService extends PubSubService {
       () => eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler),
       () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler)
     );
+  }
+
+  private _handleViewportImageChange(viewportId: string): void {
+    console.log('🔄 Image change detected for viewport:', viewportId);
+    
+    this.storeRotationFlipState(viewportId);
+    
+    this.attemptViewportRestoration(viewportId);
   }
 
   private _handleViewportReady(viewportId: string): void {
@@ -207,6 +215,32 @@ class ViewportPersistenceService extends PubSubService {
     }
   }
 
+  public checkIfRestorationNeeded(viewportId: string): boolean {
+    const { cornerstoneViewportService } = this.servicesManager.services;
+
+    try {
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+      if (!viewport?.getCurrentImageId?.()) {
+        return false;
+      }
+
+      const hash = this.generateViewportHash(viewport);
+      if (!hash) {
+        return false;
+      }
+
+      const storedState = this._getViewportState(hash);
+      if (!storedState?.rotationFlip) {
+        return false;
+      }
+
+      const currentState = this._extractRotationFlipState(viewport);
+      return !this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip);
+    } catch (error) {
+      return false;
+    }
+  }
+
   public attemptViewportRestoration(viewportId: string): void {
     console.log('🔄 Scheduling restoration for:', viewportId);
 
@@ -289,25 +323,28 @@ class ViewportPersistenceService extends PubSubService {
       const hash = this.generateViewportHash(viewport);
       if (!hash) {
         console.log('❌ Could not generate hash for viewport');
+        setTimeout(() => {
+          this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+            viewportId,
+            hash: null,
+            state: null,
+            noHash: true,
+          });
+        }, 200);
         return false;
       }
 
       console.log('🔍 Looking for stored state with hash:', hash);
-
-      // Debug: check what's actually in localStorage
-      const allStoredKeys = Object.keys(localStorage).filter(key =>
-        key.startsWith(this.STORAGE_KEY_PREFIX)
-      );
-      console.log(
-        '🔍 All stored viewport keys:',
-        allStoredKeys.map(key => key.replace(this.STORAGE_KEY_PREFIX, ''))
-      );
 
       const storedState = this._getViewportState(hash);
       if (!storedState?.rotationFlip) {
         console.log('❌ No stored state found for hash:', hash);
 
         // Try to find a close match
+        const allStoredKeys = Object.keys(localStorage).filter(key =>
+          key.startsWith(this.STORAGE_KEY_PREFIX)
+        );
+        
         const partialMatches = allStoredKeys.filter(key => {
           const storedHash = key.replace(this.STORAGE_KEY_PREFIX, '');
           const hashParts = hash.split('-');
@@ -318,10 +355,6 @@ class ViewportPersistenceService extends PubSubService {
         });
 
         if (partialMatches.length > 0) {
-          console.log(
-            '🔍 Found partial matches (same study/series):',
-            partialMatches.map(key => key.replace(this.STORAGE_KEY_PREFIX, ''))
-          );
 
           // Use the most recent partial match
           let mostRecentKey = partialMatches[0];
@@ -342,77 +375,80 @@ class ViewportPersistenceService extends PubSubService {
           const fallbackState = localStorage.getItem(mostRecentKey);
           if (fallbackState) {
             const parsedState = JSON.parse(fallbackState);
-            console.log(
-              '🔄 Using fallback state from:',
-              mostRecentKey.replace(this.STORAGE_KEY_PREFIX, '')
-            );
 
             // Update the stored state with the current hash for future use
             this._storeViewportState(hash, parsedState);
 
-            // Check if current state matches the fallback state
-            const currentState = this._extractRotationFlipState(viewport);
-            if (this._statesMatch(currentState?.rotationFlip, parsedState.rotationFlip)) {
-              console.log('⏭️ Fallback state already correct, skipping restoration');
-              return true;
-            }
-
-            // Broadcast restoration start event for fallback state
-            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORE_START, {
-              viewportId,
-            });
-
             this._applyViewportState(viewport, parsedState);
 
-            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-              viewportId,
-              hash,
-              state: parsedState,
-            });
+            setTimeout(() => {
+              this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+                viewportId,
+                hash,
+                state: parsedState,
+              });
+            }, 200); // Balanced delay to prevent flicker while staying responsive
 
             return true;
           }
         }
 
+        const defaultState = this._extractRotationFlipState(viewport);
+        if (defaultState) {
+          this._storeViewportState(hash, defaultState);
+          console.log('📦 Stored default state for new image');
+          
+          this._applyViewportState(viewport, defaultState);
+          
+          setTimeout(() => {
+            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+              viewportId,
+              hash,
+              state: defaultState,
+              wasDefault: true,
+            });
+          }, 200); // Same delay as transformed images for uniformity
+        } else {
+          setTimeout(() => {
+            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+              viewportId,
+              hash,
+              state: null,
+              noStoredState: true,
+            });
+          }, 200); // Same delay for uniformity
+        }
+        
         return false;
-      }
-
-      // Check if the current state matches the stored state
-      const currentState = this._extractRotationFlipState(viewport);
-      console.log('🔍 Current vs stored state comparison:', {
-        current: currentState?.rotationFlip,
-        stored: storedState.rotationFlip,
-        matches: this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip),
-      });
-
-      if (this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip)) {
-        console.log('⏭️ State already correct, skipping restoration');
-        return true; // Consider this a success
       }
 
       console.log('📥 Restoring state:', {
         viewportId,
         hash,
-        currentState: currentState?.rotationFlip,
         storedState: storedState.rotationFlip,
-      });
-
-      // Broadcast restoration start event only when we actually need to restore
-      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORE_START, {
-        viewportId,
       });
 
       this._applyViewportState(viewport, storedState);
 
-      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-        viewportId,
-        hash,
-        state: storedState,
-      });
+      setTimeout(() => {
+        this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+          viewportId,
+          hash,
+          state: storedState,
+        });
+      }, 200); // Balanced delay to prevent flicker while staying responsive
 
       return true;
     } catch (error) {
       console.error('Error restoring viewport state:', error);
+      setTimeout(() => {
+        this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+          viewportId,
+          hash: null,
+          state: null,
+          error: true,
+        });
+      }, 300);
       return false;
     }
   }

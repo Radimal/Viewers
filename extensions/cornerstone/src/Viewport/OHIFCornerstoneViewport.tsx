@@ -87,9 +87,8 @@ const OHIFCornerstoneViewport = React.memo(
 
     const [scrollbarHeight, setScrollbarHeight] = useState('100px');
     const [enabledVPElement, setEnabledVPElement] = useState(null);
-    const [showBlackScreen, setShowBlackScreen] = useState(false);
-    const [showFullBlackOverlay, setShowFullBlackOverlay] = useState(true); // Start with full black overlay
-    const [viewportOpacity, setViewportOpacity] = useState(0); // Start transparent for fade-in
+    const [showBlackScreen, setShowBlackScreen] = useState(true); // Start with black screen
+    const [isImageReady, setIsImageReady] = useState(false);
     const elementRef = useRef() as React.MutableRefObject<HTMLDivElement>;
     const [appConfig] = useAppConfig();
 
@@ -252,6 +251,16 @@ const OHIFCornerstoneViewport = React.memo(
     }, [viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
     useEffect(() => {
+      const element = elementRef.current;
+      if (!element) return;
+
+      element.style.visibility = 'hidden';
+      
+      return () => {
+      };
+    }, [displaySets]);
+
+    useEffect(() => {
       if (!viewportPersistenceService || !cornerstoneViewportService) return;
 
       const attemptRestoration = () => {
@@ -391,29 +400,31 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [displaySets, elementRef, viewportId, isJumpToMeasurementDisabled, servicesManager]);
 
-    // Manage full black overlay during displaySet transitions
+    // Manage black screen during displaySet transitions
     useEffect(() => {
       if (displaySets && displaySets.length > 0) {
-        setShowFullBlackOverlay(true);
         setShowBlackScreen(true);
-        setViewportOpacity(0); // Reset to transparent for new transition
-
-        // Fallback timeout to ensure overlay doesn't stay too long
-        const clearBlackScreenTimer = setTimeout(() => {
-          setShowBlackScreen(false);
-          setViewportOpacity(1);
-          setTimeout(() => {
-            setShowFullBlackOverlay(false);
-          }, 400); // Allow fade-in to complete
-        }, 1000);
-
-        return () => clearTimeout(clearBlackScreenTimer);
+        setIsImageReady(false);
+        
+        const storeCurrentState = () => {
+          try {
+            const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            if (viewport?.getCurrentImageId?.()) {
+              viewportPersistenceService?.storeRotationFlipState(viewportId);
+            }
+          } catch (error) {
+            console.warn('Error storing current state during transition:', error);
+          }
+        };
+        
+        storeCurrentState();
       } else {
-        setShowFullBlackOverlay(true);
+        setShowBlackScreen(true);
+        setIsImageReady(false);
       }
-    }, [displaySets]);
+    }, [displaySets, viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
-    // Listen for restoration events to clear black overlays
+    // Listen for restoration events and image loading to clear black screen
     useEffect(() => {
       if (!viewportPersistenceService) return;
 
@@ -421,34 +432,33 @@ const OHIFCornerstoneViewport = React.memo(
         viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_RESTORED,
         event => {
           if (event.viewportId === viewportId) {
-            setShowBlackScreen(false);
-            // Start fade-in immediately
-            setViewportOpacity(1);
-            // Small delay to ensure viewport is stable before clearing full overlay
+            
             setTimeout(() => {
-              setShowFullBlackOverlay(false);
-            }, 600);
+              const element = elementRef.current;
+              if (element) {
+                element.style.visibility = 'visible';
+              }
+              setIsImageReady(true);
+              setShowBlackScreen(false);
+            }, 50);
           }
         }
       );
 
-      // Also clear overlays when viewport data is successfully loaded without restoration
-      const viewportDataLoadedTimer = setTimeout(() => {
-        if (showFullBlackOverlay) {
-          setShowBlackScreen(false);
-          // Start fade-in for default images
-          setViewportOpacity(1);
-          setTimeout(() => {
-            setShowFullBlackOverlay(false);
-          }, 100);
+      const fallbackTimer = setTimeout(() => {
+        const element = elementRef.current;
+        if (element) {
+          element.style.visibility = 'visible';
         }
-      }, 200); // Faster for default images
+        setIsImageReady(true);
+        setShowBlackScreen(false);
+      }, 2000); // 2 second fallback
 
       return () => {
         restorationCompleteSubscription?.unsubscribe();
-        clearTimeout(viewportDataLoadedTimer);
+        clearTimeout(fallbackTimer);
       };
-    }, [viewportPersistenceService, viewportId, showFullBlackOverlay]);
+    }, [viewportPersistenceService, viewportId]);
 
     // Set up the window level action menu in the viewport action corners.
     useEffect(() => {
@@ -554,9 +564,7 @@ const OHIFCornerstoneViewport = React.memo(
             className="cornerstone-viewport-element"
             style={{ 
               height: '100%', 
-              width: '100%',
-              opacity: viewportOpacity,
-              transition: 'opacity 0.4s ease-in-out'
+              width: '100%'
             }}
             onContextMenu={e => e.preventDefault()}
             onMouseDown={e => e.preventDefault()}
@@ -581,20 +589,11 @@ const OHIFCornerstoneViewport = React.memo(
             viewportId={viewportId}
             servicesManager={servicesManager}
           />
-          {/* Black screen overlay during displaySet transitions */}
+          {/* Black screen overlay until image is ready */}
           {showBlackScreen && (
             <div className="pointer-events-none absolute top-0 left-0 z-50 h-full w-full bg-black">
               <div className="flex h-full items-center justify-center text-white">
                 {/* Optional: Add loading indicator */}
-              </div>
-            </div>
-          )}
-
-          {/* Full black overlay covering entire viewport until stable */}
-          {showFullBlackOverlay && (
-            <div className="pointer-events-none absolute top-0 left-0 z-[60] h-full w-full bg-black">
-              <div className="flex h-full items-center justify-center text-white opacity-50">
-                {/* Optional: Add subtle loading indicator */}
               </div>
             </div>
           )}
