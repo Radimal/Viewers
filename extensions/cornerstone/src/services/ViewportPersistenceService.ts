@@ -70,16 +70,27 @@ class ViewportPersistenceService extends PubSubService {
       }
     };
 
+    const volumeLoadedHandler = (event: any) => {
+      const { element } = event.detail;
+      if (element?.id) {
+        this._handleViewportReady(element.id);
+      }
+    };
+
     // Add event listeners
     eventTarget.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler);
     eventTarget.addEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler);
     eventTarget.addEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler);
+    eventTarget.addEventListener(Enums.Events.VOLUME_LOADED, volumeLoadedHandler);
+    eventTarget.addEventListener(Enums.Events.VOLUME_RENDERED, volumeLoadedHandler);
 
     // Store cleanup functions
     this.subscriptions.push(
       () => eventTarget.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler),
       () => eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler),
-      () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler)
+      () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler),
+      () => eventTarget.removeEventListener(Enums.Events.VOLUME_LOADED, volumeLoadedHandler),
+      () => eventTarget.removeEventListener(Enums.Events.VOLUME_RENDERED, volumeLoadedHandler)
     );
   }
 
@@ -262,12 +273,13 @@ class ViewportPersistenceService extends PubSubService {
     console.log('⏳ Waiting for viewport ready events for:', viewportId);
 
     // Fallback: remove from pending after timeout to prevent memory leaks
+    const timeout = 8000; // 8 second timeout for slow-loading images
     setTimeout(() => {
       if (this.pendingRestorations.has(viewportId)) {
         console.log('🕐 Removing stale pending restoration for:', viewportId);
         this.pendingRestorations.delete(viewportId);
       }
-    }, 5000); // 5 second timeout
+    }, timeout);
   }
 
   private _restoreViewportStateWithRetry(viewportId: string, retryCount: number): void {

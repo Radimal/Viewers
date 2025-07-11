@@ -89,6 +89,25 @@ const OHIFCornerstoneViewport = React.memo(
     const [enabledVPElement, setEnabledVPElement] = useState(null);
     const [showBlackScreen, setShowBlackScreen] = useState(true); // Start with black screen
     const [isImageReady, setIsImageReady] = useState(false);
+    useEffect(() => {
+      const isVolumeViewport = viewportOptions.viewportType === 'volume';
+      const isMultiFrame = displaySets?.[0]?.images?.length > 1; // CT scans have multiple frames
+      const isSlowLoading = isVolumeViewport || isMultiFrame;
+      
+      if (isSlowLoading && displaySets && displaySets.length > 0) {
+        const emergencyTimer = setTimeout(() => {
+          setIsImageReady(true);
+          setShowBlackScreen(false);
+          
+          const element = elementRef.current;
+          if (element) {
+            element.style.visibility = 'visible';
+          }
+        }, 1000); // 1 second for slow-loading images to match standard timing
+        
+        return () => clearTimeout(emergencyTimer);
+      }
+    }, [viewportId, viewportOptions.viewportType, displaySets]);
     const elementRef = useRef() as React.MutableRefObject<HTMLDivElement>;
     const [appConfig] = useAppConfig();
 
@@ -252,13 +271,40 @@ const OHIFCornerstoneViewport = React.memo(
 
     useEffect(() => {
       const element = elementRef.current;
-      if (!element) return;
+      if (!element) {
+        return;
+      }
 
       element.style.visibility = 'hidden';
       
+      const isVolumeViewport = viewportOptions.viewportType === 'volume';
+      if (isVolumeViewport) {
+        const volumeShowTimer = setTimeout(() => {
+          const element = elementRef.current;
+          if (element) {
+            element.style.visibility = 'visible';
+            setIsImageReady(true);
+            setShowBlackScreen(false);
+            
+            try {
+              const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+              if (viewport) {
+                viewportPersistenceService?.storeRotationFlipState(viewportId);
+              }
+            } catch (error) {
+              console.warn('Error storing volume state:', error);
+            }
+          }
+        }, 1000); // 1 second delay for volumes
+        
+        return () => {
+          clearTimeout(volumeShowTimer);
+        };
+      }
+      
       return () => {
       };
-    }, [displaySets]);
+    }, [displaySets, viewportOptions.viewportType, viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
     useEffect(() => {
       if (!viewportPersistenceService || !cornerstoneViewportService) return;
@@ -422,7 +468,7 @@ const OHIFCornerstoneViewport = React.memo(
         setShowBlackScreen(true);
         setIsImageReady(false);
       }
-    }, [displaySets, viewportId, cornerstoneViewportService, viewportPersistenceService]);
+    }, [displaySets, viewportId, viewportOptions.viewportType, cornerstoneViewportService, viewportPersistenceService]);
 
     // Listen for restoration events and image loading to clear black screen
     useEffect(() => {
@@ -445,6 +491,8 @@ const OHIFCornerstoneViewport = React.memo(
         }
       );
 
+      const isVolumeViewport = viewportOptions.viewportType === 'volume';
+      const fallbackDelay = isVolumeViewport ? 2000 : 2000; // Same for both, but volume gets additional checks above
       const fallbackTimer = setTimeout(() => {
         const element = elementRef.current;
         if (element) {
@@ -452,7 +500,18 @@ const OHIFCornerstoneViewport = React.memo(
         }
         setIsImageReady(true);
         setShowBlackScreen(false);
-      }, 2000); // 2 second fallback
+        
+        if (isVolumeViewport) {
+          try {
+            const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            if (viewport) {
+              viewportPersistenceService?.storeRotationFlipState(viewportId);
+            }
+          } catch (error) {
+            console.warn('Error storing volume viewport state in fallback:', error);
+          }
+        }
+      }, fallbackDelay);
 
       return () => {
         restorationCompleteSubscription?.unsubscribe();
