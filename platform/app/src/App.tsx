@@ -5,6 +5,7 @@ import PropTypes from 'prop-types';
 import i18n from '@ohif/i18n';
 import { I18nextProvider } from 'react-i18next';
 import { BrowserRouter } from 'react-router-dom';
+import cacheManager from './utils/cacheManager';
 
 import Compose from './routes/Mode/Compose';
 import {
@@ -71,6 +72,7 @@ function App({
     };
 
     run();
+    cacheManager.startVersionChecking();
   }, []);
 
   if (!init) {
