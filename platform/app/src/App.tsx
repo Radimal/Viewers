@@ -73,6 +73,10 @@ function App({
 
     run();
     cacheManager.startVersionChecking();
+    // Make cache manager globally accessible for debugging
+    if (typeof window !== 'undefined') {
+      window.cacheManager = cacheManager;
+    }
   }, []);
 
   if (!init) {
