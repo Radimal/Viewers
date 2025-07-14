@@ -67,6 +67,7 @@ const OHIFCornerstoneViewport = React.memo(
     } = props;
     const viewportId = viewportOptions.viewportId;
 
+
     if (!viewportId) {
       throw new Error('Viewport ID is required');
     }
@@ -89,10 +90,15 @@ const OHIFCornerstoneViewport = React.memo(
     const [enabledVPElement, setEnabledVPElement] = useState(null);
     const [showBlackScreen, setShowBlackScreen] = useState(true); // Start with black screen
     const [isImageReady, setIsImageReady] = useState(false);
+    
+    // Immediate check for any non-standard viewport types - bypass black screen if needed
     useEffect(() => {
       const isVolumeViewport = viewportOptions.viewportType === 'volume';
+      const isStackViewport = viewportOptions.viewportType === 'stack';
       const isMultiFrame = displaySets?.[0]?.images?.length > 1; // CT scans have multiple frames
-      const isSlowLoading = isVolumeViewport || isMultiFrame;
+      const isUnknownViewport = !isVolumeViewport && !isStackViewport; // Catch any other viewport types
+      const isUltrasound = displaySets?.[0]?.Modality === 'US'; // Ultrasound modality
+      const isSlowLoading = isVolumeViewport || isMultiFrame || isUnknownViewport || isUltrasound;
       
       if (isSlowLoading && displaySets && displaySets.length > 0) {
         const emergencyTimer = setTimeout(() => {
@@ -269,16 +275,21 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
+    // Keep viewport hidden until restoration is complete - simple approach
     useEffect(() => {
       const element = elementRef.current;
       if (!element) {
         return;
       }
 
+      // Force viewport to be invisible immediately when displaySets change
       element.style.visibility = 'hidden';
       
+      // For volume viewports, add additional timeout as they load slower
       const isVolumeViewport = viewportOptions.viewportType === 'volume';
       if (isVolumeViewport) {
+        // For volume viewports, just show them after a short delay
+        // The restoration system seems unreliable for volumes
         const volumeShowTimer = setTimeout(() => {
           const element = elementRef.current;
           if (element) {
@@ -286,6 +297,7 @@ const OHIFCornerstoneViewport = React.memo(
             setIsImageReady(true);
             setShowBlackScreen(false);
             
+            // Try to store state for future use
             try {
               const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
               if (viewport) {
@@ -303,6 +315,7 @@ const OHIFCornerstoneViewport = React.memo(
       }
       
       return () => {
+        // Cleanup - but restoration events will handle showing
       };
     }, [displaySets, viewportOptions.viewportType, viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
@@ -452,6 +465,7 @@ const OHIFCornerstoneViewport = React.memo(
         setShowBlackScreen(true);
         setIsImageReady(false);
         
+        // Store current state before switching if there was a previous viewport
         const storeCurrentState = () => {
           try {
             const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
@@ -478,7 +492,7 @@ const OHIFCornerstoneViewport = React.memo(
         viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_RESTORED,
         event => {
           if (event.viewportId === viewportId) {
-            
+            // Show the viewport and clear black screen
             setTimeout(() => {
               const element = elementRef.current;
               if (element) {
@@ -491,8 +505,11 @@ const OHIFCornerstoneViewport = React.memo(
         }
       );
 
+      // Fallback timeout to prevent getting stuck on black screen
+      // Shorter timeout for volume viewports since they often don't trigger restoration events properly
       const isVolumeViewport = viewportOptions.viewportType === 'volume';
       const fallbackDelay = isVolumeViewport ? 2000 : 2000; // Same for both, but volume gets additional checks above
+      
       const fallbackTimer = setTimeout(() => {
         const element = elementRef.current;
         if (element) {
@@ -501,6 +518,7 @@ const OHIFCornerstoneViewport = React.memo(
         setIsImageReady(true);
         setShowBlackScreen(false);
         
+        // For volume viewports, also try to store default state
         if (isVolumeViewport) {
           try {
             const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
