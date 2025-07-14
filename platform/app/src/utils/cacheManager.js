@@ -1,8 +1,11 @@
+// Cache management utility for smart version checking
 class CacheManager {
   constructor() {
     this.currentVersion = null;
-    this.checkInterval = 30000; // Check every 30 seconds
     this.isChecking = false;
+    this.hasCheckedAfterLoad = false;
+    this.lastCheckTime = 0;
+    this.minCheckInterval = 60000; // Minimum 1 minute between checks
   }
 
   async getCurrentVersion() {
@@ -18,7 +21,15 @@ class CacheManager {
 
   async checkForUpdates() {
     if (this.isChecking) return;
+    
+    // Rate limiting - don't check too frequently
+    const now = Date.now();
+    if (now - this.lastCheckTime < this.minCheckInterval) {
+      return;
+    }
+    
     this.isChecking = true;
+    this.lastCheckTime = now;
 
     try {
       const newVersion = await this.getCurrentVersion();
@@ -69,15 +80,40 @@ class CacheManager {
       console.log('Current app version:', version);
     });
 
-    // Periodic checking
-    setInterval(() => {
-      this.checkForUpdates();
-    }, this.checkInterval);
+    // Single check 30 seconds after initial load
+    setTimeout(() => {
+      if (!this.hasCheckedAfterLoad) {
+        this.checkForUpdates();
+        this.hasCheckedAfterLoad = true;
+      }
+    }, 30000);
 
-    // Check when window regains focus
+    // Only check when window regains focus (user returns to tab)
+    // This is the most practical time for updates
     window.addEventListener('focus', () => {
       this.checkForUpdates();
     });
+
+    // Check when user interacts after being idle
+    let idleTimer = null;
+    const resetIdleTimer = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        // After 5 minutes of inactivity, check on next interaction
+        const checkOnNextInteraction = () => {
+          this.checkForUpdates();
+          document.removeEventListener('click', checkOnNextInteraction);
+          document.removeEventListener('keypress', checkOnNextInteraction);
+        };
+        document.addEventListener('click', checkOnNextInteraction);
+        document.addEventListener('keypress', checkOnNextInteraction);
+      }, 300000); // 5 minutes
+    };
+
+    // Reset idle timer on user activity
+    document.addEventListener('click', resetIdleTimer);
+    document.addEventListener('keypress', resetIdleTimer);
+    resetIdleTimer();
   }
 }
 
