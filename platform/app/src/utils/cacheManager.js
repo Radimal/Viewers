@@ -10,11 +10,26 @@ class CacheManager {
 
   async getCurrentVersion() {
     try {
+      console.log('🔍 Checking for version.json...');
       const response = await fetch('/version.json?' + Date.now()); // Cache bust the version check
+      
+      console.log('📡 Version check response:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        ok: response.ok
+      });
+
+      if (!response.ok) {
+        console.warn('❌ version.json not found or error:', response.status, response.statusText);
+        return null;
+      }
+
       const data = await response.json();
+      console.log('✅ Version data received:', data);
       return data.version;
     } catch (error) {
-      console.warn('Failed to check version:', error);
+      console.warn('❌ Failed to check version:', error);
       return null;
     }
   }
@@ -74,10 +89,16 @@ class CacheManager {
   }
 
   startVersionChecking() {
+    console.log('🚀 Starting cache manager...');
+    
     // Initial version set
     this.getCurrentVersion().then(version => {
       this.currentVersion = version;
-      console.log('Current app version:', version);
+      if (version) {
+        console.log('✅ Current app version initialized:', version);
+      } else {
+        console.warn('⚠️ Could not initialize app version - version.json may not exist');
+      }
     });
 
     // Single check 30 seconds after initial load
@@ -114,6 +135,21 @@ class CacheManager {
     document.addEventListener('click', resetIdleTimer);
     document.addEventListener('keypress', resetIdleTimer);
     resetIdleTimer();
+  }
+
+  // Debug functions for console testing
+  async manualVersionCheck() {
+    console.log('🔧 Manual version check triggered...');
+    await this.checkForUpdates();
+  }
+
+  logStatus() {
+    console.log('📊 Cache Manager Status:', {
+      currentVersion: this.currentVersion,
+      hasCheckedAfterLoad: this.hasCheckedAfterLoad,
+      lastCheckTime: new Date(this.lastCheckTime).toLocaleTimeString(),
+      isChecking: this.isChecking
+    });
   }
 }
 
