@@ -12,12 +12,12 @@ class CacheManager {
     try {
       console.log('🔍 Checking for version.json...');
       const response = await fetch('/version.json?' + Date.now()); // Cache bust the version check
-      
+
       console.log('📡 Version check response:', {
         status: response.status,
         statusText: response.statusText,
         url: response.url,
-        ok: response.ok
+        ok: response.ok,
       });
 
       if (!response.ok) {
@@ -36,19 +36,19 @@ class CacheManager {
 
   async checkForUpdates() {
     if (this.isChecking) return;
-    
+
     // Rate limiting - don't check too frequently
     const now = Date.now();
     if (now - this.lastCheckTime < this.minCheckInterval) {
       return;
     }
-    
+
     this.isChecking = true;
     this.lastCheckTime = now;
 
     try {
       const newVersion = await this.getCurrentVersion();
-      
+
       if (this.currentVersion && newVersion && this.currentVersion !== newVersion) {
         console.log('New version detected:', newVersion, 'Current:', this.currentVersion);
         this.handleVersionChange();
@@ -63,14 +63,9 @@ class CacheManager {
   }
 
   handleVersionChange() {
-    // Show user notification
-    const shouldReload = confirm(
-      'A new version is available. Click OK to refresh and get the latest updates.'
-    );
-    
-    if (shouldReload) {
-      this.forceReload();
-    }
+    // Force update - automatically reload without user confirmation
+    console.log('🔄 New version detected - forcing update...');
+    this.forceReload();
   }
 
   forceReload() {
@@ -80,22 +75,24 @@ class CacheManager {
         names.forEach(name => caches.delete(name));
       });
     }
-    
+
     // Clear localStorage if needed (be careful with user data)
     // localStorage.clear();
-    
+
     // Force hard reload
     window.location.reload(true);
   }
 
   startVersionChecking() {
     console.log('🚀 Starting cache manager...');
-    
-    // Initial version set
+
+    // Initial version set and immediate check
     this.getCurrentVersion().then(version => {
       this.currentVersion = version;
       if (version) {
         console.log('✅ Current app version initialized:', version);
+        // Perform immediate check after initialization
+        setTimeout(() => this.checkForUpdates(), 1000);
       } else {
         console.warn('⚠️ Could not initialize app version - version.json may not exist');
       }
@@ -107,7 +104,7 @@ class CacheManager {
         this.checkForUpdates();
         this.hasCheckedAfterLoad = true;
       }
-    }, 30000);
+    }, 10000);
 
     // Only check when window regains focus (user returns to tab)
     // This is the most practical time for updates
@@ -148,7 +145,7 @@ class CacheManager {
       currentVersion: this.currentVersion,
       hasCheckedAfterLoad: this.hasCheckedAfterLoad,
       lastCheckTime: new Date(this.lastCheckTime).toLocaleTimeString(),
-      isChecking: this.isChecking
+      isChecking: this.isChecking,
     });
   }
 }
