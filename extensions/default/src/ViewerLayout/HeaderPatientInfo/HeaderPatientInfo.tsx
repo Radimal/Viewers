@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import usePatientInfo from '../../hooks/usePatientInfo';
 import { Icons } from '@ohif/ui-next';
+import LoadingProgressIndicator from './LoadingProgressIndicator';
 
 export enum PatientInfoVisibility {
   VISIBLE = 'visible',
@@ -66,6 +67,9 @@ function HeaderPatientInfo({ servicesManager, appConfig }: withAppTypes) {
           </div>
         )}
       </div>
+      
+      <LoadingProgressIndicator servicesManager={servicesManager} />
+      
       <Icons.ChevronPatient className={`text-primary-active ${expanded ? 'rotate-180' : ''}`} />
     </div>
   );
