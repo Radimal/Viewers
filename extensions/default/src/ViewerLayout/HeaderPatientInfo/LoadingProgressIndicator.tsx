@@ -17,7 +17,35 @@ function LoadingProgressIndicator({ servicesManager }: LoadingProgressIndicatorP
   });
 
   useEffect(() => {
-    const { studyPrefetcherService, viewportGridService } = servicesManager.services;
+    const { studyPrefetcherService, viewportGridService, cornerstoneViewportService } = servicesManager.services;
+
+    const handleScrollStart = () => {
+      setLoadingState({
+        isLoading: true,
+        progress: 0,
+      });
+    };
+
+    const handleImageLoaded = () => {
+      setLoadingState({
+        isLoading: false,
+        progress: 100,
+      });
+    };
+
+    const handleImageError = () => {
+      setLoadingState({
+        isLoading: false,
+        progress: 0,
+      });
+    };
+
+    const eventTarget = cornerstoneViewportService.getRenderingEngine()?.canvas || window;
+    
+    eventTarget.addEventListener('CORNERSTONE_STACK_VIEWPORT_SCROLL', handleScrollStart);
+    eventTarget.addEventListener('CORNERSTONE_STACK_NEW_IMAGE', handleImageLoaded);
+    eventTarget.addEventListener('CORNERSTONE_VOLUME_NEW_IMAGE', handleImageLoaded);
+    eventTarget.addEventListener('IMAGE_LOAD_ERROR', handleImageError);
 
     const progressSubscription = studyPrefetcherService.subscribe(
       studyPrefetcherService.EVENTS.DISPLAYSET_LOAD_PROGRESS,
@@ -35,21 +63,6 @@ function LoadingProgressIndicator({ servicesManager }: LoadingProgressIndicatorP
       }
     );
 
-    const completeSubscription = studyPrefetcherService.subscribe(
-      studyPrefetcherService.EVENTS.DISPLAYSET_LOAD_COMPLETE,
-      ({ displaySetInstanceUID }) => {
-        setLoadingState(prev => {
-          if (prev.displaySetInstanceUID === displaySetInstanceUID) {
-            return {
-              isLoading: false,
-              progress: 100,
-            };
-          }
-          return prev;
-        });
-      }
-    );
-
     const viewportChangeSubscription = viewportGridService.subscribe(
       viewportGridService.EVENTS.ACTIVE_VIEWPORT_ID_CHANGED,
       () => {
@@ -61,8 +74,12 @@ function LoadingProgressIndicator({ servicesManager }: LoadingProgressIndicatorP
     );
 
     return () => {
+      eventTarget.removeEventListener('CORNERSTONE_STACK_VIEWPORT_SCROLL', handleScrollStart);
+      eventTarget.removeEventListener('CORNERSTONE_STACK_NEW_IMAGE', handleImageLoaded);
+      eventTarget.removeEventListener('CORNERSTONE_VOLUME_NEW_IMAGE', handleImageLoaded);
+      eventTarget.removeEventListener('IMAGE_LOAD_ERROR', handleImageError);
+      
       progressSubscription.unsubscribe();
-      completeSubscription.unsubscribe();
       viewportChangeSubscription.unsubscribe();
     };
   }, [servicesManager]);
