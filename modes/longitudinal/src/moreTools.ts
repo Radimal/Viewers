@@ -83,31 +83,6 @@ const moreTools = [
           ],
         }),
         createButton({
-          id: 'ImageSliceSync',
-          icon: 'link',
-          label: 'Image Slice Sync',
-          tooltip: 'Enable position synchronization on stack viewports',
-          commands: {
-            commandName: 'toggleSynchronizer',
-            commandOptions: {
-              type: 'imageSlice',
-            },
-          },
-          listeners: {
-            [EVENTS.VIEWPORT_NEW_IMAGE_SET]: {
-              commandName: 'toggleImageSliceSync',
-              commandOptions: { toggledState: true },
-            },
-          },
-          evaluate: [
-            'evaluate.cornerstone.synchronizer',
-            {
-              name: 'evaluate.viewport.supported',
-              unsupportedViewportTypes: ['video', 'volume3d'],
-            },
-          ],
-        }),
-        createButton({
           id: 'ReferenceLines',
           icon: 'tool-referenceLines',
           label: 'Reference Lines',
@@ -204,20 +179,6 @@ const moreTools = [
           icon: 'tool-magnify',
           label: 'Zoom-in',
           tooltip: 'Zoom-in',
-          commands: setToolActiveToolbar,
-          evaluate: [
-            'evaluate.cornerstoneTool',
-            {
-              name: 'evaluate.viewport.supported',
-              unsupportedViewportTypes: ['video'],
-            },
-          ],
-        }),
-        createButton({
-          id: 'CalibrationLine',
-          icon: 'tool-calibration',
-          label: 'Calibration',
-          tooltip: 'Calibration Line',
           commands: setToolActiveToolbar,
           evaluate: [
             'evaluate.cornerstoneTool',

@@ -112,6 +112,8 @@ function modeFactory({ modeConfiguration }) {
         'Capture',
         'Layout',
         'Crosshairs',
+        'CalibrationLine',
+        'ImageSliceSync',
         'MoreTools',
         // 'ExternalMonitor',
       ]);

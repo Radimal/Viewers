@@ -2,6 +2,7 @@
 // Only ways that you can pass in a custom React component for render :l
 import { ToolbarService } from '@ohif/core';
 import type { Button } from '@ohif/core/types';
+import { Enums as CornerstoneEnums } from '@cornerstonejs/core';
 
 const { createButton } = ToolbarService;
 
@@ -203,6 +204,51 @@ const toolbarButtons: Button[] = [
         name: 'evaluate.cornerstoneTool',
         disabledText: 'Select an MPR viewport to enable this tool',
       },
+    },
+  },
+  {
+    id: 'CalibrationLine',
+    uiType: 'ohif.radioGroup',
+    props: {
+      icon: 'tool-calibration',
+      label: 'Calibration',
+      tooltip: 'Calibration Line',
+      commands: setToolActiveToolbar,
+      evaluate: [
+        'evaluate.cornerstoneTool',
+        {
+          name: 'evaluate.viewport.supported',
+          unsupportedViewportTypes: ['video'],
+        },
+      ],
+    },
+  },
+  {
+    id: 'ImageSliceSync',
+    uiType: 'ohif.radioGroup',
+    props: {
+      icon: 'link',
+      label: 'Image Slice Sync',
+      tooltip: 'Enable position synchronization on stack viewports',
+      commands: {
+        commandName: 'toggleSynchronizer',
+        commandOptions: {
+          type: 'imageSlice',
+        },
+      },
+      listeners: {
+        [CornerstoneEnums.Events.VIEWPORT_NEW_IMAGE_SET]: {
+          commandName: 'toggleImageSliceSync',
+          commandOptions: { toggledState: true },
+        },
+      },
+      evaluate: [
+        'evaluate.cornerstone.synchronizer',
+        {
+          name: 'evaluate.viewport.supported',
+          unsupportedViewportTypes: ['video', 'volume3d'],
+        },
+      ],
     },
   },
 ];

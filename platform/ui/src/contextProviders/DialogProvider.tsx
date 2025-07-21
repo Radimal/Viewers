@@ -43,10 +43,15 @@ const DialogProvider = ({ children, service = null }) => {
 
   const getCenterPosition = id => {
     const root = document.querySelector('#root');
-    const centerX = root.offsetLeft + root.offsetWidth / 2;
-    const centerY = root.offsetTop + root.offsetHeight / 2;
     const item = document.querySelector(`#draggableItem-${id}`);
     const itemBounds = item.getBoundingClientRect();
+    
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    const centerX = viewportWidth / 2;
+    const centerY = (viewportHeight * 0.45); // Moved up from 60% to 45% for better positioning
+    
     return {
       x: centerX - itemBounds.width / 2,
       y: centerY - itemBounds.height / 2,
