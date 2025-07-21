@@ -55,14 +55,20 @@ function commandsModule({
   } = servicesManager.services;
 
   const setupAutoImageSliceSync = () => {
-    const enableImageSliceSyncIfNeeded = () => {
+    let syncTimeout = null;
+    
+    const enableImageSliceSyncForAll = () => {
       const { viewports } = viewportGridService.getState();
       const totalViewports = viewports.size;
       
       if (totalViewports > 1) {
-        setTimeout(() => {
-          toggleImageSliceSync({ servicesManager });
-        }, 100);
+        if (syncTimeout) {
+          clearTimeout(syncTimeout);
+        }
+        
+        syncTimeout = setTimeout(() => {
+          forceEnableImageSliceSync({ servicesManager });
+        }, 300);
       }
     };
 
@@ -72,17 +78,29 @@ function commandsModule({
       
       if (totalViewports > 1) {
         setTimeout(() => {
-          toggleImageSliceSync({ servicesManager });
-        }, 100);
+          forceEnableImageSliceSync({ servicesManager });
+        }, 200);
       }
     };
 
     const handleViewportsReady = () => {
-      enableImageSliceSyncIfNeeded();
+      enableImageSliceSyncForAll();
     };
 
     const handleNewImageSet = () => {
-      enableImageSliceSyncIfNeeded();
+      enableImageSliceSyncForAll();
+    };
+
+    const handleImageRendered = () => {
+      enableImageSliceSyncForAll();
+    };
+
+    const handleGridStateChanged = () => {
+      enableImageSliceSyncForAll();
+    };
+
+    const handleActiveViewportChanged = () => {
+      enableImageSliceSyncForAll();
     };
 
     viewportGridService.subscribe(
@@ -95,11 +113,284 @@ function commandsModule({
       handleViewportsReady
     );
 
+    viewportGridService.subscribe(
+      viewportGridService.EVENTS.GRID_STATE_CHANGED,
+      handleGridStateChanged
+    );
+
+    viewportGridService.subscribe(
+      viewportGridService.EVENTS.ACTIVE_VIEWPORT_ID_CHANGED,
+      handleActiveViewportChanged
+    );
+
     eventTarget.addEventListener(
       CornerstoneEnums.Events.VIEWPORT_NEW_IMAGE_SET,
       handleNewImageSet
     );
+
+    eventTarget.addEventListener(
+      CornerstoneEnums.Events.IMAGE_RENDERED,
+      handleImageRendered
+    );
+
+    eventTarget.addEventListener(
+      CornerstoneEnums.Events.STACK_NEW_IMAGE,
+      enableImageSliceSyncForAll
+    );
+
+    eventTarget.addEventListener(
+      CornerstoneEnums.Events.VOLUME_LOADED,
+      enableImageSliceSyncForAll
+    );
   };
+
+  // Force enable image slice sync for compatible viewports, grouped intelligently
+  const forceEnableImageSliceSync = ({ servicesManager }) => {
+    const { syncGroupService, viewportGridService, displaySetService, cornerstoneViewportService } =
+      servicesManager.services;
+
+    // Get all viewports
+    let { viewports } = viewportGridService.getState();
+    viewports = [...viewports.values()];
+    
+    // Filter empty viewports
+    viewports = viewports.filter(
+      viewport => viewport.displaySetInstanceUIDs && viewport.displaySetInstanceUIDs.length
+    );
+
+    // Filter for stack/volume viewports that can potentially be synchronized
+    viewports = viewports.filter(viewport => {
+      const { displaySetInstanceUIDs } = viewport;
+
+      for (const displaySetInstanceUID of displaySetInstanceUIDs) {
+        const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUID);
+
+        // Include both reconstructable volumes and stack viewports
+        if (displaySet && (displaySet.isReconstructable || displaySet.Modality)) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    // Only proceed if we have multiple viewports to sync
+    if (viewports.length < 2) {
+      return;
+    }
+
+    viewports.forEach(gridViewport => {
+      const { viewportId } = gridViewport.viewportOptions;
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+      
+      if (viewport) {
+        const syncStates = syncGroupService.getSynchronizersForViewport(viewportId);
+        syncStates.forEach(syncState => {
+          if (syncState.id.startsWith('IMAGE_SLICE_SYNC')) {
+            try {
+              syncGroupService.removeViewportFromSyncGroup(
+                viewportId,
+                viewport.getRenderingEngine().id,
+                syncState.id
+              );
+            } catch (error) {
+              console.warn(`Failed to remove viewport ${viewportId} from sync group:`, error);
+            }
+          }
+        });
+      }
+    });
+
+    // Group viewports by spatial compatibility
+    const syncGroups = groupViewportsByCompatibility(viewports, displaySetService);
+
+    syncGroups.forEach((viewportGroup, groupIndex) => {
+      if (viewportGroup.length < 2) {
+        return;
+      }
+
+      const syncId = `IMAGE_SLICE_SYNC_GROUP_${groupIndex}`;
+
+      viewportGroup.forEach((gridViewport) => {
+        const { viewportId } = gridViewport.viewportOptions;
+        const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+        
+        if (!viewport) {
+          return;
+        }
+
+        try {
+          syncGroupService.addViewportToSyncGroup(viewportId, viewport.getRenderingEngine().id, {
+            type: 'imageSlice',
+            id: syncId,
+            source: true,
+            target: true,
+          });
+        } catch (error) {
+          console.warn(`Failed to add viewport ${viewportId} to sync group:`, error);
+        }
+      });
+    });
+  };
+
+  // Group viewports by spatial compatibility (same study, frame of reference, etc.)
+  const groupViewportsByCompatibility = (viewports, displaySetService) => {
+    const groups = [];
+    const processed = new Set();
+
+    viewports.forEach((viewport, index) => {
+      if (processed.has(index)) {
+        return;
+      }
+
+      const currentGroup = [viewport];
+      processed.add(index);
+
+      const currentMetadata = getViewportMetadata(viewport, displaySetService);
+      
+      if (!currentMetadata) {
+        groups.push(currentGroup);
+        return;
+      }
+
+      viewports.forEach((otherViewport, otherIndex) => {
+        if (otherIndex === index || processed.has(otherIndex)) {
+          return;
+        }
+
+        const otherMetadata = getViewportMetadata(otherViewport, displaySetService);
+        
+        if (otherMetadata) {
+          const isCompatibleWithGroup = currentGroup.some(groupViewport => {
+            const groupMetadata = getViewportMetadata(groupViewport, displaySetService);
+            return groupMetadata && areViewportsCompatibleForSync(groupMetadata, otherMetadata);
+          });
+          
+          if (isCompatibleWithGroup) {
+            currentGroup.push(otherViewport);
+            processed.add(otherIndex);
+          }
+        }
+      });
+
+      groups.push(currentGroup);
+    });
+
+    return groups;
+  };
+
+  // Get relevant metadata for sync compatibility checking
+  const getViewportMetadata = (viewport, displaySetService) => {
+    const { displaySetInstanceUIDs } = viewport;
+    
+    if (!displaySetInstanceUIDs || displaySetInstanceUIDs.length === 0) {
+      return null;
+    }
+
+    const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUIDs[0]);
+    
+    if (!displaySet) {
+      return null;
+    }
+
+    const firstInstance = displaySet.instances?.[0];
+    
+    if (!firstInstance) {
+      return null;
+    }
+
+    return {
+      StudyInstanceUID: firstInstance.StudyInstanceUID,
+      SeriesInstanceUID: firstInstance.SeriesInstanceUID,
+      FrameOfReferenceUID: firstInstance.FrameOfReferenceUID,
+      Modality: firstInstance.Modality,
+      ImageOrientationPatient: firstInstance.ImageOrientationPatient,
+      PatientID: firstInstance.PatientID,
+      PatientName: firstInstance.PatientName,
+      SeriesDescription: firstInstance.SeriesDescription,
+      isReconstructable: displaySet.isReconstructable,
+      numImages: displaySet.instances?.length || 1
+    };
+  };
+
+  const areViewportsCompatibleForSync = (metadata1, metadata2) => {
+    if (metadata1.PatientID && metadata2.PatientID && 
+        metadata1.PatientID !== metadata2.PatientID) {
+      return false;
+    }
+
+    if (metadata1.SeriesInstanceUID === metadata2.SeriesInstanceUID) {
+      return true;
+    }
+
+    if (metadata1.StudyInstanceUID && metadata2.StudyInstanceUID &&
+        metadata1.StudyInstanceUID !== metadata2.StudyInstanceUID) {
+      return false;
+    }
+
+    const frameDifference = Math.abs(metadata1.numImages - metadata2.numImages);
+    const frameTolerancePercent = 0.05;
+    const maxFrameTolerance = Math.min(metadata1.numImages, metadata2.numImages) * frameTolerancePercent;
+    
+    if (frameDifference > maxFrameTolerance && frameDifference > 2) {
+      return false;
+    }
+
+    const seriesDesc1 = (metadata1.SeriesDescription || '').toLowerCase();
+    const seriesDesc2 = (metadata2.SeriesDescription || '').toLowerCase();
+    
+    const anatomyKeywords = ['head', 'brain', 'chest', 'thorax', 'thx', 'abdomen', 'pelvis', 'spine', 'neck'];
+    
+    let anatomy1 = null;
+    let anatomy2 = null;
+    
+    for (const keyword of anatomyKeywords) {
+      if (seriesDesc1.includes(keyword)) anatomy1 = keyword;
+      if (seriesDesc2.includes(keyword)) anatomy2 = keyword;
+    }
+    
+    if (anatomy1 && anatomy2 && anatomy1 !== anatomy2) {
+      return false;
+    }
+
+    if (anatomy1 && anatomy2 && anatomy1 === anatomy2 && frameDifference <= maxFrameTolerance) {
+      return true;
+    }
+
+    const isContrastPair = (
+      (seriesDesc1.includes('head') && seriesDesc2.includes('head')) ||
+      (seriesDesc1.includes('brain') && seriesDesc2.includes('brain'))
+    ) && (
+      (seriesDesc1.includes('+c') || seriesDesc1.includes('contrast')) !==
+      (seriesDesc2.includes('+c') || seriesDesc2.includes('contrast'))
+    );
+
+    if (isContrastPair && frameDifference <= maxFrameTolerance) {
+      return true;
+    }
+
+    if (metadata1.ImageOrientationPatient && metadata2.ImageOrientationPatient) {
+      const iop1 = metadata1.ImageOrientationPatient;
+      const iop2 = metadata2.ImageOrientationPatient;
+      
+      const tolerance = 0.01;
+      const orientationMatch = iop1.every((value, index) => 
+        Math.abs(value - iop2[index]) < tolerance
+      );
+      
+      if (!orientationMatch) {
+        return false;
+      }
+    }
+
+    if (!anatomy1 || !anatomy2 || anatomy1 === anatomy2) {
+      if (frameDifference <= maxFrameTolerance) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
 
   const { measurementServiceSource } = this;
 
