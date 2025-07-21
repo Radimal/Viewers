@@ -95,8 +95,19 @@ const CornerstoneViewportDownloadForm = ({
       // to render the viewport for the downloadViewport.
       renderingEngine.resize();
 
+      if (downloadViewport instanceof StackViewport) {
+        const presentation = activeViewport.getViewPresentation();
+        if (presentation && downloadViewport.setViewPresentation) {
+          downloadViewport.setViewPresentation(presentation);
+        }
+      } else if (downloadViewport instanceof BaseVolumeViewport) {
+        const camera = activeViewport.getCamera();
+        if (camera && downloadViewport.setCamera) {
+          downloadViewport.setCamera(camera);
+        }
+      }
+
       // Trigger the render on the viewport to update the on screen
-      // downloadViewport.resetCamera();
       downloadViewport.render();
 
       downloadViewportElement.addEventListener(
@@ -123,14 +134,6 @@ const CornerstoneViewportDownloadForm = ({
           resolve({ dataUrl, width: newWidth, height: newHeight });
 
           downloadViewportElement.removeEventListener(Enums.Events.IMAGE_RENDERED, updateViewport);
-
-          // for some reason we need a reset camera here, and I don't know why
-          downloadViewport.resetCamera();
-          const presentation = activeViewport.getViewPresentation();
-          if (downloadViewport.setView) {
-            downloadViewport.setView(activeViewport.getViewReference(), presentation);
-          }
-          downloadViewport.render();
         }
       );
     });
@@ -152,10 +155,14 @@ const CornerstoneViewportDownloadForm = ({
         if (downloadViewport instanceof StackViewport) {
           const imageId = viewport.getCurrentImageId();
           const properties = viewport.getProperties();
+          const viewPresentation = viewport.getViewPresentation();
 
           downloadViewport.setStack([imageId]).then(() => {
             try {
               downloadViewport.setProperties(properties);
+              if (viewPresentation) {
+                downloadViewport.setViewPresentation(viewPresentation);
+              }
               const newWidth = Math.min(width || image.width, MAX_TEXTURE_SIZE);
               const newHeight = Math.min(height || image.height, MAX_TEXTURE_SIZE);
 
@@ -167,10 +174,16 @@ const CornerstoneViewportDownloadForm = ({
           });
         } else if (downloadViewport instanceof BaseVolumeViewport) {
           const actors = viewport.getActors();
+          const camera = viewport.getCamera();
+          
           // downloadViewport.setActors(actors);
           actors.forEach(actor => {
             downloadViewport.addActor(actor);
           });
+
+          if (camera) {
+            downloadViewport.setCamera(camera);
+          }
 
           downloadViewport.render();
 
