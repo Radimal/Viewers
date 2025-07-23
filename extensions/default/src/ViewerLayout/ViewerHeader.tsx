@@ -6,7 +6,7 @@ import { useLocation } from 'react-router';
 import { UserPreferences, AboutModal, useModal } from '@ohif/ui';
 import { Header } from '@ohif/ui-next';
 import i18n from '@ohif/i18n';
-import { hotkeys } from '@ohif/core';
+import { hotkeys, defaults } from '@ohif/core';
 import { Toolbar } from '../Toolbar/Toolbar';
 import HeaderPatientInfo from './HeaderPatientInfo';
 import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
@@ -90,6 +90,41 @@ function ViewerHeader({
   const versionNumber = process.env.VERSION_NUMBER;
   const commitHash = process.env.COMMIT_HASH;
 
+
+  useEffect(() => {
+    if (!servicesManager?._commandsManager) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      try {
+        const saved = localStorage.getItem('defaultToolBindings');
+        if (saved) {
+          const savedBindings = JSON.parse(saved);
+          const primaryTool = savedBindings.find(b => b.id === 'leftMouseButton')?.commandOptions?.toolName;
+          const secondaryTool = savedBindings.find(b => b.id === 'rightMouseButton')?.commandOptions?.toolName;
+          const auxiliaryTool = savedBindings.find(b => b.id === 'middleMouseButton')?.commandOptions?.toolName;
+          
+          if (primaryTool || secondaryTool || auxiliaryTool) {
+            servicesManager._commandsManager.runCommand(
+              'applyMouseButtonBindings',
+              {
+                primaryTool: primaryTool || 'WindowLevel',
+                secondaryTool: secondaryTool || 'Pan', 
+                auxiliaryTool: auxiliaryTool || 'Zoom'
+              },
+              'CORNERSTONE'
+            );
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load saved tool preferences:', error);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [servicesManager?._commandsManager]);
+
   const menuOptions = [
     {
       title: t('Header:About'),
@@ -113,6 +148,7 @@ function ViewerHeader({
           contentProps: {
             hotkeyDefaults: hotkeysManager.getValidHotkeyDefinitions(hotkeyDefaults),
             hotkeyDefinitions,
+            defaultToolBindings: defaults.defaultToolBindings,
             currentLanguage: currentLanguage(),
             availableLanguages,
             defaultLanguage,
@@ -121,7 +157,20 @@ function ViewerHeader({
               hotkeys.unpause();
               hide();
             },
-            onSubmit: ({ hotkeyDefinitions, language }) => {
+            onActivateTool: (commandName, commandOptions) => {
+              if (servicesManager?._commandsManager) {
+                try {
+                  servicesManager._commandsManager.runCommand(
+                    commandName,
+                    commandOptions,
+                    'CORNERSTONE'
+                  );
+                } catch (error) {
+                  console.error('Failed to activate tool:', error);
+                }
+              }
+            },
+            onSubmit: ({ hotkeyDefinitions, language, defaultToolBindings: toolBindings }) => {
               if (language.value !== currentLanguage().value) {
                 i18n.changeLanguage(language.value);
               }
@@ -129,7 +178,14 @@ function ViewerHeader({
               hide();
             },
             onReset: () => hotkeysManager.restoreDefaultBindings(),
-            hotkeysModule: hotkeys,
+            hotkeysModule: {
+              initialize: hotkeys.initialize || (() => {}),
+              pause: hotkeys.pause || (() => {}),
+              unpause: hotkeys.unpause || (() => {}),
+              startRecording: hotkeys.startRecord || (() => {}),
+              record: hotkeys.record || (() => {}),
+              ...hotkeys,
+            },
           },
         }),
     },

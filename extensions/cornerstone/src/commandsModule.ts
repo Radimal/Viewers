@@ -1641,6 +1641,77 @@ function commandsModule({
         viewportGridService.getActiveViewportId()
       );
     },
+
+    applyMouseButtonBindings: ({ primaryTool, secondaryTool, auxiliaryTool }) => {
+      try {
+        const { toolGroupService } = servicesManager.services;
+        const toolGroupIds = toolGroupService.getToolGroupIds();
+        
+        toolGroupIds.forEach(toolGroupId => {
+          try {
+            const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+            if (!toolGroup) {
+              return;
+            }
+            
+            // Step 1: Set the three core tools to passive to clear bindings
+            const coreTools = ['WindowLevel', 'Pan', 'Zoom'];
+            coreTools.forEach(tool => {
+              if (toolGroup.hasTool(tool)) {
+                try {
+                  toolGroup.setToolPassive(tool);
+                } catch (e) {
+                  // Ignore errors
+                }
+              }
+            });
+            
+            // Step 2: Ensure our target tools exist
+            [primaryTool, secondaryTool, auxiliaryTool].forEach(tool => {
+              if (tool && tool !== 'None' && !toolGroup.hasTool(tool)) {
+                try {
+                  toolGroup.addTool(tool);
+                } catch (e) {
+                }
+              }
+            });
+            
+            // Step 3: Activate tools with specific mouse button bindings
+            if (primaryTool && primaryTool !== 'None') {
+              toolGroup.setToolActive(primaryTool, {
+                bindings: [{ mouseButton: Enums.MouseBindings.Primary }]
+              });
+            }
+            
+            if (secondaryTool && secondaryTool !== 'None') {
+              toolGroup.setToolActive(secondaryTool, {
+                bindings: [{ mouseButton: Enums.MouseBindings.Secondary }]
+              });
+            }
+            
+            if (auxiliaryTool && auxiliaryTool !== 'None') {
+              toolGroup.setToolActive(auxiliaryTool, {
+                bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }]
+              });
+            }
+            
+          } catch (error) {
+            console.error(`Error configuring tool group ${toolGroupId}:`, error);
+          }
+        });
+        
+      } catch (error) {
+        console.error('Error in applyMouseButtonBindings:', error);
+      }
+    },
+
+    refreshPageToApplyToolBindings: () => {
+      try {
+        window.location.reload();
+      } catch (error) {
+        console.error('Error refreshing page:', error);
+      }
+    },
   };
 
   const definitions = {
@@ -1910,6 +1981,12 @@ function commandsModule({
     },
     getRenderInactiveSegmentations: {
       commandFn: actions.getRenderInactiveSegmentations,
+    },
+    applyMouseButtonBindings: {
+      commandFn: actions.applyMouseButtonBindings,
+    },
+    refreshPageToApplyToolBindings: {
+      commandFn: actions.refreshPageToApplyToolBindings,
     },
   };
 

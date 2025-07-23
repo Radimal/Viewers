@@ -7,6 +7,7 @@ import CheckBox from '../CheckBox';
 import Typography from '../Typography';
 import Button from '../Button';
 import HotkeysPreferences from '../HotkeysPreferences';
+import DefaultToolsPreferences from '../DefaultToolsPreferences';
 import { ButtonEnums } from '../Button';
 import Input from '../Input';
 
@@ -17,9 +18,11 @@ const UserPreferences = ({
   disabled = false,
   hotkeyDefinitions,
   hotkeyDefaults,
+  defaultToolBindings = [],
   onCancel = () => {},
   onSubmit = () => {},
   onReset = () => {},
+  onActivateTool = () => {},
   hotkeysModule,
 }) => {
   const { t } = useTranslation('UserPreferencesModal');
@@ -27,15 +30,46 @@ const UserPreferences = ({
   if (openAdditionalWindowsOnStart) {
     openAdditionalWindowsOnStart = JSON.parse(openAdditionalWindowsOnStart);
   }
+
+  const getSavedToolBindings = () => {
+    try {
+      const saved = localStorage.getItem('defaultToolBindings');
+      if (saved) {
+        const parsedSaved = JSON.parse(saved);
+        return defaultToolBindings.map(defaultBinding => {
+          const savedBinding = parsedSaved.find(s => s.id === defaultBinding.id);
+          if (savedBinding) {
+            return {
+              ...defaultBinding,
+              ...savedBinding,
+              availableTools: defaultBinding.availableTools,
+            };
+          }
+          return defaultBinding;
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to load saved tool bindings:', error);
+    }
+    return defaultToolBindings;
+  };
+
   const [state, setState] = useState({
     isDisabled: disabled,
     hotkeyErrors: {},
     hotkeyDefinitions,
+    defaultToolBindings: getSavedToolBindings(),
     language: currentLanguage,
     openAdditionalWindowsOnStart: !!openAdditionalWindowsOnStart,
   });
 
   const onSubmitHandler = () => {
+    // Save tool bindings to localStorage
+    try {
+      localStorage.setItem('defaultToolBindings', JSON.stringify(state.defaultToolBindings));
+    } catch (error) {
+      console.warn('Failed to save tool bindings:', error);
+    }
     onSubmit(state);
   };
 
@@ -46,7 +80,14 @@ const UserPreferences = ({
       hotkeyDefinitions: hotkeyDefaults,
       hotkeyErrors: {},
       isDisabled: disabled,
+      defaultToolBindings: defaultToolBindings, // Reset to original defaults
     }));
+    // Clear saved tool bindings
+    try {
+      localStorage.removeItem('defaultToolBindings');
+    } catch (error) {
+      console.warn('Failed to clear saved tool bindings:', error);
+    }
     onReset();
   };
 
@@ -74,6 +115,40 @@ const UserPreferences = ({
         [id]: definition,
       },
     }));
+  };
+
+  const onDefaultToolsChangeHandler = (id, selectedTool) => {
+    const updatedBindings = state.defaultToolBindings.map(binding =>
+      binding.id === id
+        ? {
+            ...binding,
+            commandOptions: {
+              ...binding.commandOptions,
+              toolName: selectedTool,
+            },
+          }
+        : binding
+    );
+
+    setState(state => ({
+      ...state,
+      defaultToolBindings: updatedBindings,
+    }));
+
+    try {
+      localStorage.setItem('defaultToolBindings', JSON.stringify(updatedBindings));
+    } catch (error) {
+      console.warn('Failed to save tool bindings:', error);
+    }
+  };
+
+  const onApplyChanges = () => {
+    try {
+      localStorage.setItem('defaultToolBindings', JSON.stringify(state.defaultToolBindings));
+    } catch (error) {
+      console.warn('Failed to save tool bindings:', error);
+    }
+    window.location.reload();
   };
 
   const Section = ({ title, children }) => (
@@ -123,6 +198,32 @@ const UserPreferences = ({
           ></CheckBox>
         </div>
       </Section>
+      <Section title={t('Default Tool Assignments')}>
+        <DefaultToolsPreferences
+          disabled={disabled}
+          defaultToolBindings={state.defaultToolBindings}
+          onChange={onDefaultToolsChangeHandler}
+          onActivateTool={onActivateTool}
+        />
+        <div className="mt-4 flex flex-col items-center">
+          <Button
+            type={ButtonEnums.type.primary}
+            onClick={onApplyChanges}
+            disabled={disabled}
+            className="px-6"
+          >
+            Apply Tool Changes
+          </Button>
+          <div className="mt-4 text-center">
+            <Typography
+              variant="body"
+              className="text-sm text-gray-400"
+            >
+              Note: Clicking Apply will save your preferences and refresh the page to apply changes.
+            </Typography>
+          </div>
+        </div>
+      </Section>
       <Section title={t('Hotkeys')}>
         <HotkeysPreferences
           disabled={disabled}
@@ -166,9 +267,11 @@ UserPreferences.propTypes = {
   disabled: PropTypes.bool,
   hotkeyDefaults: PropTypes.object.isRequired,
   hotkeyDefinitions: PropTypes.object.isRequired,
+  defaultToolBindings: PropTypes.array,
   onCancel: PropTypes.func,
   onSubmit: PropTypes.func,
   onReset: PropTypes.func,
+  onActivateTool: PropTypes.func,
   hotkeysModule: PropTypes.shape({
     initialize: PropTypes.func.isRequired,
     pause: PropTypes.func.isRequired,
