@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,10 @@ const DefaultToolsPreferences = ({
 }) => {
   const { t } = useTranslation('UserPreferencesModal');
   const [toolBindings, setToolBindings] = useState(defaultToolBindings);
+
+  useEffect(() => {
+    setToolBindings(defaultToolBindings);
+  }, [defaultToolBindings]);
 
   const onToolChangeHandler = (id, selectedTool) => {
     const updatedBindings = toolBindings.map(binding =>
@@ -31,12 +35,8 @@ const DefaultToolsPreferences = ({
     onChange(id, selectedTool);
   };
 
-  if (!toolBindings.length) {
-    return (
-      <div>
-        {t('No default tools found')} - Length: {toolBindings.length}
-      </div>
-    );
+  if (!toolBindings || !toolBindings.length) {
+    return <div>Loading tool preferences...</div>;
   }
 
   return (

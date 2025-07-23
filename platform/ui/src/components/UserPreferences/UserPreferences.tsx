@@ -32,6 +32,11 @@ const UserPreferences = ({
   }
 
   const getSavedToolBindings = () => {
+    // Always start with the default tool bindings
+    if (!defaultToolBindings || defaultToolBindings.length === 0) {
+      return [];
+    }
+    
     try {
       const saved = localStorage.getItem('defaultToolBindings');
       if (saved) {

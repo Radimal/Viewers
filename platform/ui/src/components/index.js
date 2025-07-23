@@ -66,6 +66,7 @@ import WindowLevel from './WindowLevel';
 import WindowLevelMenuItem from './WindowLevelMenuItem';
 import UserPreferences from './UserPreferences';
 import HotkeysPreferences from './HotkeysPreferences';
+import DefaultToolsPreferences from './DefaultToolsPreferences';
 import HotkeyField from './HotkeyField';
 import Header from './Header';
 import ImageScrollbar from './ImageScrollbar';
@@ -106,6 +107,7 @@ export {
   Header,
   UserPreferences,
   HotkeysPreferences,
+  DefaultToolsPreferences,
   Button,
   ButtonGroup,
   ButtonEnums,
