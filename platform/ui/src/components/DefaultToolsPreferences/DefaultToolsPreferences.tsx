@@ -31,7 +31,6 @@ const DefaultToolsPreferences = ({
     onChange(id, selectedTool);
   };
 
-
   if (!toolBindings.length) {
     return (
       <div>
