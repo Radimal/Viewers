@@ -68,19 +68,42 @@ class CacheManager {
     this.forceReload();
   }
 
-  forceReload() {
-    // Clear all caches and reload
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        names.forEach(name => caches.delete(name));
+  async forceReload() {
+    console.log('🧹 Clearing all caches for version update...');
+    
+    // Clear service worker caches
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'CLEAR_ALL_CACHES'
       });
     }
 
-    // Clear localStorage if needed (be careful with user data)
-    // localStorage.clear();
+    // Clear browser caches directly
+    if ('caches' in window) {
+      try {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => {
+          console.log('🗑️ Deleting cache:', name);
+          return caches.delete(name);
+        }));
+      } catch (error) {
+        console.warn('Failed to clear some caches:', error);
+      }
+    }
 
-    // Force hard reload
-    window.location.reload(true);
+    // Clear any stale localStorage cache keys (preserve user preferences)
+    const preserveKeys = ['defaultToolBindings', 'userPreferences'];
+    Object.keys(localStorage).forEach(key => {
+      if (!preserveKeys.includes(key) && (key.includes('cache') || key.includes('version'))) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    // Small delay to ensure cache clearing completes
+    setTimeout(() => {
+      console.log('🔄 Reloading page for version update...');
+      window.location.reload(true);
+    }, 100);
   }
 
   startVersionChecking() {

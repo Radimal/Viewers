@@ -17,15 +17,35 @@ const FONTS_CACHE = `fonts-${CACHE_VERSION}`;
 workbox.core.skipWaiting();
 workbox.core.clientsClaim();
 
-// Cache static assets that aren't precached
+// Cache JS/CSS bundles for 1 month (actively developed)
 workbox.routing.registerRoute(
   /\.(?:js|css|json5)$/,
-  new workbox.strategies.NetworkFirst({
+  new workbox.strategies.CacheFirst({
     cacheName: STATIC_CACHE,
     plugins: [
+      new workbox.cacheableResponse.CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new workbox.expiration.ExpirationPlugin({
+        maxEntries: 100,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+      }),
+    ],
+  })
+);
+
+// Cache images and fonts for 3 months (change less frequently)
+workbox.routing.registerRoute(
+  /\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff|woff2|ttf|eot)$/,
+  new workbox.strategies.CacheFirst({
+    cacheName: `assets-${CACHE_VERSION}`,
+    plugins: [
+      new workbox.cacheableResponse.CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
       new workbox.expiration.ExpirationPlugin({
         maxEntries: 50,
-        maxAgeSeconds: 24 * 60 * 60, // 24 hours
+        maxAgeSeconds: 90 * 24 * 60 * 60, // 90 days
       }),
     ],
   })
@@ -70,7 +90,8 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (!cacheName.startsWith(CACHE_VERSION)) {
+          if (!cacheName.includes(CACHE_VERSION)) {
+            console.log('🗑️ Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -79,8 +100,33 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Use the manifest for precaching
-workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
+// Listen for cache clear messages from cacheManager
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'CLEAR_ALL_CACHES') {
+    console.log('🧹 Clearing all caches for version update...');
+    event.waitUntil(
+      caches.keys().then(cacheNames => {
+        return Promise.all(
+          cacheNames.map(cacheName => {
+            console.log('🗑️ Deleting cache for update:', cacheName);
+            return caches.delete(cacheName);
+          })
+        );
+      })
+    );
+  }
+});
+
+// Exclude version.json from precaching and runtime caching
+workbox.precaching.precacheAndRoute(
+  self.__WB_MANIFEST.filter(entry => !entry.url.includes('version.json'))
+);
+
+// Never cache version.json - critical for update detection
+workbox.routing.registerRoute(
+  /\/version\.json/,
+  new workbox.strategies.NetworkOnly()
+);
 
 // TODO: Cache API
 // https://developers.google.com/web/fundamentals/instant-and-offline/web-storage/cache-api
