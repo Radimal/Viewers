@@ -12,26 +12,46 @@ const CACHE_VERSION = new Date().toISOString().split('T')[0]; // Use date as ver
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const FONTS_CACHE = `fonts-${CACHE_VERSION}`;
 
+// Detect environment - development vs production
+const isLocalDevelopment = self.location.hostname === 'localhost' || 
+                           self.location.hostname === '127.0.0.1' || 
+                           self.location.hostname.includes('local') ||
+                           self.location.port === '3000' ||
+                           self.location.port === '3001';
+
 // Install newest
 // https://developers.google.com/web/tools/workbox/modules/workbox-core
 workbox.core.skipWaiting();
 workbox.core.clientsClaim();
 
-// Cache JS/CSS bundles for 1 month (actively developed)
+// Cache JS/CSS bundles - NetworkFirst for development, CacheFirst for production
 workbox.routing.registerRoute(
   /\.(?:js|css|json5)$/,
-  new workbox.strategies.CacheFirst({
-    cacheName: STATIC_CACHE,
-    plugins: [
-      new workbox.cacheableResponse.CacheableResponsePlugin({
-        statuses: [0, 200],
-      }),
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 100,
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-      }),
-    ],
-  })
+  isLocalDevelopment 
+    ? new workbox.strategies.NetworkFirst({
+        cacheName: STATIC_CACHE,
+        plugins: [
+          new workbox.cacheableResponse.CacheableResponsePlugin({
+            statuses: [0, 200],
+          }),
+          new workbox.expiration.ExpirationPlugin({
+            maxEntries: 100,
+            maxAgeSeconds: 24 * 60 * 60, // 1 day in development
+          }),
+        ],
+      })
+    : new workbox.strategies.CacheFirst({
+        cacheName: STATIC_CACHE,
+        plugins: [
+          new workbox.cacheableResponse.CacheableResponsePlugin({
+            statuses: [0, 200],
+          }),
+          new workbox.expiration.ExpirationPlugin({
+            maxEntries: 100,
+            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days in production
+          }),
+        ],
+      })
 );
 
 // Cache images and fonts for 3 months (change less frequently)
