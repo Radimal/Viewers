@@ -12,6 +12,14 @@ const CACHE_VERSION = new Date().toISOString().split('T')[0]; // Use date as ver
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const FONTS_CACHE = `fonts-${CACHE_VERSION}`;
 
+// Detect environment - development vs production
+const isLocalDevelopment =
+  self.location.hostname === 'localhost' ||
+  self.location.hostname === '127.0.0.1' ||
+  self.location.hostname.includes('local') ||
+  self.location.port === '3000' ||
+  self.location.port === '3001';
+
 // Install newest
 // https://developers.google.com/web/tools/workbox/modules/workbox-core
 workbox.core.skipWaiting();
