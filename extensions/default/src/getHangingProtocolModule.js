@@ -3,6 +3,74 @@ import hpMNCompare from './hangingprotocols/hpCompare';
 import hpMammography from './hangingprotocols/hpMammo';
 import hpScale from './hangingprotocols/hpScale';
 
+const getUserLayoutPreference = () => {
+  try {
+    const saved = localStorage.getItem('userLayoutPreference');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        rows: parsed.rows || 1,
+        columns: parsed.columns || 1,
+        name: parsed.name || '1x1'
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to load user layout preference:', error);
+  }
+  
+  return {
+    rows: 1,
+    columns: 1,
+    name: '1x1'
+  };
+};
+
+const createUserPreferredViewports = (rows, columns) => {
+  const totalViewports = rows * columns;
+  const viewports = [];
+
+  for (let i = 0; i < totalViewports; i++) {
+    viewports.push({
+      viewportOptions: {
+        viewportType: 'stack',
+        viewportId: i === 0 ? 'default' : undefined,
+        toolGroupId: 'default',
+        allowUnmatchedView: true,
+        // Add initialImageOptions for the first viewport
+        ...(i === 0 && {
+          initialImageOptions: {
+            custom: 'sopInstanceLocation',
+          }
+        }),
+        syncGroups: [
+          {
+            type: 'hydrateseg',
+            id: 'sameFORId',
+            source: true,
+            target: true,
+            // Include options for first viewport only
+            ...(i === 0 && {
+              options: {
+                matchingRules: ['sameFOR'],
+              }
+            })
+          },
+        ],
+      },
+      displaySets: [
+        {
+          id: 'defaultDisplaySetId',
+          matchedDisplaySetsIndex: i === 0 ? -1 : i,
+        },
+      ],
+    });
+  }
+
+  return viewports;
+};
+
+const userPref = getUserLayoutPreference();
+
 const defaultProtocol = {
   id: 'default',
   locked: true,
@@ -73,49 +141,15 @@ const defaultProtocol = {
   },
   stages: [
     {
-      name: 'default',
+      name: userPref.name,
       viewportStructure: {
         layoutType: 'grid',
         properties: {
-          rows: 1,
-          columns: 1,
+          rows: userPref.rows,
+          columns: userPref.columns,
         },
       },
-      viewports: [
-        {
-          viewportOptions: {
-            viewportType: 'stack',
-            viewportId: 'default',
-            toolGroupId: 'default',
-            // This will specify the initial image options index if it matches in the URL
-            // and will otherwise not specify anything.
-            initialImageOptions: {
-              custom: 'sopInstanceLocation',
-            },
-            // Other options for initialImageOptions, which can be included in the default
-            // custom attribute, or can be provided directly.
-            //   index: 180,
-            //   preset: 'middle', // 'first', 'last', 'middle'
-            // },
-            syncGroups: [
-              {
-                type: 'hydrateseg',
-                id: 'sameFORId',
-                source: true,
-                target: true,
-                // options: {
-                //   matchingRules: ['sameFOR'],
-                // },
-              },
-            ],
-          },
-          displaySets: [
-            {
-              id: 'defaultDisplaySetId',
-            },
-          ],
-        },
-      ],
+      viewports: createUserPreferredViewports(userPref.rows, userPref.columns),
       createdDate: '2021-02-23T18:32:42.850Z',
     },
   ],
