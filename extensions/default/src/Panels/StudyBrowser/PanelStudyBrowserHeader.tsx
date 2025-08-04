@@ -21,13 +21,15 @@ function PanelStudyBrowserHeader({
           <div className="flex w-full items-center gap-[10px]">
             <div className="flex items-center justify-center">
               <div className="text-primary-active flex items-center space-x-1">
-                {actionIcons.map((icon: actionIcon, index) =>
-                  React.createElement(Icons[icon.iconName] || Icons.MissingIcon, {
-                    key: index,
-                    onClick: () => updateActionIconValue(icon),
-                    className: `cursor-pointer`,
-                  })
-                )}
+                {actionIcons
+                  .filter((icon: actionIcon) => icon.id !== 'settings')
+                  .map((icon: actionIcon, index) =>
+                    React.createElement(Icons[icon.iconName] || Icons.MissingIcon, {
+                      key: index,
+                      onClick: () => updateActionIconValue(icon),
+                      className: `cursor-pointer`,
+                    })
+                  )}
               </div>
             </div>
             <div className="ml-auto flex h-full items-center justify-center">
