@@ -84,6 +84,24 @@ const patientIDItem = {
   contentF: ({ referenceInstance, formatters: { formatPN } }) => `${referenceInstance.PatientID}`,
 };
 
+const patientSexItem = {
+  id: 'PatientSex',
+  customizationType: 'ohif.overlayItem',
+  label: '',
+  title: 'Patient Sex',
+  condition: ({ referenceInstance }) => referenceInstance?.PatientSex,
+  contentF: ({ referenceInstance }) => `Sex: ${referenceInstance.PatientSex}`,
+};
+
+const patientNeuteredItem = {
+  id: 'PatientNeutered',
+  customizationType: 'ohif.overlayItem',
+  label: '',
+  title: 'Patient Neutered',
+  condition: ({ referenceInstance }) => referenceInstance?.PatientSexNeutered,
+  contentF: ({ referenceInstance }) => `Neutered: ${referenceInstance.PatientSexNeutered}`,
+};
+
 const institutionItem = {
   id: 'InstitutionName',
   customizationType: 'ohif.overlayItem',
@@ -135,6 +153,8 @@ const topLeftItems = {
   items: [
     patientNameItem,
     patientIDItem,
+    patientSexItem,
+    patientNeuteredItem,
     institutionItem,
     physicianNameItem,
     seriesDescriptionItem,
