@@ -55,33 +55,45 @@ export async function downloadOrthancStudy(
   const downloadUrl = `${baseUrl}/orthanc/study/download?id=${orthancStudyUUID}`;
 
   try {
-    const response = await fetch(downloadUrl);
+    const response = await fetch(downloadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        combine: null,
+      }),
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = 'study.zip'; // Default filename
+    const data = await response.json();
 
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-      if (filenameMatch) {
-        filename = filenameMatch[1].replace(/['"]/g, '');
-      }
+    if (!data.success) {
+      throw new Error(data.error || 'Download failed');
     }
 
-    const blob = await response.blob();
+    if (data.urls && data.urls.length > 0) {
+      for (let i = 0; i < data.urls.length; i++) {
+        const downloadUrl = data.urls[i];
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.target = '_blank';
+        a.download = `study-${orthancStudyUUID}-${i + 1}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
 
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+        if (i < data.urls.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } else {
+      throw new Error('No download URLs returned from server');
+    }
   } catch (error) {
     console.error('Error downloading study:', error);
     throw error;
