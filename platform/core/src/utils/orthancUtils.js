@@ -46,13 +46,16 @@ export async function generateOrthancStudyUUID(patientId, studyInstanceUID) {
  */
 export async function downloadOrthancStudy(
   orthancStudyUUID,
-  baseUrl = 'http://radimal-reporter.onrender.com'
+  baseUrl = 'http://radimal-reporter.onrender.com',
+  userId = null
 ) {
   if (!orthancStudyUUID) {
     throw new Error('Orthanc study UUID is required');
   }
 
-  const downloadUrl = `${baseUrl}/orthanc/study/download?id=${orthancStudyUUID}`;
+  const downloadUrl = `${baseUrl}/orthanc/study/download?id=${orthancStudyUUID}${userId ? `&user_id=${userId}` : ''}`;
+
+  console.log('Attempting download with:', { orthancStudyUUID, baseUrl, userId, downloadUrl });
 
   try {
     const response = await fetch(downloadUrl, {
@@ -70,6 +73,7 @@ export async function downloadOrthancStudy(
     }
 
     const data = await response.json();
+    console.log('Server response:', data);
 
     if (!data.success) {
       throw new Error(data.error || 'Download failed');
