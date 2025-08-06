@@ -39,6 +39,7 @@ import {
 import { splitComma, getSplitParam } from './splitComma';
 import { createStudyBrowserTabs } from './createStudyBrowserTabs';
 import { sopClassDictionary } from './sopClassDictionary';
+import * as orthancUtils from './orthancUtils';
 
 // Commented out unused functionality.
 // Need to implement new mechanism for derived displaySets using the displaySetManager.
@@ -84,6 +85,7 @@ const utils = {
   getSplitParam,
   generateAcceptHeader,
   createStudyBrowserTabs,
+  orthancUtils,
 };
 
 export {
@@ -117,6 +119,7 @@ export {
   getSplitParam,
   generateAcceptHeader,
   createStudyBrowserTabs,
+  orthancUtils,
 };
 
 export default utils;

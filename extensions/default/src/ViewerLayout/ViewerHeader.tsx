@@ -10,6 +10,9 @@ import { hotkeys, defaults } from '@ohif/core';
 import { Toolbar } from '../Toolbar/Toolbar';
 import HeaderPatientInfo from './HeaderPatientInfo';
 import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
+import useStudyInfo from '../hooks/useStudyInfo';
+import { utils } from '@ohif/core';
+const { orthancUtils } = utils;
 
 const { availableLanguages, defaultLanguage, currentLanguage } = i18n;
 
@@ -21,6 +24,61 @@ function ViewerHeader({
 }: withAppTypes<{ appConfig: AppTypes.Config }>) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { studyInfo } = useStudyInfo(servicesManager);
+  const { uiNotificationService } = servicesManager.services;
+
+  const handleDownloadStudy = async () => {
+    if (!studyInfo?.PatientID || !studyInfo?.StudyInstanceUID) {
+      uiNotificationService.show({
+        title: 'Download Error',
+        message: 'Missing required study information for download',
+        type: 'error',
+        duration: 5000,
+      });
+      return;
+    }
+
+    let reporterOrigin;
+    if (window.location.origin === 'http://localhost:3000') {
+      reporterOrigin = 'http://localhost:5007';
+    } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
+      reporterOrigin = 'https://reporter-staging.onrender.com';
+    } else if (window.location.origin === 'https://view.radimal.ai') {
+      reporterOrigin = 'https://radimal-reporter.onrender.com';
+    } else {
+      reporterOrigin = 'https://radimal-reporter.onrender.com';
+    }
+
+    try {
+      uiNotificationService.show({
+        title: 'Download Started',
+        message: 'Preparing study download...',
+        type: 'info',
+        duration: 3000,
+      });
+
+      await orthancUtils.downloadStudyByDICOMIds(
+        studyInfo.PatientID,
+        studyInfo.StudyInstanceUID,
+        reporterOrigin
+      );
+
+      uiNotificationService.show({
+        title: 'Download Complete',
+        message: 'Study download has been completed successfully',
+        type: 'success',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('Error downloading study:', error);
+      uiNotificationService.show({
+        title: 'Download Failed',
+        message: `Failed to download study: ${error.message || 'Unknown error'}`,
+        type: 'error',
+        duration: 8000,
+      });
+    }
+  };
 
   useEffect(() => {
     const extractStudyId = searchString => {
@@ -287,6 +345,8 @@ function ViewerHeader({
       isReturnEnabled={!!appConfig.showStudyList}
       onClickReturnButton={onClickReturnButton}
       WhiteLabeling={appConfig.whiteLabeling}
+      studyInfo={studyInfo}
+      onDownloadStudy={handleDownloadStudy}
       Secondary={
         <Toolbar
           servicesManager={servicesManager}
