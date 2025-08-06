@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import classNames from 'classnames';
 import {
@@ -34,6 +34,11 @@ interface HeaderProps {
   };
   PatientInfo?: ReactNode;
   Secondary?: ReactNode;
+  studyInfo?: {
+    PatientID: string;
+    StudyInstanceUID: string;
+  };
+  onDownloadStudy?: () => Promise<void>;
 }
 
 function Header({
@@ -46,9 +51,28 @@ function Header({
   WhiteLabeling,
   PatientInfo,
   Secondary,
+  studyInfo,
+  onDownloadStudy,
   ...props
 }: HeaderProps): ReactNode {
   const { t } = useTranslation('Header');
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!onDownloadStudy) {
+      console.error('No download handler provided');
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      await onDownloadStudy();
+    } catch (error) {
+      console.error('Error in download handler:', error);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const onClickReturn = () => {
     if (isReturnEnabled && onClickReturnButton) {
@@ -84,6 +108,18 @@ function Header({
         <div className="absolute right-0 top-1/2 flex -translate-y-1/2 select-none items-center">
           {PatientInfo}
           <div className="border-primary-dark mx-1.5 h-[25px] border-r"></div>
+          <div className="flex-shrink-0 mr-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-active hover:bg-primary-dark mt-2 h-full w-full"
+              onClick={handleDownload}
+              disabled={isDownloading || !onDownloadStudy}
+              title={isDownloading ? "Downloading..." : "Download Study"}
+            >
+              {isDownloading ? <Icons.LoadingSpinner className="animate-spin" /> : <Icons.Download />}
+            </Button>
+          </div>
           <div className="flex-shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
