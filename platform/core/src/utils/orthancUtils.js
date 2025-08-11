@@ -93,12 +93,9 @@ export async function downloadOrthancStudy(
         const downloadUrl = data.urls[i];
 
         const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.target = '_blank';
-        a.download = `study-${orthancStudyUUID}-${i + 1}.zip`;
-        document.body.appendChild(a);
+        a.setAttribute('href', downloadUrl);
+        a.setAttribute('download', '');
         a.click();
-        document.body.removeChild(a);
 
         if (i < data.urls.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1000));
