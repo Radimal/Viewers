@@ -373,7 +373,7 @@ export const Icons = {
       xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
-      <title>icon-download</title>
+      <title>Download Study</title>
       <g
         id="icon-download"
         stroke="none"
