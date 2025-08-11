@@ -53,7 +53,7 @@ export async function downloadOrthancStudy(
     throw new Error('Orthanc study UUID is required');
   }
 
-  const downloadUrl = `${baseUrl}/orthanc/study/download?id=${orthancStudyUUID}${userId ? `&user_id=${userId}` : ''}`;
+  const downloadUrl = `${baseUrl}/orthanc/study/download`;
 
   console.log('Attempting download with:', { orthancStudyUUID, baseUrl, userId, downloadUrl });
 
@@ -64,6 +64,8 @@ export async function downloadOrthancStudy(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        id: orthancStudyUUID,
+        user_id: userId,
         combine: null,
       }),
     });
