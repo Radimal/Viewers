@@ -29,6 +29,15 @@ const defaultToolBindings = [
     isEditable: true,
     availableTools: ['WindowLevel', 'Pan', 'Zoom'],
   },
+  {
+    id: 'scrollWheel',
+    commandName: 'updateScrollWheelBinding',
+    commandOptions: { mouseButton: 'Wheel', toolName: 'StackScroll' },
+    label: 'Scroll Wheel Action',
+    mouseButton: 'Wheel',
+    isEditable: true,
+    availableTools: ['Zoom', 'StackScroll'],
+  },
 ];
 
 export default defaultToolBindings;

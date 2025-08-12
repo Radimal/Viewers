@@ -31,6 +31,11 @@ const UserPreferences = ({
     openAdditionalWindowsOnStart = JSON.parse(openAdditionalWindowsOnStart);
   }
 
+  let scrollWheelPreference = localStorage.getItem('scrollWheelTool');
+  if (!scrollWheelPreference) {
+    scrollWheelPreference = 'StackScroll';
+  }
+
   const getSavedToolBindings = () => {
     // Always start with the default tool bindings
     if (!defaultToolBindings || defaultToolBindings.length === 0) {
@@ -39,6 +44,8 @@ const UserPreferences = ({
     
     try {
       const saved = localStorage.getItem('defaultToolBindings');
+      const scrollWheelTool = localStorage.getItem('scrollWheelTool');
+
       if (saved) {
         const parsedSaved = JSON.parse(saved);
         return defaultToolBindings.map(defaultBinding => {
@@ -48,6 +55,28 @@ const UserPreferences = ({
               ...defaultBinding,
               ...savedBinding,
               availableTools: defaultBinding.availableTools,
+            };
+          }
+          if (defaultBinding.id === 'scrollWheel' && scrollWheelTool) {
+            return {
+              ...defaultBinding,
+              commandOptions: {
+                ...defaultBinding.commandOptions,
+                toolName: scrollWheelTool,
+              },
+            };
+          }
+          return defaultBinding;
+        });
+      } else if (scrollWheelTool) {
+        return defaultToolBindings.map(defaultBinding => {
+          if (defaultBinding.id === 'scrollWheel') {
+            return {
+              ...defaultBinding,
+              commandOptions: {
+                ...defaultBinding.commandOptions,
+                toolName: scrollWheelTool,
+              },
             };
           }
           return defaultBinding;
@@ -66,6 +95,7 @@ const UserPreferences = ({
     defaultToolBindings: getSavedToolBindings(),
     language: currentLanguage,
     openAdditionalWindowsOnStart: !!openAdditionalWindowsOnStart,
+    scrollWheelTool: scrollWheelPreference,
   });
 
   const onSubmitHandler = () => {
@@ -85,13 +115,14 @@ const UserPreferences = ({
       hotkeyDefinitions: hotkeyDefaults,
       hotkeyErrors: {},
       isDisabled: disabled,
-      defaultToolBindings: defaultToolBindings, // Reset to original defaults
+      defaultToolBindings: defaultToolBindings,
+      scrollWheelTool: 'StackScroll',
     }));
-    // Clear saved tool bindings
     try {
       localStorage.removeItem('defaultToolBindings');
+      localStorage.removeItem('scrollWheelTool');
     } catch (error) {
-      console.warn('Failed to clear saved tool bindings:', error);
+      console.warn('Failed to clear saved preferences:', error);
     }
     onReset();
   };
@@ -138,10 +169,14 @@ const UserPreferences = ({
     setState(state => ({
       ...state,
       defaultToolBindings: updatedBindings,
+      scrollWheelTool: id === 'scrollWheel' ? selectedTool : state.scrollWheelTool,
     }));
 
     try {
       localStorage.setItem('defaultToolBindings', JSON.stringify(updatedBindings));
+      if (id === 'scrollWheel') {
+        localStorage.setItem('scrollWheelTool', selectedTool);
+      }
     } catch (error) {
       console.warn('Failed to save tool bindings:', error);
     }

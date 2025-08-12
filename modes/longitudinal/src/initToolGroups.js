@@ -1,5 +1,31 @@
 import { toolNames as SRToolNames } from '@ohif/extension-cornerstone-dicom-sr';
 
+const getScrollWheelTool = () => {
+  try {
+    const saved = localStorage.getItem('scrollWheelTool');
+    return saved || 'StackScroll';
+  } catch (error) {
+    console.warn('Failed to load scroll wheel preference:', error);
+    return 'StackScroll';
+  }
+};
+
+const getScrollWheelBinding = (toolNames, Enums) => {
+  const preference = getScrollWheelTool();
+
+  if (preference === 'Zoom') {
+    return {
+      wheelTool: toolNames.Zoom,
+      secondaryTool: toolNames.StackScroll,
+    };
+  } else {
+    return {
+      wheelTool: toolNames.StackScroll,
+      secondaryTool: toolNames.Zoom,
+    };
+  }
+};
+
 const colours = {
   'viewport-0': 'rgb(200, 0, 0)',
   'viewport-1': 'rgb(200, 200, 0)',
@@ -24,6 +50,7 @@ function initDefaultToolGroup(
   );
 
   const { toolNames, Enums } = utilityModule.exports;
+  const toolBinding = getScrollWheelBinding(toolNames, Enums);
 
   const tools = {
     active: [
@@ -36,12 +63,12 @@ function initDefaultToolGroup(
         bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }],
       },
       {
-        toolName: toolNames.Zoom,
-        bindings: [{ mouseButton: Enums.MouseBindings.Secondary }],
+        toolName: toolBinding.wheelTool,
+        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
       },
       {
-        toolName: toolNames.StackScroll,
-        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        toolName: toolBinding.secondaryTool,
+        bindings: [{ mouseButton: Enums.MouseBindings.Secondary }],
       },
     ],
     passive: [
@@ -125,6 +152,8 @@ function initSRToolGroup(extensionManager, toolGroupService) {
 
   const { toolNames: SRToolNames } = SRUtilityModule.exports;
   const { toolNames, Enums } = CS3DUtilityModule.exports;
+  const toolBinding = getScrollWheelBinding(toolNames, Enums);
+
   const tools = {
     active: [
       {
@@ -144,7 +173,7 @@ function initSRToolGroup(extensionManager, toolGroupService) {
         ],
       },
       {
-        toolName: toolNames.Zoom,
+        toolName: toolBinding.secondaryTool,
         bindings: [
           {
             mouseButton: Enums.MouseBindings.Secondary,
@@ -152,7 +181,7 @@ function initSRToolGroup(extensionManager, toolGroupService) {
         ],
       },
       {
-        toolName: toolNames.StackScroll,
+        toolName: toolBinding.wheelTool,
         bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
       },
     ],
@@ -187,6 +216,7 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, m
   const { cornerstoneViewportService } = serviceManager.services;
 
   const { toolNames, Enums } = utilityModule.exports;
+  const toolBinding = getScrollWheelBinding(toolNames, Enums);
 
   const tools = {
     active: [
@@ -199,12 +229,12 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, m
         bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }],
       },
       {
-        toolName: toolNames.Zoom,
-        bindings: [{ mouseButton: Enums.MouseBindings.Secondary }],
+        toolName: toolBinding.wheelTool,
+        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
       },
       {
-        toolName: toolNames.StackScroll,
-        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        toolName: toolBinding.secondaryTool,
+        bindings: [{ mouseButton: Enums.MouseBindings.Secondary }],
       },
     ],
     passive: [
