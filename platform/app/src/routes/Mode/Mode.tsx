@@ -169,38 +169,20 @@ export default function ModeRoute({
 
   useEffect(() => {
     if (!hotkeys || !ExtensionDependenciesLoaded || !studyInstanceUIDs?.length) {
-      console.log('[HOTKEYS] Mode useEffect early return:', {
-        hotkeys: !!hotkeys,
-        ExtensionDependenciesLoaded,
-        studyInstanceUIDs: studyInstanceUIDs?.length
-      });
       return;
     }
-
-    console.log('[HOTKEYS] Setting up hotkeys in Mode.tsx:', {
-      hotkeyName,
-      hotkeysCount: hotkeys?.length,
-      hotkeys: hotkeys
-    });
 
     hotkeysManager.setDefaultHotKeys(hotkeys);
 
     const userPreferredHotkeys = JSON.parse(localStorage.getItem(hotkeyName));
-    console.log('[HOTKEYS] User preferred hotkeys from localStorage:', {
-      hotkeyName,
-      userPreferredHotkeys
-    });
 
     if (userPreferredHotkeys?.length) {
-      console.log('[HOTKEYS] Using user preferred hotkeys');
       hotkeysManager.setHotkeys(userPreferredHotkeys, hotkeyName);
     } else {
-      console.log('[HOTKEYS] Using default hotkeys');
       hotkeysManager.setHotkeys(hotkeys, hotkeyName);
     }
 
     return () => {
-      console.log('[HOTKEYS] Cleaning up hotkeys manager');
       hotkeysManager.destroy();
     };
   }, [ExtensionDependenciesLoaded, hotkeys, studyInstanceUIDs]);
