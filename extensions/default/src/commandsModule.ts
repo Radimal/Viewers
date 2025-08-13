@@ -459,9 +459,48 @@ const commandsModule = ({
      * @see ViewportOverlay and CustomizableViewportOverlay components
      */
     toggleOverlays: () => {
+      console.log('[HOTKEYS] toggleOverlays command executed');
       const overlays = document.getElementsByClassName('viewport-overlay');
+      console.log(`[HOTKEYS] Found ${overlays.length} overlay elements with class 'viewport-overlay'`, overlays);
+      
+      if (overlays.length === 0) {
+        const alternativeSelectors = [
+          'ohif-overlay',
+          'cornerstone-overlay', 
+          '.viewport-overlay-top-left',
+          '.viewport-overlay-top-right',
+          '.viewport-overlay-bottom-left',
+          '.viewport-overlay-bottom-right',
+          '[class*="overlay"]'
+        ];
+        
+        console.log('[HOTKEYS] No viewport-overlay elements found, checking alternatives:');
+        alternativeSelectors.forEach(selector => {
+          const elements = document.querySelectorAll(selector);
+          if (elements.length > 0) {
+            console.log(`[HOTKEYS] Found ${elements.length} elements with selector '${selector}':`, elements);
+          }
+        });
+        
+        const viewportElements = document.querySelectorAll('.cornerstone-viewport-element');
+        viewportElements.forEach((viewport, index) => {
+          console.log(`[HOTKEYS] Viewport ${index} children:`, viewport.children);
+          const overlayChildren = Array.from(viewport.children).filter(child => 
+            child.className.includes('overlay') || child.className.includes('text')
+          );
+          console.log(`[HOTKEYS] Viewport ${index} overlay-like children:`, overlayChildren);
+        });
+      }
+      
       for (let i = 0; i < overlays.length; i++) {
-        overlays.item(i).classList.toggle('hidden');
+        const overlay = overlays.item(i);
+        const wasHidden = overlay.classList.contains('hidden');
+        overlay.classList.toggle('hidden');
+        console.log(`[HOTKEYS] Overlay ${i} toggled: ${wasHidden ? 'hidden -> visible' : 'visible -> hidden'}`, overlay);
+      }
+      
+      if (overlays.length === 0) {
+        console.warn('[HOTKEYS] No overlay elements found to toggle. The overlay system may have changed.');
       }
     },
 
@@ -504,16 +543,40 @@ const commandsModule = ({
     }: UpdateViewportDisplaySetParams) => {
       const nonImageModalities = ['SR', 'SEG', 'SM', 'RTSTRUCT', 'RTPLAN', 'RTDOSE'];
 
-      const currentDisplaySets = [...displaySetService.activeDisplaySets];
+      const allDisplaySets = [...displaySetService.activeDisplaySets];
 
       const { activeViewportId, viewports, isHangingProtocolLayout } =
         viewportGridService.getState();
 
       const { displaySetInstanceUIDs } = viewports.get(activeViewportId);
 
-      const activeDisplaySetIndex = currentDisplaySets.findIndex(displaySet =>
+      const activeDisplaySet = allDisplaySets.find(displaySet =>
         displaySetInstanceUIDs.includes(displaySet.displaySetInstanceUID)
       );
+
+      if (!activeDisplaySet) {
+        console.warn('[SERIES NAVIGATION] No active display set found');
+        return;
+      }
+
+      const currentStudyInstanceUID = activeDisplaySet.StudyInstanceUID;
+      console.log('[SERIES NAVIGATION] Current study UID:', currentStudyInstanceUID);
+
+      const currentStudyDisplaySets = allDisplaySets.filter(displaySet => 
+        displaySet.StudyInstanceUID === currentStudyInstanceUID
+      );
+
+      console.log('[SERIES NAVIGATION] Navigation bounded to study:', {
+        totalDisplaySets: allDisplaySets.length,
+        studyDisplaySets: currentStudyDisplaySets.length,
+        currentStudyUID: currentStudyInstanceUID
+      });
+
+      const activeDisplaySetIndex = currentStudyDisplaySets.findIndex(displaySet =>
+        displaySetInstanceUIDs.includes(displaySet.displaySetInstanceUID)
+      );
+
+      const currentDisplaySets = currentStudyDisplaySets;
 
       let displaySetIndexToShow: number;
 
@@ -531,10 +594,33 @@ const commandsModule = ({
       }
 
       if (displaySetIndexToShow < 0 || displaySetIndexToShow >= currentDisplaySets.length) {
+        console.log('[SERIES NAVIGATION] Reached study boundary:', {
+          requestedIndex: displaySetIndexToShow,
+          direction: direction > 0 ? 'next' : 'previous',
+          totalSeriesInStudy: currentDisplaySets.length,
+          currentIndex: activeDisplaySetIndex
+        });
+        
+        uiNotificationService.show({
+          title: 'Series Navigation',
+          message: direction > 0 
+            ? 'Reached last series in current study' 
+            : 'Reached first series in current study',
+          type: 'info',
+          duration: 2000,
+        });
         return;
       }
 
       const { displaySetInstanceUID } = currentDisplaySets[displaySetIndexToShow];
+
+      console.log('[SERIES NAVIGATION] Navigating within study bounds:', {
+        from: activeDisplaySetIndex,
+        to: displaySetIndexToShow,
+        direction: direction > 0 ? 'next' : 'previous',
+        targetDisplaySetUID: displaySetInstanceUID,
+        studyUID: currentStudyInstanceUID
+      });
 
       let updatedViewports = [];
 

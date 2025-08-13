@@ -63,15 +63,33 @@ export class HotkeysManager {
    * @param {HotkeyDefinition[] | Object} [hotkeyDefinitions=[]] Contains hotkeys definitions
    */
   setHotkeys(hotkeyDefinitions = [], name = 'hotkey-definitions') {
+    console.log(`[HOTKEYS] setHotkeys called with:`, {
+      name,
+      definitionsCount: hotkeyDefinitions?.length,
+      isEnabled: this.isEnabled,
+      hotkeyDefinitions
+    });
+
     try {
       const definitions = this.getValidDefinitions(hotkeyDefinitions);
+      console.log(`[HOTKEYS] Valid definitions processed:`, definitions);
+
       if (isequal(definitions, this.hotkeyDefaults)) {
+        console.log(`[HOTKEYS] Definitions equal defaults, removing localStorage item: ${name}`);
         localStorage.removeItem(name);
       } else {
+        console.log(`[HOTKEYS] Definitions differ from defaults, saving to localStorage: ${name}`);
         localStorage.setItem(name, JSON.stringify(definitions));
       }
-      definitions.forEach(definition => this.registerHotkeys(definition));
+
+      console.log(`[HOTKEYS] Registering ${definitions.length} hotkey definitions`);
+      definitions.forEach((definition, index) => {
+        console.log(`[HOTKEYS] Processing definition ${index + 1}/${definitions.length}:`, definition);
+        this.registerHotkeys(definition);
+      });
+      console.log(`[HOTKEYS] Successfully registered all hotkeys`);
     } catch (error) {
+      console.error('[HOTKEYS] Error in setHotkeys:', error);
       const { uiNotificationService } = this._servicesManager.services;
       uiNotificationService.show({
         title: 'Hotkeys Manager',
@@ -175,8 +193,20 @@ export class HotkeysManager {
     { commandName, commandOptions = {}, context, keys, label, isEditable }: Hotkey = {},
     extension
   ) {
+    console.log(`[HOTKEYS] Registering hotkey:`, {
+      commandName,
+      commandOptions,
+      context,
+      keys,
+      label,
+      isEditable,
+      extension
+    });
+
     if (!commandName) {
-      throw new Error(`No command was defined for hotkey "${keys}"`);
+      const error = `No command was defined for hotkey "${keys}"`;
+      console.error(`[HOTKEYS] ${error}`);
+      throw new Error(error);
     }
 
     const commandHash = objectHash({ commandName, commandOptions });
@@ -185,10 +215,8 @@ export class HotkeysManager {
 
     if (previouslyRegisteredDefinition) {
       const previouslyRegisteredKeys = previouslyRegisteredDefinition.keys;
+      console.log(`[HOTKEYS] Unbinding previously registered hotkey: "${previouslyRegisteredKeys}" for command: "${commandName}"`);
       this._unbindHotkeys(commandName, previouslyRegisteredKeys);
-      // log.info(
-      //   `[hotkeys] Unbinding ${commandName} with ${options} options from ${previouslyRegisteredKeys}`
-      // );
     }
 
     // Set definition & bind
@@ -199,11 +227,10 @@ export class HotkeysManager {
       label,
       isEditable,
     };
+    
+    console.log(`[HOTKEYS] Attempting to bind hotkey: "${keys}" -> command: "${commandName}"`);
     this._bindHotkeys(commandName, commandOptions, context, keys);
-    // log.info(
-    //   `[hotkeys] Binding ${commandName} with ${options} from ${context ||
-    //   'default'} options to ${keys}`
-    // );
+    console.log(`[HOTKEYS] Successfully registered hotkey: "${keys}" -> command: "${commandName}"`);
   }
 
   /**
@@ -241,10 +268,28 @@ export class HotkeysManager {
     const isKeyArray = keys instanceof Array;
     const combinedKeys = isKeyArray ? keys.join('+') : keys;
 
+    console.log(`[HOTKEYS] Binding hotkey: "${combinedKeys}" -> command: "${commandName}"`, {
+      commandName,
+      commandOptions,
+      context,
+      keys: combinedKeys
+    });
+
     hotkeys.bind(combinedKeys, evt => {
+      console.log(`[HOTKEYS] Hotkey triggered: "${combinedKeys}" -> command: "${commandName}"`, {
+        commandName,
+        commandOptions,
+        context,
+        event: evt
+      });
       evt.preventDefault();
       evt.stopPropagation();
-      this._commandsManager.runCommand(commandName, { evt, ...commandOptions }, context);
+      
+      try {
+        this._commandsManager.runCommand(commandName, { evt, ...commandOptions }, context);
+      } catch (error) {
+        console.error(`[HOTKEYS] Error executing command "${commandName}":`, error);
+      }
     });
   }
 
