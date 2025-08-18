@@ -403,6 +403,78 @@ function commandsModule({
     return toolGroupService.getToolGroupForViewport(viewport.id);
   }
 
+  const directWheelZoom = event => {
+    const viewportElement = event.target.closest('.cornerstone-viewport-element');
+    if (!viewportElement) return;
+
+    const scrollWheelTool = localStorage.getItem('scrollWheelTool');
+    if (scrollWheelTool !== 'Zoom') return;
+
+    if (
+      event.target.classList.contains('tool-active') ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    )
+      return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const getZoomFactor = () => {
+      try {
+        const saved = localStorage.getItem('zoomSpeed');
+        const factor = saved && saved !== 'NaN' ? parseFloat(saved) : 0.1;
+        const validFactor = isNaN(factor) ? 0.1 : factor;
+
+        if (validFactor <= 0.075) return 0.5;
+        if (validFactor <= 0.15) return 1;
+        if (validFactor <= 0.3) return 2;
+        return 4;
+      } catch (error) {
+        return 1;
+      }
+    };
+
+    try {
+      const enabledElement = getEnabledElement(viewportElement);
+      if (enabledElement && enabledElement.viewport) {
+        const { viewport } = enabledElement;
+        if (
+          viewport &&
+          typeof viewport.getZoom === 'function' &&
+          typeof viewport.setZoom === 'function'
+        ) {
+          const currentZoom = viewport.getZoom();
+
+          const zoomFactor = getZoomFactor();
+          const baseStep = 0.05 * 0.75;
+          const zoomStep = baseStep * zoomFactor;
+
+          const direction = event.deltaY > 0 ? -zoomStep : zoomStep;
+          const newZoom = currentZoom * (1 + direction);
+
+          const clampedZoom = newZoom;
+
+          const canvas = viewport.getCanvas();
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const cursorX = (event.clientX - rect.left) * scaleX;
+          const cursorY = (event.clientY - rect.top) * scaleY;
+          viewport.setZoom(clampedZoom, { x: cursorX, y: cursorY });
+          viewport.render();
+        }
+      }
+    } catch (error) {
+    }
+  };
+
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('wheel', directWheelZoom);
+    document.addEventListener('wheel', directWheelZoom, { passive: false });
+  }
+
   const actions = {
     /**
      * Generates the selector props for the context menu, specific to
@@ -978,7 +1050,19 @@ function commandsModule({
     },
     scaleViewport: ({ direction }) => {
       const enabledElement = _getActiveViewportEnabledElement();
-      const scaleFactor = direction > 0 ? 0.9 : 1.1;
+
+      const getZoomSpeed = () => {
+        try {
+          const saved = localStorage.getItem('zoomSpeed');
+          return saved ? parseFloat(saved) : 0.1; // Default 10% zoom
+        } catch (error) {
+          console.warn('Failed to load zoom speed preference:', error);
+          return 0.1;
+        }
+      };
+
+      const zoomSpeed = getZoomSpeed();
+      const scaleFactor = direction > 0 ? 1 - zoomSpeed : 1 + zoomSpeed;
 
       if (!enabledElement) {
         return;

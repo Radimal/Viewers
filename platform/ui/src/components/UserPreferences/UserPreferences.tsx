@@ -36,6 +36,17 @@ const UserPreferences = ({
     scrollWheelPreference = 'StackScroll';
   }
 
+  let zoomSpeedPreference = localStorage.getItem('zoomSpeed');
+  if (!zoomSpeedPreference || zoomSpeedPreference === 'NaN') {
+    zoomSpeedPreference = '0.1';
+  }
+  
+  const parsedZoomSpeed = parseFloat(zoomSpeedPreference);
+  if (isNaN(parsedZoomSpeed)) {
+    zoomSpeedPreference = '0.1';
+    localStorage.setItem('zoomSpeed', '0.1');
+  }
+
   const getSavedToolBindings = () => {
     // Always start with the default tool bindings
     if (!defaultToolBindings || defaultToolBindings.length === 0) {
@@ -96,12 +107,14 @@ const UserPreferences = ({
     language: currentLanguage,
     openAdditionalWindowsOnStart: !!openAdditionalWindowsOnStart,
     scrollWheelTool: scrollWheelPreference,
+    zoomSpeed: zoomSpeedPreference,
   });
 
   const onSubmitHandler = () => {
     // Save tool bindings to localStorage
     try {
       localStorage.setItem('defaultToolBindings', JSON.stringify(state.defaultToolBindings));
+      localStorage.setItem('zoomSpeed', state.zoomSpeed.toString());
     } catch (error) {
       console.warn('Failed to save tool bindings:', error);
     }
@@ -117,10 +130,12 @@ const UserPreferences = ({
       isDisabled: disabled,
       defaultToolBindings: defaultToolBindings,
       scrollWheelTool: 'StackScroll',
+      zoomSpeed: '0.1',
     }));
     try {
       localStorage.removeItem('defaultToolBindings');
       localStorage.removeItem('scrollWheelTool');
+      localStorage.removeItem('zoomSpeed');
     } catch (error) {
       console.warn('Failed to clear saved preferences:', error);
     }
@@ -179,6 +194,28 @@ const UserPreferences = ({
       }
     } catch (error) {
       console.warn('Failed to save tool bindings:', error);
+    }
+  };
+
+  const zoomSpeedOptions = [
+    { label: '0.5x (Slow)', value: '0.05' },
+    { label: '1x (Normal)', value: '0.1' },
+    { label: '2x (Fast)', value: '0.2' },
+    { label: '4x (Very Fast)', value: '0.4' }
+  ];
+
+  const onZoomSpeedChangeHandler = (value) => {
+    const actualValue = typeof value === 'object' && value.value !== undefined ? value.value : value;
+    
+    setState(state => ({
+      ...state,
+      zoomSpeed: actualValue,
+    }));
+
+    try {
+      localStorage.setItem('zoomSpeed', actualValue);
+    } catch (error) {
+      console.warn('Failed to save zoom speed:', error);
     }
   };
 
@@ -245,6 +282,31 @@ const UserPreferences = ({
           onChange={onDefaultToolsChangeHandler}
           onActivateTool={onActivateTool}
         />
+        
+        <div className="mt-6 mb-4 flex flex-row items-center justify-center">
+          <div className="flex w-40 justify-end pr-4">
+            <Typography
+              variant="subtitle"
+              className="flex items-center whitespace-nowrap"
+            >
+              Zoom Speed:
+            </Typography>
+          </div>
+          <div className="flex w-60 items-center">
+            <Select
+              disabled={disabled}
+              isClearable={false}
+              placeholder={zoomSpeedOptions.find(opt => opt.value === state.zoomSpeed)?.label || "Select zoom speed..."}
+              value={zoomSpeedOptions.find(opt => opt.value === state.zoomSpeed) || null}
+              onChange={(value) => onZoomSpeedChangeHandler(value)}
+              options={zoomSpeedOptions}
+            />
+            <Typography variant="body" className="text-sm text-gray-400 ml-2">
+              Zoom factor
+            </Typography>
+          </div>
+        </div>
+        
         <div className="mt-4 flex flex-col items-center">
           <Button
             type={ButtonEnums.type.primary}
