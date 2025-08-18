@@ -429,7 +429,8 @@ function commandsModule({
 
         if (validFactor <= 0.075) return 0.5;
         if (validFactor <= 0.15) return 1;
-        if (validFactor <= 0.3) return 2;
+        if (validFactor <= 0.29) return 2;
+        if (validFactor <= 0.39) return 3;
         return 4;
       } catch (error) {
         return 1;

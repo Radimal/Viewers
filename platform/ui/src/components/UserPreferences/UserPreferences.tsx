@@ -201,7 +201,8 @@ const UserPreferences = ({
     { label: '0.5x (Slow)', value: '0.05' },
     { label: '1x (Normal)', value: '0.1' },
     { label: '2x (Fast)', value: '0.2' },
-    { label: '4x (Very Fast)', value: '0.4' }
+    { label: '3x (Faster)', value: '0.3' },
+    { label: '4x (Very Fast)', value: '0.4' },
   ];
 
   const onZoomSpeedChangeHandler = (value) => {
