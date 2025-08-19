@@ -457,14 +457,23 @@ function commandsModule({
 
           const clampedZoom = newZoom;
 
-          const canvas = viewport.getCanvas();
-          const rect = canvas.getBoundingClientRect();
-          const scaleX = canvas.width / rect.width;
-          const scaleY = canvas.height / rect.height;
-          const cursorX = (event.clientX - rect.left) * scaleX;
-          const cursorY = (event.clientY - rect.top) * scaleY;
-          viewport.setZoom(clampedZoom, { x: cursorX, y: cursorY });
+          const camera = viewport.getCamera();
+          const { parallelScale } = camera;
+          const zoomRatio = clampedZoom / currentZoom;
+          const newParallelScale = parallelScale / zoomRatio;
+          
+          const updatedCamera = {
+            ...camera,
+            parallelScale: newParallelScale
+          };
+          
+          viewport.setCamera(updatedCamera);
           viewport.render();
+          
+          const viewportId = viewport.id;
+          if (viewportId) {
+            cornerstoneViewportService.storePresentation({ viewportId });
+          }
         }
       }
     } catch (error) {
