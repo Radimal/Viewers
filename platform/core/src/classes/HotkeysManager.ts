@@ -29,6 +29,9 @@ export class HotkeysManager {
 
     this._servicesManager = servicesManager;
     this._commandsManager = commandsManager;
+    if (typeof window !== 'undefined') {
+      window.debugHotkeys = () => this.logRegisteredHotkeys();
+    }
   }
 
   /**
@@ -90,6 +93,29 @@ export class HotkeysManager {
   setDefaultHotKeys(hotkeyDefinitions = []) {
     const definitions = this.getValidDefinitions(hotkeyDefinitions);
     this.hotkeyDefaults = definitions;
+    console.log('[HOTKEY DEBUG] Setting default hotkeys:', {
+      count: definitions.length,
+      hotkeys: definitions.map(def => ({
+        commandName: def.commandName,
+        keys: def.keys,
+        label: def.label
+      }))
+    });
+  }
+
+  /**
+   * Debug method to log all currently registered hotkeys
+   */
+  logRegisteredHotkeys() {
+    console.log('[HOTKEY DEBUG] Currently registered hotkeys:', {
+      total: Object.keys(this.hotkeyDefinitions).length,
+      isEnabled: this.isEnabled,
+      hotkeys: Object.values(this.hotkeyDefinitions).map(def => ({
+        commandName: def.commandName,
+        keys: def.keys,
+        label: def.label
+      }))
+    });
   }
 
   /**
@@ -186,9 +212,6 @@ export class HotkeysManager {
     if (previouslyRegisteredDefinition) {
       const previouslyRegisteredKeys = previouslyRegisteredDefinition.keys;
       this._unbindHotkeys(commandName, previouslyRegisteredKeys);
-      // log.info(
-      //   `[hotkeys] Unbinding ${commandName} with ${options} options from ${previouslyRegisteredKeys}`
-      // );
     }
 
     // Set definition & bind
@@ -200,10 +223,6 @@ export class HotkeysManager {
       isEditable,
     };
     this._bindHotkeys(commandName, commandOptions, context, keys);
-    // log.info(
-    //   `[hotkeys] Binding ${commandName} with ${options} from ${context ||
-    //   'default'} options to ${keys}`
-    // );
   }
 
   /**
@@ -244,7 +263,27 @@ export class HotkeysManager {
     hotkeys.bind(combinedKeys, evt => {
       evt.preventDefault();
       evt.stopPropagation();
-      this._commandsManager.runCommand(commandName, { evt, ...commandOptions }, context);
+      console.log('[HOTKEY DEBUG] Key pressed:', {
+        key: evt.key,
+        code: evt.code,
+        combinedKeys,
+        commandName,
+        commandOptions,
+        context,
+        timestamp: new Date().toISOString()
+      });
+      
+      try {
+        console.log('[HOTKEY DEBUG] Executing command:', commandName);
+        this._commandsManager.runCommand(commandName, { evt, ...commandOptions }, context);
+        console.log('[HOTKEY DEBUG] Command executed successfully:', commandName);
+      } catch (error) {
+        console.error('[HOTKEY DEBUG] Command execution failed:', {
+          commandName,
+          error: error.message,
+          stack: error.stack
+        });
+      }
     });
   }
 
