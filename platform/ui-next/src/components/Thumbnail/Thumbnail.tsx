@@ -81,6 +81,9 @@ const Thumbnail = ({
                 alt={imageAltText}
                 className="h-[114px] w-[128px] rounded"
                 crossOrigin="anonymous"
+                onError={(e) => {
+                  console.error('💔 Thumbnail image failed to render:', displaySetInstanceUID, 'src:', imageSrc);
+                }}
               />
             ) : (
               <div className="bg-background h-[114px] w-[128px] rounded"></div>

@@ -562,7 +562,12 @@ class StudyPrefetcherService extends PubSubService {
       return;
     }
 
-    console.warn(`An error ocurred when trying to load "${imageRequest.imageId}"`, error);
+    // Enhanced logging for thumbnail vs other requests
+    if (this.requestType === RequestType.Thumbnail) {
+      console.error('📋 Thumbnail prefetch failed:', imageRequest.imageId, error.message || error);
+    } else {
+      console.warn(`An error ocurred when trying to load "${imageRequest.imageId}"`, error);
+    }
 
     const { imageId } = imageRequest;
 

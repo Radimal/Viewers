@@ -79,6 +79,9 @@ const Thumbnail = ({
               alt={imageAltText}
               className="h-full w-full object-contain"
               crossOrigin="anonymous"
+              onError={(e) => {
+                console.error('💔 Thumbnail image failed to render:', displaySetInstanceUID, 'src:', imageSrc);
+              }}
             />
           ) : (
             <div>{imageAltText}</div>
