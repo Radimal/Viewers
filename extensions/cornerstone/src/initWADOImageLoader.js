@@ -46,7 +46,12 @@ export default function initWADOImageLoader(
       return xhrRequestHeaders;
     },
     errorInterceptor: error => {
-      errorHandler.getHTTPErrorHandler(error);
+      const handler = errorHandler.getHTTPErrorHandler();
+      if (typeof handler === 'function') {
+        handler(error);
+      } else {
+        console.error('⚠️ WADO image load error - no error handler configured:', error);
+      }
     },
   });
 }
