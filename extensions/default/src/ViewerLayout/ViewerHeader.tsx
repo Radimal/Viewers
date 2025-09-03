@@ -95,7 +95,7 @@ function ViewerHeader({
     try {
       uiNotificationService.show({
         title: 'Cache Invalidation Started',
-        message: 'Invalidating cache for current study...',
+        message: 'Invalidating cache for current study, this can take a few minutes',
         type: 'info',
         duration: 3000,
       });
@@ -287,8 +287,8 @@ function ViewerHeader({
         }),
     },
     {
-      title: 'Invalidate Cache',
-      icon: 'refresh',
+      title: t('Reload Study'),
+      icon: 'Refresh',
       onClick: handleInvalidateCache,
     },
   ];
