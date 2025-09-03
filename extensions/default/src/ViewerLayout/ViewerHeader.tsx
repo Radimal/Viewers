@@ -12,6 +12,7 @@ import HeaderPatientInfo from './HeaderPatientInfo';
 import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
 import useStudyInfo from '../hooks/useStudyInfo';
 import { utils } from '@ohif/core';
+import { InvalidationService } from '../../../../platform/app/src/utils/invalidationService';
 const { orthancUtils } = utils;
 
 const { availableLanguages, defaultLanguage, currentLanguage } = i18n;
@@ -74,6 +75,44 @@ function ViewerHeader({
       uiNotificationService.show({
         title: 'Download Failed',
         message: `Failed to download study: ${error.message || 'Unknown error'}`,
+        type: 'error',
+        duration: 8000,
+      });
+    }
+  };
+
+  const handleInvalidateCache = async () => {
+    if (!studyInfo?.StudyInstanceUID) {
+      uiNotificationService.show({
+        title: 'Invalidation Error',
+        message: 'Missing StudyInstanceUID for cache invalidation',
+        type: 'error',
+        duration: 5000,
+      });
+      return;
+    }
+
+    try {
+      uiNotificationService.show({
+        title: 'Cache Invalidation Started',
+        message: 'Invalidating cache for current study...',
+        type: 'info',
+        duration: 3000,
+      });
+
+      await InvalidationService.invalidatePath(studyInfo.StudyInstanceUID);
+
+      uiNotificationService.show({
+        title: 'Cache Invalidated',
+        message: 'Study cache has been invalidated successfully',
+        type: 'success',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('Error invalidating cache:', error);
+      uiNotificationService.show({
+        title: 'Invalidation Failed',
+        message: `Failed to invalidate cache: ${error.message || 'Unknown error'}`,
         type: 'error',
         duration: 8000,
       });
@@ -246,6 +285,11 @@ function ViewerHeader({
             },
           },
         }),
+    },
+    {
+      title: 'Invalidate Cache',
+      icon: 'refresh',
+      onClick: handleInvalidateCache,
     },
   ];
 
