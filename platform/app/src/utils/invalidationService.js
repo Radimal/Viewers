@@ -1,11 +1,17 @@
 export const InvalidationService = {
   async invalidatePath(studyInstanceUID) {
     try {
-      const response = await fetch(`/api/invalidate/${encodeURIComponent(studyInstanceUID)}`, {
+      const baseUrl = 'http://radimal-reporter.onrender.com/cdn/invalidate';
+      const body = {
+        path: `/dicom-web/studies/${studyInstanceUID}/*`,
+      };
+
+      const response = await fetch(baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
