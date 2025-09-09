@@ -1,7 +1,7 @@
 export const InvalidationService = {
   async invalidatePath(studyInstanceUID) {
     try {
-      const baseUrl = 'http://radimal-reporter.onrender.com/cdn/invalidate';
+      const baseUrl = 'https://radimal-reporter.onrender.com/cdn/invalidate';
       const body = {
         path: `/dicom-web/studies/${studyInstanceUID}/*`,
       };
