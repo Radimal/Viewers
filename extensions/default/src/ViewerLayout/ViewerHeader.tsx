@@ -108,6 +108,16 @@ function ViewerHeader({
         type: 'success',
         duration: 5000,
       });
+
+      uiNotificationService.show({
+        title: 'Page refresh scheduled',
+        message: 'The page will refresh in 30 seconds to reload the study images.',
+        type: 'info',
+        duration: 5000,
+      });
+      setTimeout(() => {
+        window.location.reload();
+      }, 30000);
     } catch (error) {
       console.error('Error invalidating cache:', error);
       uiNotificationService.show({
