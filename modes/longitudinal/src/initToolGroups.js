@@ -10,6 +10,16 @@ const getScrollWheelTool = () => {
   }
 };
 
+const getScrollWheelInversion = () => {
+  try {
+    const saved = localStorage.getItem('invertScrollWheel');
+    return saved === 'true';
+  } catch (error) {
+    console.warn('Failed to load scroll wheel inversion preference:', error);
+    return false;
+  }
+};
+
 const getScrollWheelBinding = (toolNames, Enums) => {
   const preference = getScrollWheelTool();
 
@@ -52,6 +62,12 @@ function initDefaultToolGroup(
   const { toolNames, Enums } = utilityModule.exports;
   const toolBinding = getScrollWheelBinding(toolNames, Enums);
 
+  // Always get inversion preference for StackScroll tools
+  const invertScrollWheel = getScrollWheelInversion();
+  const wheelToolConfig = toolBinding.wheelTool === toolNames.StackScroll ? {
+    invert: invertScrollWheel,
+  } : {};
+
   const tools = {
     active: [
       {
@@ -65,6 +81,7 @@ function initDefaultToolGroup(
       {
         toolName: toolBinding.wheelTool,
         bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        configuration: wheelToolConfig,
       },
       {
         toolName: toolBinding.secondaryTool,
@@ -135,6 +152,17 @@ function initDefaultToolGroup(
   };
 
   toolGroupService.createToolGroupAndAddTools(toolGroupId, tools);
+  
+  // Force reconfigure the StackScroll tool if inversion is enabled
+  if (toolBinding.wheelTool === toolNames.StackScroll && invertScrollWheel) {
+    try {
+      toolGroupService.setToolConfiguration(toolGroupId, toolNames.StackScroll, {
+        invert: true,
+      });
+    } catch (error) {
+      console.warn('Failed to reconfigure StackScroll tool:', error);
+    }
+  }
 }
 
 function initSRToolGroup(extensionManager, toolGroupService) {
@@ -153,6 +181,10 @@ function initSRToolGroup(extensionManager, toolGroupService) {
   const { toolNames: SRToolNames } = SRUtilityModule.exports;
   const { toolNames, Enums } = CS3DUtilityModule.exports;
   const toolBinding = getScrollWheelBinding(toolNames, Enums);
+  const invertScrollWheel = getScrollWheelInversion();
+  const wheelToolConfig = toolBinding.wheelTool === toolNames.StackScroll ? {
+    invert: invertScrollWheel,
+  } : {};
 
   const tools = {
     active: [
@@ -183,6 +215,7 @@ function initSRToolGroup(extensionManager, toolGroupService) {
       {
         toolName: toolBinding.wheelTool,
         bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        configuration: wheelToolConfig,
       },
     ],
     passive: [
@@ -205,6 +238,17 @@ function initSRToolGroup(extensionManager, toolGroupService) {
 
   const toolGroupId = 'SRToolGroup';
   toolGroupService.createToolGroupAndAddTools(toolGroupId, tools);
+  
+  // Force reconfigure the StackScroll tool if inversion is enabled
+  if (toolBinding.wheelTool === toolNames.StackScroll && invertScrollWheel) {
+    try {
+      toolGroupService.setToolConfiguration(toolGroupId, toolNames.StackScroll, {
+        invert: true,
+      });
+    } catch (error) {
+      console.warn('Failed to reconfigure SRToolGroup StackScroll tool:', error);
+    }
+  }
 }
 
 function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, modeLabelConfig) {
@@ -217,6 +261,10 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, m
 
   const { toolNames, Enums } = utilityModule.exports;
   const toolBinding = getScrollWheelBinding(toolNames, Enums);
+  const invertScrollWheel = getScrollWheelInversion();
+  const wheelToolConfig = toolBinding.wheelTool === toolNames.StackScroll ? {
+    invert: invertScrollWheel,
+  } : {};
 
   const tools = {
     active: [
@@ -231,6 +279,7 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, m
       {
         toolName: toolBinding.wheelTool,
         bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        configuration: wheelToolConfig,
       },
       {
         toolName: toolBinding.secondaryTool,
@@ -320,6 +369,17 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, m
   };
 
   toolGroupService.createToolGroupAndAddTools('mpr', tools);
+  
+  // Force reconfigure the StackScroll tool if inversion is enabled
+  if (toolBinding.wheelTool === toolNames.StackScroll && invertScrollWheel) {
+    try {
+      toolGroupService.setToolConfiguration('mpr', toolNames.StackScroll, {
+        invert: true,
+      });
+    } catch (error) {
+      console.warn('Failed to reconfigure MPRToolGroup StackScroll tool:', error);
+    }
+  }
 }
 function initVolume3DToolGroup(extensionManager, toolGroupService) {
   const utilityModule = extensionManager.getModuleEntry(

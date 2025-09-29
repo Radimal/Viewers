@@ -47,6 +47,11 @@ const UserPreferences = ({
     localStorage.setItem('zoomSpeed', '0.1');
   }
 
+  let invertScrollWheelPreference = localStorage.getItem('invertScrollWheel');
+  if (invertScrollWheelPreference === null) {
+    invertScrollWheelPreference = 'false';
+  }
+
   const getSavedToolBindings = () => {
     // Always start with the default tool bindings
     if (!defaultToolBindings || defaultToolBindings.length === 0) {
@@ -108,6 +113,7 @@ const UserPreferences = ({
     openAdditionalWindowsOnStart: !!openAdditionalWindowsOnStart,
     scrollWheelTool: scrollWheelPreference,
     zoomSpeed: zoomSpeedPreference,
+    invertScrollWheel: invertScrollWheelPreference === 'true',
   });
 
   const onSubmitHandler = () => {
@@ -115,6 +121,7 @@ const UserPreferences = ({
     try {
       localStorage.setItem('defaultToolBindings', JSON.stringify(state.defaultToolBindings));
       localStorage.setItem('zoomSpeed', state.zoomSpeed.toString());
+      localStorage.setItem('invertScrollWheel', state.invertScrollWheel.toString());
     } catch (error) {
       console.warn('Failed to save tool bindings:', error);
     }
@@ -131,11 +138,13 @@ const UserPreferences = ({
       defaultToolBindings: defaultToolBindings,
       scrollWheelTool: 'StackScroll',
       zoomSpeed: '0.1',
+      invertScrollWheel: false,
     }));
     try {
       localStorage.removeItem('defaultToolBindings');
       localStorage.removeItem('scrollWheelTool');
       localStorage.removeItem('zoomSpeed');
+      localStorage.removeItem('invertScrollWheel');
     } catch (error) {
       console.warn('Failed to clear saved preferences:', error);
     }
@@ -217,6 +226,19 @@ const UserPreferences = ({
       localStorage.setItem('zoomSpeed', actualValue);
     } catch (error) {
       console.warn('Failed to save zoom speed:', error);
+    }
+  };
+
+  const onInvertScrollWheelChangeHandler = (value) => {
+    setState(state => ({
+      ...state,
+      invertScrollWheel: value,
+    }));
+
+    try {
+      localStorage.setItem('invertScrollWheel', value.toString());
+    } catch (error) {
+      console.warn('Failed to save scroll wheel inversion:', error);
     }
   };
 
@@ -304,6 +326,26 @@ const UserPreferences = ({
             />
             <Typography variant="body" className="text-sm text-gray-400 ml-2">
               Zoom factor
+            </Typography>
+          </div>
+        </div>
+        
+        <div className="mt-4 mb-4 flex flex-row items-center justify-center">
+          <div className="flex w-40 justify-end pr-4">
+            <Typography
+              variant="subtitle"
+              className="flex items-center whitespace-nowrap"
+            >
+              Invert Scroll Direction:
+            </Typography>
+          </div>
+          <div className="flex w-60 items-center">
+            <CheckBox
+              checked={state.invertScrollWheel}
+              onChange={onInvertScrollWheelChangeHandler}
+            />
+            <Typography variant="body" className="text-sm text-gray-400 ml-2">
+              Reverse scroll wheel direction
             </Typography>
           </div>
         </div>

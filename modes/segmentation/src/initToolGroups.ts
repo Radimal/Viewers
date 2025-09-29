@@ -17,7 +17,18 @@ function createTools(utilityModule) {
       { toolName: toolNames.WindowLevel, bindings: [{ mouseButton: Enums.MouseBindings.Primary }] },
       { toolName: toolNames.Pan, bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }] },
       { toolName: toolNames.Zoom, bindings: [{ mouseButton: Enums.MouseBindings.Secondary }] },
-      { toolName: toolNames.StackScroll, bindings: [{ mouseButton: Enums.MouseBindings.Wheel }] },
+      { 
+        toolName: toolNames.StackScroll, 
+        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        configuration: (() => {
+          try {
+            const invertScrollWheel = localStorage.getItem('invertScrollWheel') === 'true';
+            return { invert: invertScrollWheel };
+          } catch (error) {
+            return {};
+          }
+        })(),
+      },
     ],
     passive: [
       {

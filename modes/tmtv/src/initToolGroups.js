@@ -24,6 +24,14 @@ function _initToolGroups(toolNames, Enums, toolGroupService, commandsManager, mo
       {
         toolName: toolNames.StackScroll,
         bindings: [{ mouseButton: Enums.MouseBindings.Wheel }],
+        configuration: (() => {
+          try {
+            const invertScrollWheel = localStorage.getItem('invertScrollWheel') === 'true';
+            return { invert: invertScrollWheel };
+          } catch (error) {
+            return {};
+          }
+        })(),
       },
     ],
     passive: [
@@ -147,6 +155,19 @@ function _initToolGroups(toolNames, Enums, toolGroupService, commandsManager, mo
   });
   toolGroupService.createToolGroupAndAddTools(toolGroupIds.Fusion, tools);
   toolGroupService.createToolGroupAndAddTools(toolGroupIds.default, tools);
+
+  // Force reconfigure StackScroll tool with inversion setting for all TMTV tool groups
+  try {
+    const invertScrollWheel = localStorage.getItem('invertScrollWheel') === 'true';
+    if (invertScrollWheel) {
+      toolGroupService.setToolConfiguration(toolGroupIds.CT, toolNames.StackScroll, { invert: true });
+      toolGroupService.setToolConfiguration(toolGroupIds.PT, toolNames.StackScroll, { invert: true });
+      toolGroupService.setToolConfiguration(toolGroupIds.Fusion, toolNames.StackScroll, { invert: true });
+      toolGroupService.setToolConfiguration(toolGroupIds.default, toolNames.StackScroll, { invert: true });
+    }
+  } catch (error) {
+    console.warn('Failed to reconfigure TMTV StackScroll tools:', error);
+  }
 
   const mipTools = {
     active: [
