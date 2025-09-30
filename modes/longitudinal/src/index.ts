@@ -127,15 +127,6 @@ function modeFactory({ modeConfiguration }) {
             sourceEvents: [segmentationService.EVENTS.SEGMENTATION_ADDED],
           },
         ]),
-        ...panelService.addActivatePanelTriggers(tracked.measurements, [
-          {
-            sourcePubSubService: measurementService,
-            sourceEvents: [
-              measurementService.EVENTS.MEASUREMENT_ADDED,
-              measurementService.EVENTS.RAW_MEASUREMENT_ADDED,
-            ],
-          },
-        ]),
       ];
     },
     onModeExit: ({ servicesManager }: withAppTypes) => {
@@ -218,7 +209,7 @@ function modeFactory({ modeConfiguration }) {
               rightPanelClosed: true,
               viewports: [
                 {
-                  namespace: tracked.viewport,
+                  namespace: '@ohif/extension-cornerstone.viewportModule.cornerstone',
                   displaySetsToDisplay: [
                     ohif.sopClassHandler,
                     dicomvideo.sopClassHandler,
