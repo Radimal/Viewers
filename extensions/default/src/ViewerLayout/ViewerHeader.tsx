@@ -115,17 +115,50 @@ function ViewerHeader({
         type: 'info',
         duration: 5000,
       });
-      setTimeout(() => {
-        window.location.reload();
+      setTimeout(async () => {
+        // Clear Cache API
+        if ('caches' in window) {
+          try {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+            console.log('✅ Cleared Cache API storage');
+          } catch (error) {
+            console.warn('⚠️ Could not clear Cache API:', error);
+          }
+        }
+
+        // Force reload with cache-busting
+        const url = new URL(window.location);
+        url.searchParams.set('_t', Date.now());
+        window.location.replace(url.toString());
       }, 30000);
     } catch (error) {
       console.error('Error invalidating cache:', error);
       uiNotificationService.show({
         title: 'Invalidation Failed',
-        message: `Failed to invalidate cache: ${error.message || 'Unknown error'}`,
+        message: `Failed to invalidate cache: ${error.message || 'Unknown error'}. Performing hard reload...`,
         type: 'error',
-        duration: 8000,
+        duration: 3000,
       });
+
+      // Perform hard reload even if CDN invalidation failed
+      setTimeout(async () => {
+        // Clear Cache API
+        if ('caches' in window) {
+          try {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+            console.log('✅ Cleared Cache API storage after error');
+          } catch (cacheError) {
+            console.warn('⚠️ Could not clear Cache API after error:', cacheError);
+          }
+        }
+
+        // Force reload with cache-busting
+        const url = new URL(window.location);
+        url.searchParams.set('_t', Date.now());
+        window.location.replace(url.toString());
+      }, 5000);
     }
   };
 
