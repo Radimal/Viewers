@@ -8,6 +8,7 @@ async function getStudiesForPatientByMRN(dataSource, qidoForStudyUID) {
         '00080080', // Institution Name
         '00100030', // Patient Birthday
         '00101040', // Patient Address
+        '00100010', // Patient Name
         // Add more fields here if you want them in the result
       ].join(','),
       disableWildcard: true,

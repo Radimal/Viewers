@@ -29,6 +29,7 @@ export function createStudyBrowserTabs(
         ...ds,
         birthDate: study.birthDate,
         institutionName: study.institutionName,
+        patientName: study.patientName,
       }));
     const tabStudy = Object.assign({}, study, { displaySets: displaySetsForStudy });
 
@@ -41,7 +42,10 @@ export function createStudyBrowserTabs(
   allStudies.forEach(study => {
     if (
       primaryStudies.some(
-        p => study.institutionName === p.institutionName && study.birthDate === p.birthDate
+        p =>
+          study.institutionName === p.institutionName &&
+          study.birthDate === p.birthDate &&
+          study.patientName === p.patientName
       )
     )
       patientStudies.push(study);

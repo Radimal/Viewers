@@ -100,6 +100,7 @@ function PanelStudyBrowser({
           '00080080', // Institution Name
           '00100030', // Patient Birthday
           '00101040', // Patient Address
+          '00100010', // PatientName
           // Add more fields here if you want them in the result
         ],
       });
@@ -129,6 +130,7 @@ function PanelStudyBrowser({
           numInstances: qidoStudy.NumInstances,
           birthDate: qidoStudy.BirthDate,
           institutionName: qidoStudy.InstitutionName,
+          patientName: qidoStudy.PatientName,
         };
       });
 
