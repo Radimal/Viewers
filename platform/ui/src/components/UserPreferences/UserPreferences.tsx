@@ -40,7 +40,7 @@ const UserPreferences = ({
   if (!zoomSpeedPreference || zoomSpeedPreference === 'NaN') {
     zoomSpeedPreference = '0.1';
   }
-  
+
   const parsedZoomSpeed = parseFloat(zoomSpeedPreference);
   if (isNaN(parsedZoomSpeed)) {
     zoomSpeedPreference = '0.1';
@@ -52,12 +52,17 @@ const UserPreferences = ({
     invertScrollWheelPreference = 'false';
   }
 
+  let viewerOverrideDisabled = localStorage.getItem('viewerOverrideDisabled');
+  if (viewerOverrideDisabled === null) {
+    viewerOverrideDisabled = 'false';
+  }
+
   const getSavedToolBindings = () => {
     // Always start with the default tool bindings
     if (!defaultToolBindings || defaultToolBindings.length === 0) {
       return [];
     }
-    
+
     try {
       const saved = localStorage.getItem('defaultToolBindings');
       const scrollWheelTool = localStorage.getItem('scrollWheelTool');
@@ -114,6 +119,7 @@ const UserPreferences = ({
     scrollWheelTool: scrollWheelPreference,
     zoomSpeed: zoomSpeedPreference,
     invertScrollWheel: invertScrollWheelPreference === 'true',
+    viewerOverrideDisabled: viewerOverrideDisabled === 'true',
   });
 
   const onSubmitHandler = () => {
@@ -122,6 +128,7 @@ const UserPreferences = ({
       localStorage.setItem('defaultToolBindings', JSON.stringify(state.defaultToolBindings));
       localStorage.setItem('zoomSpeed', state.zoomSpeed.toString());
       localStorage.setItem('invertScrollWheel', state.invertScrollWheel.toString());
+      localStorage.setItem('viewerOverrideDisabled', state.viewerOverrideDisabled.toString());
     } catch (error) {
       console.warn('Failed to save tool bindings:', error);
     }
@@ -139,12 +146,14 @@ const UserPreferences = ({
       scrollWheelTool: 'StackScroll',
       zoomSpeed: '0.1',
       invertScrollWheel: false,
+      viewerOverrideDisabled: false,
     }));
     try {
       localStorage.removeItem('defaultToolBindings');
       localStorage.removeItem('scrollWheelTool');
       localStorage.removeItem('zoomSpeed');
       localStorage.removeItem('invertScrollWheel');
+      localStorage.removeItem('viewerOverrideDisabled');
     } catch (error) {
       console.warn('Failed to clear saved preferences:', error);
     }
@@ -214,9 +223,10 @@ const UserPreferences = ({
     { label: '4x (Very Fast)', value: '0.4' },
   ];
 
-  const onZoomSpeedChangeHandler = (value) => {
-    const actualValue = typeof value === 'object' && value.value !== undefined ? value.value : value;
-    
+  const onZoomSpeedChangeHandler = value => {
+    const actualValue =
+      typeof value === 'object' && value.value !== undefined ? value.value : value;
+
     setState(state => ({
       ...state,
       zoomSpeed: actualValue,
@@ -229,7 +239,7 @@ const UserPreferences = ({
     }
   };
 
-  const onInvertScrollWheelChangeHandler = (value) => {
+  const onInvertScrollWheelChangeHandler = value => {
     setState(state => ({
       ...state,
       invertScrollWheel: value,
@@ -239,6 +249,36 @@ const UserPreferences = ({
       localStorage.setItem('invertScrollWheel', value.toString());
     } catch (error) {
       console.warn('Failed to save scroll wheel inversion:', error);
+    }
+  };
+
+  const onViewerOverrideChangeHandler = value => {
+    setState(state => ({
+      ...state,
+      viewerOverrideDisabled: value,
+    }));
+
+    try {
+      localStorage.setItem('viewerOverrideDisabled', value.toString());
+      if (window.opener && window.name === 'viewerWindow') {
+        let origin;
+        if (window.location.origin === 'http://localhost:3000') {
+          origin = 'http://localhost:8000';
+        } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
+          origin = 'https://radimal-vet-staging.onrender.com';
+        } else if (window.location.origin === 'https://view.radimal.ai') {
+          origin = 'https://vet.radimal.ai';
+        }
+        window.opener.postMessage(
+          {
+            type: 'VIEWER_OVERRIDE_CHANGED',
+            value: value,
+          },
+          origin || '*'
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to save viewer override setting:', error);
     }
   };
 
@@ -305,7 +345,7 @@ const UserPreferences = ({
           onChange={onDefaultToolsChangeHandler}
           onActivateTool={onActivateTool}
         />
-        
+
         <div className="mt-6 mb-4 flex flex-row items-center justify-center">
           <div className="flex w-40 justify-end pr-4">
             <Typography
@@ -319,17 +359,23 @@ const UserPreferences = ({
             <Select
               disabled={disabled}
               isClearable={false}
-              placeholder={zoomSpeedOptions.find(opt => opt.value === state.zoomSpeed)?.label || "Select zoom speed..."}
+              placeholder={
+                zoomSpeedOptions.find(opt => opt.value === state.zoomSpeed)?.label ||
+                'Select zoom speed...'
+              }
               value={zoomSpeedOptions.find(opt => opt.value === state.zoomSpeed) || null}
-              onChange={(value) => onZoomSpeedChangeHandler(value)}
+              onChange={value => onZoomSpeedChangeHandler(value)}
               options={zoomSpeedOptions}
             />
-            <Typography variant="body" className="text-sm text-gray-400 ml-2">
+            <Typography
+              variant="body"
+              className="ml-2 text-sm text-gray-400"
+            >
               Zoom factor
             </Typography>
           </div>
         </div>
-        
+
         <div className="mt-4 mb-4 flex flex-row items-center justify-center">
           <div className="flex w-40 justify-end pr-4">
             <Typography
@@ -344,12 +390,38 @@ const UserPreferences = ({
               checked={state.invertScrollWheel}
               onChange={onInvertScrollWheelChangeHandler}
             />
-            <Typography variant="body" className="text-sm text-gray-400 ml-2">
+            <Typography
+              variant="body"
+              className="ml-2 text-sm text-gray-400"
+            >
               Reverse scroll wheel direction
             </Typography>
           </div>
         </div>
-        
+
+        <div className="mt-4 mb-4 flex flex-row items-center justify-center">
+          <div className="flex w-40 justify-end pr-4">
+            <Typography
+              variant="subtitle"
+              className="flex items-center whitespace-nowrap"
+            >
+              Disable Viewer Auto-behavior:
+            </Typography>
+          </div>
+          <div className="flex w-60 items-center">
+            <CheckBox
+              checked={state.viewerOverrideDisabled}
+              onChange={onViewerOverrideChangeHandler}
+            />
+            <Typography
+              variant="body"
+              className="ml-2 text-sm text-gray-400"
+            >
+              Disables automatic viewer opening and fade in/out
+            </Typography>
+          </div>
+        </div>
+
         <div className="mt-4 flex flex-col items-center">
           <Button
             type={ButtonEnums.type.primary}
