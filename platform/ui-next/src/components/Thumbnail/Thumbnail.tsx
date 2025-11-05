@@ -162,6 +162,17 @@ const Thumbnail = ({
                     <Icons.DicomTagBrowser />
                     Tag Browser
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onThumbnailContextMenu('viewReport', {
+                        displaySetInstanceUID,
+                      });
+                    }}
+                    className="gap-[6px]"
+                  >
+                    <Icons.Pdf />
+                    View Report
+                  </DropdownMenuItem>
                   {canReject && (
                     <DropdownMenuItem
                       onSelect={() => {
@@ -295,6 +306,17 @@ const Thumbnail = ({
               >
                 <Icons.DicomTagBrowser />
                 Tag Browser
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  onThumbnailContextMenu('viewReport', {
+                    displaySetInstanceUID,
+                  });
+                }}
+                className="gap-[6px]"
+              >
+                <Icons.Pdf />
+                View Report
               </DropdownMenuItem>
               {canReject && (
                 <DropdownMenuItem

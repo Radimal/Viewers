@@ -453,6 +453,125 @@ const commandsModule = ({
       });
     },
 
+    async viewReport({ displaySetInstanceUID }: { displaySetInstanceUID?: string }) {
+      const { activeViewportId, viewports } = viewportGridService.getState();
+      const activeViewportSpecificData = viewports.get(activeViewportId);
+      const { displaySetInstanceUIDs } = activeViewportSpecificData;
+
+      const displaySets = displaySetService.activeDisplaySets;
+      const defaultDisplaySetInstanceUID = displaySetInstanceUID || displaySetInstanceUIDs[0];
+
+      const displaySet = displaySets.find(
+        ds => ds.displaySetInstanceUID === defaultDisplaySetInstanceUID
+      );
+      if (!displaySet) {
+        console.error('Display set not found');
+        return;
+      }
+
+      const studyInstanceUID = displaySet.StudyInstanceUID;
+
+      const isProduction = window.location.origin === 'https://view.radimal.ai';
+
+      const graphqlEndpoint = isProduction
+        ? 'https://api.radimal.ai/v1/graphql'
+        : 'https://hasura.stage-1.radimal.ai/v1/graphql';
+
+      const adminSecret = isProduction
+        ? process.env.REACT_APP_HASURA_ADMIN_SECRET_PROD || process.env.HASURA_ADMIN_SECRET_PROD
+        : process.env.REACT_APP_HASURA_ADMIN_SECRET_DEV || process.env.HASURA_ADMIN_SECRET_DEV;
+      
+      const platformUrl = isProduction
+        ? 'https://vet.radimal.ai'
+        : 'https://radimal-vet-staging.onrender.com';
+
+      try {
+        const response = await fetch(graphqlEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hasura-admin-secret': adminSecret,
+          },
+          body: JSON.stringify({
+            query: `
+              query MyQuery {
+                cases(where: {dicom_server_study_instance_uid: {_eq: "${studyInstanceUID}"}}) {
+                  id
+                  consultations {
+                    s3_url
+                  }
+                }
+              }
+            `,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const cases = result.data?.cases;
+
+        if (
+          cases &&
+          cases.length > 0 &&
+          cases[0].consultations &&
+          cases[0].consultations.length > 0
+        ) {
+          const s3_url = cases[0].consultations[0].s3_url;
+          if (s3_url) {
+            try {
+              const key = s3_url.split('s3.amazonaws.com/')[1];
+              const flaskResponse = await fetch(
+                `https://radimal-reporter.onrender.com/consultation/pdf?key=${key}`,
+                {
+                  method: 'GET',
+                }
+              );
+
+              if (!flaskResponse.ok) {
+                throw new Error(`Flask API error! status: ${flaskResponse.status}`);
+              }
+
+              const presignedUrl = await flaskResponse.text();
+              window.open(`${platformUrl}/consultation?url=${presignedUrl}`, '_blank');
+            } catch (error) {
+              console.error('Error getting presigned URL:', error);
+              uiNotificationService.show({
+                title: 'View Report',
+                message: 'Failed to generate report URL.',
+                type: 'error',
+                duration: 3000,
+              });
+            }
+          } else {
+            uiNotificationService.show({
+              title: 'View Report',
+              message: 'No report URL found for this consultation.',
+              type: 'warning',
+              duration: 3000,
+            });
+          }
+        } else {
+          uiNotificationService.show({
+            title: 'View Report',
+            message: 'No case found for this study.',
+            type: 'warning',
+            duration: 3000,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching case data:', error);
+        uiNotificationService.show({
+          title: 'View Report',
+          message: 'Failed to fetch report data.',
+          type: 'error',
+          duration: 3000,
+        });
+      }
+    },
+
     /**
      * Toggle viewport overlay (the information panel shown on the four corners
      * of the viewport)
@@ -685,6 +804,9 @@ const commandsModule = ({
     },
     openDICOMTagViewer: {
       commandFn: actions.openDICOMTagViewer,
+    },
+    viewReport: {
+      commandFn: actions.viewReport,
     },
     updateViewportDisplaySet: {
       commandFn: actions.updateViewportDisplaySet,

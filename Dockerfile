@@ -38,6 +38,15 @@ COPY platform /usr/src/app/platform
 
 # Copy Files
 FROM node:20.18.1-slim as builder
+
+# Accept build arguments
+ARG REACT_APP_HASURA_ADMIN_SECRET_PROD
+ARG REACT_APP_HASURA_ADMIN_SECRET_DEV
+
+# Set environment variables from build arguments
+ENV REACT_APP_HASURA_ADMIN_SECRET_PROD=$REACT_APP_HASURA_ADMIN_SECRET_PROD
+ENV REACT_APP_HASURA_ADMIN_SECRET_DEV=$REACT_APP_HASURA_ADMIN_SECRET_DEV
+
 RUN apt-get update && apt-get install -y build-essential python3
 RUN mkdir /usr/src/app
 WORKDIR /usr/src/app

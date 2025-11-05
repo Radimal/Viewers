@@ -53,6 +53,9 @@ jobs:
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            REACT_APP_HASURA_ADMIN_SECRET_PROD=${{ secrets.HASURA_ADMIN_SECRET_PROD }}
+            REACT_APP_HASURA_ADMIN_SECRET_DEV=${{ secrets.HASURA_ADMIN_SECRET_DEV }}
 
 #  push-ecr:
 #    runs-on: ubuntu-latest
