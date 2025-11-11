@@ -9,8 +9,9 @@ name: Build and Push OHIF container
 
 on:
   push:
-    branch:
+    branches:
       - 'v3.9.*'
+      - 'v3.10.*'
 #    tags:
 #      - 'v3.9.*'
 

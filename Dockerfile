@@ -67,6 +67,9 @@ ENV QUICK_BUILD true
 # ENV GENERATE_SOURCEMAP=false
 # ENV REACT_APP_CONFIG=config/default.js
 
+# Debug: Print environment variables to see if they're set
+RUN echo "Debug: REACT_APP_HASURA_ADMIN_SECRET_DEV = $REACT_APP_HASURA_ADMIN_SECRET_DEV"
+
 RUN yarn run build
 
 # Stage 3: Bundle the built application into a Docker container
