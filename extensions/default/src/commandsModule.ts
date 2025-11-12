@@ -473,53 +473,35 @@ const commandsModule = ({
 
       const isProduction = window.location.origin === 'https://view.radimal.ai';
 
-      const graphqlEndpoint = isProduction
-        ? 'https://api.radimal.ai/v1/graphql'
-        : 'https://hasura.stage-1.radimal.ai/v1/graphql';
-
-      const adminSecret = isProduction
-        ? process.env.REACT_APP_HASURA_ADMIN_SECRET_PROD || process.env.HASURA_ADMIN_SECRET_PROD
-        : process.env.REACT_APP_HASURA_ADMIN_SECRET_DEV || process.env.HASURA_ADMIN_SECRET_DEV;
+      const apiEndpoint = isProduction
+        ? 'https://reporter.radimal.ai'
+        : 'https://reporter-staging.onrender.com';
       
       const platformUrl = isProduction
         ? 'https://vet.radimal.ai'
         : 'https://radimal-vet-staging.onrender.com';
 
       try {
-        const response = await fetch(graphqlEndpoint, {
-          method: 'POST',
+        const response = await fetch(`${apiEndpoint}/case/${studyInstanceUID}`, {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'x-hasura-admin-secret': adminSecret,
           },
-          body: JSON.stringify({
-            query: `
-              query MyQuery {
-                cases(where: {dicom_server_study_instance_uid: {_eq: "${studyInstanceUID}"}}) {
-                  id
-                  consultations {
-                    s3_url
-                  }
-                }
-              }
-            `,
-          }),
         });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const result = await response.json();
-        const cases = result.data?.cases;
+        const caseData = await response.json();
+        console.log(caseData);
 
         if (
-          cases &&
-          cases.length > 0 &&
-          cases[0].consultations &&
-          cases[0].consultations.length > 0
+          caseData &&
+          caseData.consultations &&
+          caseData.consultations.length > 0
         ) {
-          const s3_url = cases[0].consultations[0].s3_url;
+          const s3_url = caseData.consultations[0].s3_url;
           if (s3_url) {
             try {
               const key = s3_url.split('s3.amazonaws.com/')[1];
