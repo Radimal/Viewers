@@ -518,8 +518,14 @@ const commandsModule = ({
                 throw new Error(`Flask API error! status: ${flaskResponse.status}`);
               }
 
-              const presignedUrl = await flaskResponse.text();
-              window.open(`${platformUrl}/consultation?url=${presignedUrl}`, '_blank');
+              let presignedUrl = await flaskResponse.text();
+              
+              // Remove quotes if the response is JSON-stringified
+              if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
+                presignedUrl = presignedUrl.slice(1, -1);
+              }
+              
+              window.open(`${platformUrl}/consultation?url=${encodeURIComponent(presignedUrl)}`, '_blank');
             } catch (error) {
               console.error('Error getting presigned URL:', error);
               uiNotificationService.show({
