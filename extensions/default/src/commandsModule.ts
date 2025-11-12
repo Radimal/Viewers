@@ -498,10 +498,12 @@ const commandsModule = ({
 
         if (
           caseData &&
-          caseData.consultations &&
-          caseData.consultations.length > 0
+          caseData.cases &&
+          caseData.cases.length > 0 &&
+          caseData.cases[0].consultations &&
+          caseData.cases[0].consultations.length > 0
         ) {
-          const s3_url = caseData.consultations[0].s3_url;
+          const s3_url = caseData.cases[0].consultations[0].s3_url;
           if (s3_url) {
             try {
               const key = s3_url.split('s3.amazonaws.com/')[1];
