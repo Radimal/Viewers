@@ -35,9 +35,6 @@ function ViewerLayout({
   const [leftPanelClosedState, setLeftPanelClosed] = useState(leftPanelClosed);
   const [rightPanelClosedState, setRightPanelClosed] = useState(rightPanelClosed);
   const [fade, setFade] = useState(false);
-  const [viewerOverrideDisabled, setViewerOverrideDisabled] = useState(
-    localStorage.getItem('viewerOverrideDisabled') === 'true'
-  );
 
   /**
    * Set body classes (tailwindcss) that don't allow vertical
@@ -89,11 +86,6 @@ function ViewerLayout({
       component: entry.component,
       displaySetsToDisplay: viewportComponent.displaySetsToDisplay,
     };
-  };
-
-  const handleViewerOverrideToggle = (checked: boolean) => {
-    setViewerOverrideDisabled(checked);
-    localStorage.setItem('viewerOverrideDisabled', checked.toString());
   };
 
   useEffect(() => {
@@ -194,16 +186,10 @@ function ViewerLayout({
 
       if (!allowedOrigins.includes(event.origin)) return;
       console.log('Received message:', event.data);
-      if (event.data && event.data.type === 'VIEWER_OVERRIDE_SETTING') {
-        console.log('Received viewer override setting:', event.data.value);
-        setViewerOverrideDisabled(event.data.value);
-        localStorage.setItem('viewerOverrideDisabled', event.data.value.toString());
-      } else if (event.data && event.data.type === 'FADE') {
+      if (event.data && event.data.type === 'FADE') {
         console.log('Received fade event:', event.data);
         channel.postMessage(event.data);
-        if (!viewerOverrideDisabled) {
-          setFade(event.data.value);
-        }
+        setFade(event.data.value);
       } else if (event.data && event.data.type === 'CLOSE') {
         console.log('Received close event:', event.data);
         channel.postMessage(event.data);
@@ -269,9 +255,7 @@ function ViewerLayout({
     channel.onmessage = event => {
       if (event.data.type === 'FADE') {
         console.log('All children received fade event:', event.data);
-        if (!viewerOverrideDisabled) {
-          setFade(event.data.value);
-        }
+        setFade(event.data.value);
       } else if (event.data.type === 'CLOSE') {
         console.log('All children received fade event:', event.data);
         window.close();
@@ -288,7 +272,7 @@ function ViewerLayout({
   return (
     <div
       className={`absolute inset-0 bg-black transition-opacity duration-1000 ${
-        fade && !viewerOverrideDisabled ? 'opacity-10' : 'opacity-100'
+        fade ? 'opacity-10' : 'opacity-100'
       }`}
     >
       <ViewerHeader
