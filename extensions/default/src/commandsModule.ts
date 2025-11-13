@@ -476,7 +476,7 @@ const commandsModule = ({
       const apiEndpoint = isProduction
         ? 'https://reporter.radimal.ai'
         : 'https://reporter-staging.onrender.com';
-      
+
       const platformUrl = isProduction
         ? 'https://vet.radimal.ai'
         : 'https://radimal-vet-staging.onrender.com';
