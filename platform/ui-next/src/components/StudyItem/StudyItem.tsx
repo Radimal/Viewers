@@ -24,7 +24,7 @@ const StudyItem = ({
   servicesManager,
   hasRadimalCase,
   onCaseStatusUpdate,
-}: withAppTypes) => {
+}) => {
   return (
     <Accordion
       type="single"
@@ -94,6 +94,9 @@ StudyItem.propTypes = {
   onDoubleClickThumbnail: PropTypes.func,
   onClickUntrack: PropTypes.func,
   viewPreset: PropTypes.string,
+  hasRadimalCase: PropTypes.bool,
+  onCaseStatusUpdate: PropTypes.func,
+  servicesManager: PropTypes.object,
 };
 
 export { StudyItem };

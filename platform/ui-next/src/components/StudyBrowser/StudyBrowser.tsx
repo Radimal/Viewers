@@ -32,7 +32,7 @@ const StudyBrowser = ({
   showSettings,
   viewPresets,
   onThumbnailContextMenu,
-}: withAppTypes) => {
+}) => {
   const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
 
   const handleCaseStatusUpdate = (studyInstanceUid: string, hasAnyCase: boolean) => {
