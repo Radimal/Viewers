@@ -7,6 +7,7 @@ import { Icons } from '../Icons';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../Accordion';
 
 const StudyItem = ({
+  studyInstanceUid,
   date,
   description,
   numInstances,
@@ -62,6 +63,7 @@ const StudyItem = ({
         >
           {isExpanded && displaySets && (
             <ThumbnailList
+              studyInstanceUid={studyInstanceUid}
               thumbnails={displaySets}
               activeDisplaySetInstanceUIDs={activeDisplaySetInstanceUIDs}
               onThumbnailClick={onClickThumbnail}
@@ -80,6 +82,7 @@ const StudyItem = ({
 };
 
 StudyItem.propTypes = {
+  studyInstanceUid: PropTypes.string,
   date: PropTypes.string.isRequired,
   description: PropTypes.string,
   modalities: PropTypes.string.isRequired,

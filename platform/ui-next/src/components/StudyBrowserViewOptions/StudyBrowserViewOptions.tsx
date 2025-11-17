@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
 } from '../DropdownMenu/DropdownMenu';
 
-export function StudyBrowserViewOptions({ tabs, onSelectTab, activeTabName }: withAppTypes) {
+export function StudyBrowserViewOptions({ tabs, onSelectTab, activeTabName }) {
   const handleTabChange = (tabName: string) => {
     onSelectTab(tabName);
   };

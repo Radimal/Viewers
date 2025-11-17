@@ -50,6 +50,7 @@ const StudyBrowser = ({
         return (
           <React.Fragment key={studyInstanceUid}>
             <StudyItem
+              studyInstanceUid={studyInstanceUid}
               date={date}
               description={description}
               numInstances={numInstances}
