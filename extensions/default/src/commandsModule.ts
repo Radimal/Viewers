@@ -453,7 +453,7 @@ const commandsModule = ({
       });
     },
 
-    async viewReport({ displaySetInstanceUID }: { displaySetInstanceUID?: string }) {
+    async getCases({ displaySetInstanceUID }: { displaySetInstanceUID?: string }) {
       const { activeViewportId, viewports } = viewportGridService.getState();
       const activeViewportSpecificData = viewports.get(activeViewportId);
       const { displaySetInstanceUIDs } = activeViewportSpecificData;
@@ -466,7 +466,7 @@ const commandsModule = ({
       );
       if (!displaySet) {
         console.error('Display set not found');
-        return;
+        return null;
       }
 
       const studyInstanceUID = displaySet.StudyInstanceUID;
@@ -476,10 +476,6 @@ const commandsModule = ({
       const apiEndpoint = isProduction
         ? 'https://reporter.radimal.ai'
         : 'https://reporter-staging.onrender.com';
-
-      const platformUrl = isProduction
-        ? 'https://vet.radimal.ai'
-        : 'https://radimal-vet-staging.onrender.com';
 
       try {
         const response = await fetch(`${apiEndpoint}/case/${studyInstanceUID}`, {
@@ -503,60 +499,74 @@ const commandsModule = ({
           caseData.cases[0].consultations &&
           caseData.cases[0].consultations.length > 0
         ) {
-          const s3_url = caseData.cases[0].consultations[0].s3_url;
-          if (s3_url) {
-            try {
-              const key = s3_url.split('s3.amazonaws.com/')[1];
-              const flaskResponse = await fetch(
-                `https://radimal-reporter.onrender.com/consultation/pdf?key=${key}`,
-                {
-                  method: 'GET',
-                }
-              );
-
-              if (!flaskResponse.ok) {
-                throw new Error(`Flask API error! status: ${flaskResponse.status}`);
-              }
-
-              let presignedUrl = await flaskResponse.text();
-              
-              // Remove quotes if the response is JSON-stringified
-              if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
-                presignedUrl = presignedUrl.slice(1, -1);
-              }
-              
-              window.open(`${platformUrl}/consultation?url=${encodeURIComponent(presignedUrl)}`, '_blank');
-            } catch (error) {
-              console.error('Error getting presigned URL:', error);
-              uiNotificationService.show({
-                title: 'View Report',
-                message: 'Failed to generate report URL.',
-                type: 'error',
-                duration: 3000,
-              });
-            }
-          } else {
-            uiNotificationService.show({
-              title: 'View Report',
-              message: 'No report URL found for this consultation.',
-              type: 'warning',
-              duration: 3000,
-            });
-          }
+          return caseData;
         } else {
-          uiNotificationService.show({
-            title: 'View Report',
-            message: 'No case found for this study.',
-            type: 'warning',
-            duration: 3000,
-          });
+          return null;
         }
       } catch (error) {
         console.error('Error fetching case data:', error);
+        return null;
+      }
+    },
+
+    async viewReport({ displaySetInstanceUID }: { displaySetInstanceUID?: string }) {
+      const caseData = await commandsManager.runCommand('getCases', { displaySetInstanceUID });
+      
+      if (!caseData) {
         uiNotificationService.show({
           title: 'View Report',
-          message: 'Failed to fetch report data.',
-          type: 'error',
+          message: 'No case found for this study.',
+          type: 'warning',
+          duration: 3000,
+        });
+        return;
+      }
+
+      // Detect environment based on window.location.origin
+      const isProduction = window.location.origin === 'https://view.radimal.ai';
+      const platformUrl = isProduction
+        ? 'https://vet.radimal.ai'
+        : 'https://radimal-vet-staging.onrender.com';
+
+      const s3_url = caseData.cases[0].consultations[0].s3_url;
+      if (s3_url) {
+        try {
+          const key = s3_url.split('s3.amazonaws.com/')[1];
+          const flaskResponse = await fetch(
+            `https://radimal-reporter.onrender.com/consultation/pdf?key=${key}`,
+            {
+              method: 'GET',
+            }
+          );
+
+          if (!flaskResponse.ok) {
+            throw new Error(`Flask API error! status: ${flaskResponse.status}`);
+          }
+
+          let presignedUrl = await flaskResponse.text();
+
+          if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
+            presignedUrl = presignedUrl.slice(1, -1);
+          }
+
+          window.open(
+            `${platformUrl}/consultation?url=${encodeURIComponent(presignedUrl)}`,
+            '_blank'
+          );
+        } catch (error) {
+          console.error('Error getting presigned URL:', error);
+          uiNotificationService.show({
+            title: 'View Report',
+            message: 'Failed to generate report URL.',
+            type: 'error',
+            duration: 3000,
+          });
+        }
+      } else {
+        uiNotificationService.show({
+          title: 'View Report',
+          message: 'No report URL found for this consultation.',
+          type: 'warning',
           duration: 3000,
         });
       }

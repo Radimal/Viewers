@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
 import { Thumbnail } from '../Thumbnail';
@@ -11,7 +11,45 @@ const ThumbnailList = ({
   activeDisplaySetInstanceUIDs = [],
   viewPreset,
   onThumbnailContextMenu,
+  servicesManager,
+  onCaseStatusUpdate,
 }: withAppTypes) => {
+  const [caseStatusMap, setCaseStatusMap] = useState<Map<string, boolean>>(new Map());
+  const { commandsManager } = servicesManager?.services || {};
+
+  useEffect(() => {
+    const checkCases = async () => {
+      if (!commandsManager) return;
+
+      const statusMap = new Map<string, boolean>();
+      
+      for (const thumbnail of thumbnails) {
+        try {
+          const caseData = await commandsManager.runCommand('getCases', { 
+            displaySetInstanceUID: thumbnail.displaySetInstanceUID 
+          });
+          statusMap.set(thumbnail.displaySetInstanceUID, !!caseData);
+        } catch (error) {
+          console.error('Error checking cases for thumbnail:', thumbnail.displaySetInstanceUID, error);
+          statusMap.set(thumbnail.displaySetInstanceUID, false);
+        }
+      }
+      
+      setCaseStatusMap(statusMap);
+      
+      if (onCaseStatusUpdate && thumbnails?.length > 0) {
+        const hasAnyCase = Array.from(statusMap.values()).some(hasCase => hasCase);
+        const studyInstanceUid = thumbnails[0]?.StudyInstanceUID;
+        if (studyInstanceUid) {
+          onCaseStatusUpdate(studyInstanceUid, hasAnyCase);
+        }
+      }
+    };
+
+    if (thumbnails?.length > 0) {
+      checkCases();
+    }
+  }, [thumbnails, commandsManager, onCaseStatusUpdate]);
   return (
     <div
       className="min-h-[350px]"
@@ -43,6 +81,7 @@ const ThumbnailList = ({
             isHydratedForDerivedDisplaySet,
           }) => {
             const isActive = activeDisplaySetInstanceUIDs.includes(displaySetInstanceUID);
+            const hasRadimalCase = caseStatusMap.get(displaySetInstanceUID) || false;
             return (
               <Thumbnail
                 key={displaySetInstanceUID}
@@ -68,6 +107,7 @@ const ThumbnailList = ({
                 canReject={canReject}
                 onReject={onReject}
                 onThumbnailContextMenu={onThumbnailContextMenu}
+                hasRadimalCase={hasRadimalCase}
               />
             );
           }

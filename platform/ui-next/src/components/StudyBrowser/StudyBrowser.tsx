@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
 import { StudyItem } from '../StudyItem';
@@ -33,6 +33,11 @@ const StudyBrowser = ({
   viewPresets,
   onThumbnailContextMenu,
 }: withAppTypes) => {
+  const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
+
+  const handleCaseStatusUpdate = (studyInstanceUid: string, hasAnyCase: boolean) => {
+    setStudyCaseStatusMap(prev => new Map(prev.set(studyInstanceUid, hasAnyCase)));
+  };
   const getTabContent = () => {
     const tabData = tabs.find(tab => tab.name === activeTabName);
     const viewPreset = viewPresets
@@ -41,6 +46,7 @@ const StudyBrowser = ({
     return tabData.studies.map(
       ({ studyInstanceUid, date, description, numInstances, modalities, displaySets }) => {
         const isExpanded = expandedStudyInstanceUIDs.includes(studyInstanceUid);
+        const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) || false;
         return (
           <React.Fragment key={studyInstanceUid}>
             <StudyItem
@@ -62,6 +68,9 @@ const StudyBrowser = ({
               data-cy="thumbnail-list"
               viewPreset={viewPreset}
               onThumbnailContextMenu={onThumbnailContextMenu}
+              servicesManager={servicesManager}
+              hasRadimalCase={hasRadimalCase}
+              onCaseStatusUpdate={handleCaseStatusUpdate}
             />
           </React.Fragment>
         );

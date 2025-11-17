@@ -3095,6 +3095,22 @@ export const Icons = {
   save: (props: IconProps) => Icons.SaveWindows(props),
   'open-saved-windows': (props: IconProps) => Icons.OpenSavedWindows(props),
 
+  RadimalIcon: (props: IconProps & { hasCase?: boolean }) => (
+    <img
+      src="/assets/logo.png"
+      alt="Radimal"
+      width="16"
+      height="16"
+      style={{
+        filter: props.hasCase ? 'none' : 'grayscale(100%) brightness(0.7)',
+        opacity: props.hasCase ? 1 : 0.8,
+        transition: 'all 0.2s ease',
+        WebkitFilter: props.hasCase ? 'none' : 'grayscale(100%) brightness(0.7)'
+      }}
+      {...props}
+    />
+  ),
+
   /** Adds an icon to the set of icons */
   addIcon: (name: string, icon) => {
     if (Icons[name]) {

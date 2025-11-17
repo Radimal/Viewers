@@ -2,6 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import classnames from 'classnames';
 import { ThumbnailList } from '../ThumbnailList';
+import { Icons } from '../Icons';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../Accordion';
 
@@ -20,6 +21,9 @@ const StudyItem = ({
   onClickUntrack,
   viewPreset = 'thumbnails',
   onThumbnailContextMenu,
+  servicesManager,
+  hasRadimalCase,
+  onCaseStatusUpdate,
 }: withAppTypes) => {
   return (
     <Accordion
@@ -36,7 +40,10 @@ const StudyItem = ({
           <div className="flex h-[40px] flex-1 flex-row">
             <div className="flex w-full flex-row items-center justify-between">
               <div className="flex flex-col items-start text-[13px]">
-                <div className="text-white">{date}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-white">{date}</div>
+                  <Icons.RadimalIcon hasCase={hasRadimalCase} />
+                </div>
                 <div className="text-muted-foreground h-[18px] max-w-[160px] overflow-hidden truncate whitespace-nowrap">
                   {description}
                 </div>
@@ -62,6 +69,8 @@ const StudyItem = ({
               onClickUntrack={onClickUntrack}
               viewPreset={viewPreset}
               onThumbnailContextMenu={onThumbnailContextMenu}
+              servicesManager={servicesManager}
+              onCaseStatusUpdate={onCaseStatusUpdate}
             />
           )}
         </AccordionContent>

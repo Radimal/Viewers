@@ -40,6 +40,7 @@ const Thumbnail = ({
   thumbnailType = 'thumbnail',
   onClickUntrack = () => {},
   onThumbnailContextMenu,
+  hasRadimalCase = false,
 }: withAppTypes): React.ReactNode => {
   // TODO: We should wrap our thumbnail to create a "DraggableThumbnail", as
   // this will still allow for "drag", even if there is no drop target for the
@@ -81,8 +82,6 @@ const Thumbnail = ({
                 alt={imageAltText}
                 className="h-[114px] w-[128px] rounded"
                 crossOrigin="anonymous"
-                onError={(e) => {
-                  console.error('💔 Thumbnail image failed to render:', displaySetInstanceUID, 'src:', imageSrc);
                 }}
               />
             ) : (
@@ -162,17 +161,19 @@ const Thumbnail = ({
                     <Icons.DicomTagBrowser />
                     Tag Browser
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      onThumbnailContextMenu('viewReport', {
-                        displaySetInstanceUID,
-                      });
-                    }}
-                    className="gap-[6px]"
-                  >
-                    <Icons.Pdf />
-                    View Report
-                  </DropdownMenuItem>
+                  {hasRadimalCase && (
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        onThumbnailContextMenu('viewReport', {
+                          displaySetInstanceUID,
+                        });
+                      }}
+                      className="gap-[6px]"
+                    >
+                      <Icons.Pdf />
+                      View Report
+                    </DropdownMenuItem>
+                  )}
                   {canReject && (
                     <DropdownMenuItem
                       onSelect={() => {
@@ -229,7 +230,9 @@ const Thumbnail = ({
           ></div>
           <div className="flex h-full flex-col">
             <div className="flex items-center gap-[7px]">
-              <div className="text-[13px] font-semibold text-white">{modality}</div>
+              <div className="flex items-center gap-1">
+                <div className="text-[13px] font-semibold text-white">{modality}</div>
+              </div>
 
               <div className="max-w-[160px] overflow-hidden overflow-ellipsis whitespace-nowrap text-[13px] font-normal text-white">
                 {description}
@@ -307,17 +310,19 @@ const Thumbnail = ({
                 <Icons.DicomTagBrowser />
                 Tag Browser
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  onThumbnailContextMenu('viewReport', {
-                    displaySetInstanceUID,
-                  });
-                }}
-                className="gap-[6px]"
-              >
-                <Icons.Pdf />
-                View Report
-              </DropdownMenuItem>
+              {hasRadimalCase && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    onThumbnailContextMenu('viewReport', {
+                      displaySetInstanceUID,
+                    });
+                  }}
+                  className="gap-[6px]"
+                >
+                  <Icons.Pdf />
+                  View Report
+                </DropdownMenuItem>
+              )}
               {canReject && (
                 <DropdownMenuItem
                   onSelect={() => {
@@ -401,6 +406,7 @@ Thumbnail.propTypes = {
   onClickUntrack: PropTypes.func,
   countIcon: PropTypes.string,
   thumbnailType: PropTypes.oneOf(['thumbnail', 'thumbnailTracked', 'thumbnailNoImage']),
+  hasRadimalCase: PropTypes.bool,
 };
 
 export { Thumbnail };
