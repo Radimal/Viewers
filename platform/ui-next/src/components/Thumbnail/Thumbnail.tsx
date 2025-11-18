@@ -18,6 +18,7 @@ import {
  */
 const Thumbnail = ({
   displaySetInstanceUID,
+  studyInstanceUid,
   className,
   imageSrc,
   imageAltText,
@@ -382,6 +383,7 @@ const Thumbnail = ({
 
 Thumbnail.propTypes = {
   displaySetInstanceUID: PropTypes.string.isRequired,
+  studyInstanceUid: PropTypes.string,
   className: PropTypes.string,
   imageSrc: PropTypes.string,
   /**

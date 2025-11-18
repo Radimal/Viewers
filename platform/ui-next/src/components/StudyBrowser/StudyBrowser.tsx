@@ -35,10 +35,80 @@ const StudyBrowser = ({
 }) => {
   const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
 
-  const handleCaseStatusUpdate = (studyInstanceUid: string, hasAnyCase: boolean) => {
-    console.log(`StudyBrowser: Received case status update for ${studyInstanceUid}:`, hasAnyCase);
-    setStudyCaseStatusMap(prev => new Map(prev.set(studyInstanceUid, hasAnyCase)));
+  const checkStudyForCases = async (studyInstanceUid: string) => {
+    try {
+      const isProduction = window.location.origin === 'https://view.radimal.ai';
+      const isLocal = window.location.origin.includes('localhost');
+      
+      const apiEndpoint = isProduction
+        ? 'https://reporter.radimal.ai'
+        : 'https://reporter-staging.onrender.com';
+      
+      const apiUrl = `${apiEndpoint}/case/${studyInstanceUid}`;
+      console.log(`StudyBrowser: Making API call to: ${apiUrl} (isLocal: ${isLocal}, isProduction: ${isProduction})`);
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      console.log(`StudyBrowser: API response status: ${response.status} for ${studyInstanceUid}`);
+      
+      if (!response.ok) {
+        console.log(`StudyBrowser: API call failed for ${studyInstanceUid}, returning false`);
+        return false;
+      }
+      
+      const caseData = await response.json();
+      console.log(`StudyBrowser: API response data for ${studyInstanceUid}:`, caseData);
+      
+      const hasCase = caseData?.cases?.length > 0 && 
+                     caseData.cases[0]?.consultations?.length > 0;
+      
+      console.log(`StudyBrowser: Checked case for study ${studyInstanceUid}: ${hasCase}`);
+      return hasCase;
+    } catch (error) {
+      console.error(`StudyBrowser: Error checking case for ${studyInstanceUid}:`, error);
+      return false;
+    }
   };
+
+  // Check cases when studies load
+  React.useEffect(() => {
+    const checkAllStudies = async () => {
+      const tabData = tabs.find(tab => tab.name === activeTabName);
+      if (!tabData?.studies) return;
+      
+      for (const study of tabData.studies) {
+        const hasCase = await checkStudyForCases(study.studyInstanceUid);
+        setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
+      }
+    };
+    
+    checkAllStudies();
+  }, [tabs, activeTabName]);
+
+  // Debug function for console testing
+  const debugSetCaseStatus = (studyInstanceUid: string, hasCase: boolean) => {
+    console.log(`DEBUG: Manually setting case status for ${studyInstanceUid} to ${hasCase}`);
+    setStudyCaseStatusMap(prev => new Map(prev.set(studyInstanceUid, hasCase)));
+  };
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.debugSetCaseStatus = debugSetCaseStatus;
+      window.debugGetCaseStatusMap = () => {
+        console.log('Current case status map:', studyCaseStatusMap);
+        return studyCaseStatusMap;
+      };
+      window.debugGetStudyIds = () => {
+        const tabData = tabs.find(tab => tab.name === activeTabName);
+        const studyIds = tabData?.studies?.map(s => s.studyInstanceUid) || [];
+        console.log('Available study IDs:', studyIds);
+        return studyIds;
+      };
+    }
+  }, [studyCaseStatusMap, tabs, activeTabName]);
   const getTabContent = () => {
     const tabData = tabs.find(tab => tab.name === activeTabName);
     const viewPreset = viewPresets
@@ -73,7 +143,6 @@ const StudyBrowser = ({
               onThumbnailContextMenu={onThumbnailContextMenu}
               servicesManager={servicesManager}
               hasRadimalCase={hasRadimalCase}
-              onCaseStatusUpdate={handleCaseStatusUpdate}
             />
           </React.Fragment>
         );

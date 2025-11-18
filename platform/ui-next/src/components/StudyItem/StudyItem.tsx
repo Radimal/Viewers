@@ -24,7 +24,6 @@ const StudyItem = ({
   onThumbnailContextMenu,
   servicesManager,
   hasRadimalCase,
-  onCaseStatusUpdate,
 }) => {
   return (
     <Accordion
@@ -72,7 +71,7 @@ const StudyItem = ({
               viewPreset={viewPreset}
               onThumbnailContextMenu={onThumbnailContextMenu}
               servicesManager={servicesManager}
-              onCaseStatusUpdate={onCaseStatusUpdate}
+              hasRadimalCase={hasRadimalCase}
             />
           )}
         </AccordionContent>
@@ -98,7 +97,6 @@ StudyItem.propTypes = {
   onClickUntrack: PropTypes.func,
   viewPreset: PropTypes.string,
   hasRadimalCase: PropTypes.bool,
-  onCaseStatusUpdate: PropTypes.func,
   servicesManager: PropTypes.object,
 };
 

@@ -13,44 +13,8 @@ const ThumbnailList = ({
   viewPreset,
   onThumbnailContextMenu,
   servicesManager,
-  onCaseStatusUpdate,
+  hasRadimalCase = false,
 }) => {
-  const [caseStatusMap, setCaseStatusMap] = useState<Map<string, boolean>>(new Map());
-  const { commandsManager } = servicesManager?.services || {};
-
-  useEffect(() => {
-    const checkCases = async () => {
-      if (!commandsManager) return;
-
-      const statusMap = new Map<string, boolean>();
-      
-      for (const thumbnail of thumbnails) {
-        try {
-          const caseData = await commandsManager.runCommand('getCases', { 
-            displaySetInstanceUID: thumbnail.displaySetInstanceUID 
-          });
-          const hasCase = !!caseData;
-          console.log(`ThumbnailList: ${thumbnail.displaySetInstanceUID} hasCase:`, hasCase, 'caseData:', caseData);
-          statusMap.set(thumbnail.displaySetInstanceUID, hasCase);
-        } catch (error) {
-          console.error('Error checking cases for thumbnail:', thumbnail.displaySetInstanceUID, error);
-          statusMap.set(thumbnail.displaySetInstanceUID, false);
-        }
-      }
-      
-      setCaseStatusMap(statusMap);
-      
-      if (onCaseStatusUpdate && studyInstanceUid && thumbnails?.length > 0) {
-        const hasAnyCase = Array.from(statusMap.values()).some(hasCase => hasCase);
-        console.log(`ThumbnailList: Study ${studyInstanceUid} hasAnyCase:`, hasAnyCase, 'statusMap:', statusMap);
-        onCaseStatusUpdate(studyInstanceUid, hasAnyCase);
-      }
-    };
-
-    if (thumbnails?.length > 0) {
-      checkCases();
-    }
-  }, [thumbnails, commandsManager, onCaseStatusUpdate, studyInstanceUid]);
   return (
     <div
       className="min-h-[350px]"
@@ -82,11 +46,11 @@ const ThumbnailList = ({
             isHydratedForDerivedDisplaySet,
           }) => {
             const isActive = activeDisplaySetInstanceUIDs.includes(displaySetInstanceUID);
-            const hasRadimalCase = caseStatusMap.get(displaySetInstanceUID) || false;
             return (
               <Thumbnail
                 key={displaySetInstanceUID}
                 displaySetInstanceUID={displaySetInstanceUID}
+                studyInstanceUid={studyInstanceUid}
                 dragData={dragData}
                 description={description}
                 seriesNumber={seriesNumber}
@@ -151,6 +115,7 @@ ThumbnailList.propTypes = {
   viewPreset: PropTypes.string,
   onCaseStatusUpdate: PropTypes.func,
   servicesManager: PropTypes.object,
+  hasRadimalCase: PropTypes.bool,
 };
 
 export { ThumbnailList };
