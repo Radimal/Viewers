@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { Thumbnail } from '../Thumbnail';
 
 const ThumbnailList = ({
+  studyInstanceUid,
   thumbnails,
   onThumbnailClick,
   onThumbnailDoubleClick,
@@ -13,7 +14,7 @@ const ThumbnailList = ({
   onThumbnailContextMenu,
   servicesManager,
   onCaseStatusUpdate,
-}: withAppTypes) => {
+}) => {
   const [caseStatusMap, setCaseStatusMap] = useState<Map<string, boolean>>(new Map());
   const { commandsManager } = servicesManager?.services || {};
 
@@ -28,7 +29,9 @@ const ThumbnailList = ({
           const caseData = await commandsManager.runCommand('getCases', { 
             displaySetInstanceUID: thumbnail.displaySetInstanceUID 
           });
-          statusMap.set(thumbnail.displaySetInstanceUID, !!caseData);
+          const hasCase = !!caseData;
+          console.log(`ThumbnailList: ${thumbnail.displaySetInstanceUID} hasCase:`, hasCase, 'caseData:', caseData);
+          statusMap.set(thumbnail.displaySetInstanceUID, hasCase);
         } catch (error) {
           console.error('Error checking cases for thumbnail:', thumbnail.displaySetInstanceUID, error);
           statusMap.set(thumbnail.displaySetInstanceUID, false);
@@ -37,19 +40,17 @@ const ThumbnailList = ({
       
       setCaseStatusMap(statusMap);
       
-      if (onCaseStatusUpdate && thumbnails?.length > 0) {
+      if (onCaseStatusUpdate && studyInstanceUid && thumbnails?.length > 0) {
         const hasAnyCase = Array.from(statusMap.values()).some(hasCase => hasCase);
-        const studyInstanceUid = thumbnails[0]?.StudyInstanceUID;
-        if (studyInstanceUid) {
-          onCaseStatusUpdate(studyInstanceUid, hasAnyCase);
-        }
+        console.log(`ThumbnailList: Study ${studyInstanceUid} hasAnyCase:`, hasAnyCase, 'statusMap:', statusMap);
+        onCaseStatusUpdate(studyInstanceUid, hasAnyCase);
       }
     };
 
     if (thumbnails?.length > 0) {
       checkCases();
     }
-  }, [thumbnails, commandsManager, onCaseStatusUpdate]);
+  }, [thumbnails, commandsManager, onCaseStatusUpdate, studyInstanceUid]);
   return (
     <div
       className="min-h-[350px]"
@@ -118,6 +119,7 @@ const ThumbnailList = ({
 };
 
 ThumbnailList.propTypes = {
+  studyInstanceUid: PropTypes.string,
   thumbnails: PropTypes.arrayOf(
     PropTypes.shape({
       displaySetInstanceUID: PropTypes.string.isRequired,
@@ -147,6 +149,8 @@ ThumbnailList.propTypes = {
   onThumbnailDoubleClick: PropTypes.func.isRequired,
   onClickUntrack: PropTypes.func.isRequired,
   viewPreset: PropTypes.string,
+  onCaseStatusUpdate: PropTypes.func,
+  servicesManager: PropTypes.object,
 };
 
 export { ThumbnailList };

@@ -36,6 +36,7 @@ const StudyBrowser = ({
   const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
 
   const handleCaseStatusUpdate = (studyInstanceUid: string, hasAnyCase: boolean) => {
+    console.log(`StudyBrowser: Received case status update for ${studyInstanceUid}:`, hasAnyCase);
     setStudyCaseStatusMap(prev => new Map(prev.set(studyInstanceUid, hasAnyCase)));
   };
   const getTabContent = () => {
@@ -47,6 +48,7 @@ const StudyBrowser = ({
       ({ studyInstanceUid, date, description, numInstances, modalities, displaySets }) => {
         const isExpanded = expandedStudyInstanceUIDs.includes(studyInstanceUid);
         const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) || false;
+        console.log(`StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`, hasRadimalCase, 'statusMap:', studyCaseStatusMap);
         return (
           <React.Fragment key={studyInstanceUid}>
             <StudyItem
