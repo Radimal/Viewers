@@ -37,15 +37,21 @@ const StudyBrowser = ({
 
   const checkStudyForCases = async (studyInstanceUid: string) => {
     try {
-      const isProduction = window.location.origin === 'https://view.radimal.ai';
-      const isLocal = window.location.origin.includes('localhost');
+      const origin = window.location.origin;
+      let apiEndpoint;
       
-      const apiEndpoint = isProduction
-        ? 'https://reporter.radimal.ai'
-        : 'https://reporter-staging.onrender.com';
+      if (origin === 'http://localhost:3000') {
+        apiEndpoint = 'http://localhost:5007';
+      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
+        apiEndpoint = 'https://reporter-staging.onrender.com';
+      } else if (origin === 'https://view.radimal.ai') {
+        apiEndpoint = 'https://radimal-reporter.onrender.com';
+      } else {
+        apiEndpoint = 'https://radimal-reporter.onrender.com';
+      }
       
       const apiUrl = `${apiEndpoint}/case/${studyInstanceUid}`;
-      console.log(`StudyBrowser: Making API call to: ${apiUrl} (isLocal: ${isLocal}, isProduction: ${isProduction})`);
+      console.log(`StudyBrowser: Making API call to: ${apiUrl} (origin: ${origin}, endpoint: ${apiEndpoint})`);
       
       const response = await fetch(apiUrl, {
         method: 'GET',
