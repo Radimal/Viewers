@@ -654,14 +654,16 @@ const commandsModule = ({
             console.log('viewReport: After removing quotes:', JSON.stringify(presignedUrl));
           }
           presignedUrl = presignedUrl.trim(); // Trim again after removing quotes
-
-          window.open(
-            `${platformUrl}/consultation?url=${presignedUrl}`,
-            '_blank'
-          );
           console.log('viewReport: Final cleaned presigned URL:', presignedUrl);
-          const consultationUrl = `${platformUrl}/consultation/?url=${presignedUrl}`;
-          console.log('viewReport: Final consultation URL (unencoded):', consultationUrl);
+          
+          // Encode the presigned URL to prevent browser from breaking it into separate parameters
+          const encodedPresignedUrl = encodeURIComponent(presignedUrl);
+          console.log('viewReport: Encoded presigned URL:', encodedPresignedUrl);
+          
+          const consultationUrl = `${platformUrl}/consultation/?url=${encodedPresignedUrl}`;
+          console.log('viewReport: Final consultation URL (encoded):', consultationUrl);
+          
+          window.open(consultationUrl, '_blank');
         } catch (error) {
           console.error('Error getting presigned URL:', error);
           uiNotificationService.show({
