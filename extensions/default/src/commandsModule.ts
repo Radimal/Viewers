@@ -646,9 +646,11 @@ const commandsModule = ({
 
           let presignedUrl = await flaskResponse.text();
 
+          presignedUrl = presignedUrl.trim();
           if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
             presignedUrl = presignedUrl.slice(1, -1);
           }
+          presignedUrl = presignedUrl.trim(); // Trim again after removing quotes
 
           window.open(
             `${platformUrl}/consultation?url=${encodeURIComponent(presignedUrl)}`,
