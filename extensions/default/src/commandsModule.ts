@@ -513,7 +513,6 @@ const commandsModule = ({
         const caseData = await response.json();
         console.log(`getCases: Parsed response data:`, caseData);
 
-        if (
         // Check data structure
         const hasValidStructure =
           caseData &&
