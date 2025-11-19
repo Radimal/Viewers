@@ -645,10 +645,13 @@ const commandsModule = ({
           }
 
           let presignedUrl = await flaskResponse.text();
+          console.log('viewReport: Raw Flask response (actual):', presignedUrl);
 
           presignedUrl = presignedUrl.trim();
+          console.log('viewReport: After trim:', JSON.stringify(presignedUrl));
           if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
             presignedUrl = presignedUrl.slice(1, -1);
+            console.log('viewReport: After removing quotes:', JSON.stringify(presignedUrl));
           }
           presignedUrl = presignedUrl.trim(); // Trim again after removing quotes
 
@@ -656,6 +659,9 @@ const commandsModule = ({
             `${platformUrl}/consultation?url=${presignedUrl}`,
             '_blank'
           );
+          console.log('viewReport: Final cleaned presigned URL:', presignedUrl);
+          const consultationUrl = `${platformUrl}/consultation/?url=${presignedUrl}`;
+          console.log('viewReport: Final consultation URL (unencoded):', consultationUrl);
         } catch (error) {
           console.error('Error getting presigned URL:', error);
           uiNotificationService.show({
