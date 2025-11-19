@@ -550,9 +550,70 @@ const commandsModule = ({
     },
 
     async viewReport({ displaySetInstanceUID }: { displaySetInstanceUID?: string }) {
-      const caseData = await commandsManager.runCommand('getCases', { displaySetInstanceUID });
+      const { activeViewportId, viewports } = viewportGridService.getState();
+      const activeViewportSpecificData = viewports.get(activeViewportId);
+      const { displaySetInstanceUIDs } = activeViewportSpecificData;
+
+      const displaySets = displaySetService.activeDisplaySets;
+      const defaultDisplaySetInstanceUID = displaySetInstanceUID || displaySetInstanceUIDs[0];
+
+      const displaySet = displaySets.find(
+        ds => ds.displaySetInstanceUID === defaultDisplaySetInstanceUID
+      );
+      if (!displaySet) {
+        console.error('Display set not found');
+        uiNotificationService.show({
+          title: 'View Report',
+          message: 'Display set not found.',
+          type: 'error',
+          duration: 3000,
+        });
+        return;
+      }
+
+      const studyInstanceUID = displaySet.StudyInstanceUID;
+
+      const origin = window.location.origin;
+      let apiEndpoint;
       
-      if (!caseData) {
+      if (origin === 'http://localhost:3000') {
+        apiEndpoint = 'http://localhost:5007';
+      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
+        apiEndpoint = 'https://reporter-staging.onrender.com';
+      } else if (origin === 'https://view.radimal.ai') {
+        apiEndpoint = 'https://radimal-reporter.onrender.com';
+      } else {
+        apiEndpoint = 'https://radimal-reporter.onrender.com';
+      }
+
+      const apiUrl = `${apiEndpoint}/case/${studyInstanceUID}`;
+      console.log(`viewReport: Making API call to: ${apiUrl}`);
+
+      let caseData;
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        caseData = await response.json();
+        console.log(`viewReport: API response data:`, caseData);
+
+        if (!caseData?.cases?.length || !caseData.cases[0]?.consultations?.length) {
+          uiNotificationService.show({
+            title: 'View Report',
+            message: 'No case found for this study.',
+            type: 'warning',
+            duration: 3000,
+          });
+          return;
+        }
+      } catch (error) {
+        console.error(`viewReport: Error fetching case data:`, error);
         uiNotificationService.show({
           title: 'View Report',
           message: 'No case found for this study.',
