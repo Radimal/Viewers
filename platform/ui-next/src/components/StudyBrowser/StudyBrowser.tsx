@@ -85,6 +85,14 @@ const StudyBrowser = ({
       const tabData = tabs.find(tab => tab.name === activeTabName);
       if (!tabData?.studies) return;
       
+      const newMap = new Map();
+      tabData.studies.forEach(study => {
+        newMap.set(study.studyInstanceUid, false);
+      });
+      setStudyCaseStatusMap(newMap);
+      console.log('StudyBrowser: Initialized all studies to false:', newMap);
+      
+      // Then check each study and update the map
       for (const study of tabData.studies) {
         const hasCase = await checkStudyForCases(study.studyInstanceUid);
         setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
@@ -123,7 +131,7 @@ const StudyBrowser = ({
     return tabData.studies.map(
       ({ studyInstanceUid, date, description, numInstances, modalities, displaySets }) => {
         const isExpanded = expandedStudyInstanceUIDs.includes(studyInstanceUid);
-        const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) || false;
+        const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) ?? false;
         console.log(`StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`, hasRadimalCase, 'statusMap:', studyCaseStatusMap);
         return (
           <React.Fragment key={studyInstanceUid}>

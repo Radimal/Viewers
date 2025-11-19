@@ -477,34 +477,75 @@ const commandsModule = ({
         ? 'https://reporter.radimal.ai'
         : 'https://reporter-staging.onrender.com';
 
+      const apiUrl = `${apiEndpoint}/case/${studyInstanceUID}`;
+
+      console.log(`getCases: Environment detection:`, {
+        origin: window.location.origin,
+        isProduction,
+        apiEndpoint,
+        studyInstanceUID,
+        fullApiUrl: apiUrl,
+      });
+
       try {
-        const response = await fetch(`${apiEndpoint}/case/${studyInstanceUID}`, {
+        console.log(`getCases: Making API request to ${apiUrl}`);
+
+        const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },
         });
 
+        console.log(`getCases: Response received:`, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          ok: response.ok,
+        });
+
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error(`getCases: HTTP error! status: ${response.status}, response: ${errorText}`);
+          throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`);
         }
 
         const caseData = await response.json();
-        console.log(caseData);
+        console.log(`getCases: Parsed response data:`, caseData);
 
         if (
+        // Check data structure
+        const hasValidStructure =
           caseData &&
           caseData.cases &&
           caseData.cases.length > 0 &&
           caseData.cases[0].consultations &&
-          caseData.cases[0].consultations.length > 0
-        ) {
+          caseData.cases[0].consultations.length > 0;
+
+        console.log(`getCases: Data structure validation:`, {
+          hasCaseData: !!caseData,
+          hasCases: !!(caseData && caseData.cases),
+          casesLength: caseData?.cases?.length || 0,
+          hasConsultations: !!caseData?.cases?.[0]?.consultations,
+          consultationsLength: caseData?.cases?.[0]?.consultations?.length || 0,
+          isValid: hasValidStructure,
+        });
+
+        if (hasValidStructure) {
+          console.log(`getCases: Returning valid case data for study ${studyInstanceUID}`);
           return caseData;
         } else {
+          console.log(
+            `getCases: No valid case/consultation data found for study ${studyInstanceUID}`
+          );
           return null;
         }
       } catch (error) {
-        console.error('Error fetching case data:', error);
+        console.error(`getCases: Error fetching case data for study ${studyInstanceUID}:`, {
+          error: error.message,
+          stack: error.stack,
+          apiUrl,
+        });
         return null;
       }
     },
