@@ -653,7 +653,7 @@ const commandsModule = ({
           presignedUrl = presignedUrl.trim(); // Trim again after removing quotes
 
           window.open(
-            `${platformUrl}/consultation?url=${encodeURIComponent(presignedUrl)}`,
+            `${platformUrl}/consultation?url=${presignedUrl}`,
             '_blank'
           );
         } catch (error) {
