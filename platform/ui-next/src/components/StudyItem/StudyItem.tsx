@@ -42,7 +42,7 @@ const StudyItem = ({
               <div className="flex flex-col items-start text-[13px]">
                 <div className="flex items-center gap-2">
                   <div className="text-white">{date}</div>
-                  <Icons.RadimalIcon hasCase={hasRadimalCase} />
+                  <Icons.Pdf className="h-4 w-4 text-primary-main" hasCase={hasRadimalCase} />
                 </div>
                 <div className="text-muted-foreground h-[18px] max-w-[160px] overflow-hidden truncate whitespace-nowrap">
                   {description}

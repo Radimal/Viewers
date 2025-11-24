@@ -587,7 +587,6 @@ const commandsModule = ({
       }
 
       const apiUrl = `${apiEndpoint}/case/${studyInstanceUID}`;
-      console.log(`viewReport: Making API call to: ${apiUrl}`);
 
       let caseData;
       try {
@@ -601,7 +600,6 @@ const commandsModule = ({
         }
 
         caseData = await response.json();
-        console.log(`viewReport: API response data:`, caseData);
 
         if (!caseData?.cases?.length || !caseData.cases[0]?.consultations?.length) {
           uiNotificationService.show({
@@ -613,7 +611,7 @@ const commandsModule = ({
           return;
         }
       } catch (error) {
-        console.error(`viewReport: Error fetching case data:`, error);
+        console.error('Error fetching case data:', error);
         uiNotificationService.show({
           title: 'View Report',
           message: 'No case found for this study.',
@@ -624,10 +622,8 @@ const commandsModule = ({
       }
 
       const platformUrl = caseData.platform_url;
-      console.log('viewReport: Using platform URL:', platformUrl);
 
       const s3_url = caseData.cases[0].consultations[0].s3_url;
-      console.log('viewReport: S3 URL from case data:', s3_url);
       if (s3_url) {
         try {
           const key = s3_url.split('s3.amazonaws.com/')[1];
@@ -644,7 +640,6 @@ const commandsModule = ({
             flaskApiEndpoint = 'https://radimal-reporter.onrender.com';
           }
           
-          console.log('viewReport: Using Flask API endpoint:', flaskApiEndpoint);
           
           const flaskResponse = await fetch(
             `${flaskApiEndpoint}/consultation/pdf?key=${key}`,
@@ -658,24 +653,17 @@ const commandsModule = ({
           }
 
           let presignedUrl = await flaskResponse.text();
-          console.log('viewReport: Raw Flask response text:', JSON.stringify(presignedUrl));
-          console.log('viewReport: Raw Flask response (actual):', presignedUrl);
 
           presignedUrl = presignedUrl.trim();
-          console.log('viewReport: After trim:', JSON.stringify(presignedUrl));
           if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
             presignedUrl = presignedUrl.slice(1, -1);
-            console.log('viewReport: After removing quotes:', JSON.stringify(presignedUrl));
           }
-          presignedUrl = presignedUrl.trim(); // Trim again after removing quotes
-          console.log('viewReport: Final cleaned presigned URL:', presignedUrl);
+          presignedUrl = presignedUrl.trim();
           
           // Encode the presigned URL to prevent browser from breaking it into separate parameters
           const encodedPresignedUrl = encodeURIComponent(presignedUrl);
-          console.log('viewReport: Encoded presigned URL:', encodedPresignedUrl);
           
           const consultationUrl = `${platformUrl}/consultation/?url=${encodedPresignedUrl}`;
-          console.log('viewReport: Final consultation URL (encoded):', consultationUrl);
           
           window.open(consultationUrl, '_blank');
         } catch (error) {

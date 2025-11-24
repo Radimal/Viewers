@@ -6,22 +6,30 @@ type IconProps = React.HTMLAttributes<SVGElement>;
 export const Icons = {
   // Usage example: <Icons.ArrowLeft />
   Code: Code,
-  Pdf: (props: IconProps) => (
-    <svg
-      width="24px"
-      height="24px"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-    >
-      <path
-        d="M6 2C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2H6Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+  Pdf: (props: IconProps & { hasCase?: boolean }) => {
+    const { hasCase, ...svgProps } = props;
+    return (
+      <svg
+        width="24px"
+        height="24px"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{
+          filter: hasCase ? 'none' : 'grayscale(100%) brightness(0.7)',
+          opacity: hasCase ? 1 : 0.8,
+          transition: 'all 0.2s ease',
+          WebkitFilter: hasCase ? 'none' : 'grayscale(100%) brightness(0.7)'
+        }}
+        {...svgProps}
+      >
+        <path
+          d="M6 2C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2H6Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       <path
         d="M14 2V8H20"
         stroke="currentColor"
@@ -43,8 +51,9 @@ export const Icons = {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
-  ),
+      </svg>
+    );
+  },
   Add: (props: IconProps) => (
     <svg
       width="24px"
