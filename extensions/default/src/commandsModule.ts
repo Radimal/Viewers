@@ -623,18 +623,31 @@ const commandsModule = ({
         return;
       }
 
-      // Detect environment based on window.location.origin
-      const isProduction = window.location.origin === 'https://view.radimal.ai';
-      const platformUrl = isProduction
-        ? 'https://vet.radimal.ai'
-        : 'https://radimal-vet-staging.onrender.com';
+      const platformUrl = caseData.platform_url;
+      console.log('viewReport: Using platform URL:', platformUrl);
 
       const s3_url = caseData.cases[0].consultations[0].s3_url;
+      console.log('viewReport: S3 URL from case data:', s3_url);
       if (s3_url) {
         try {
           const key = s3_url.split('s3.amazonaws.com/')[1];
+          const origin = window.location.origin;
+          let flaskApiEndpoint;
+          
+          if (origin === 'http://localhost:3000') {
+            flaskApiEndpoint = 'http://localhost:5007';
+          } else if (origin === 'https://viewer.stage-1.radimal.ai') {
+            flaskApiEndpoint = 'https://reporter-staging.onrender.com';
+          } else if (origin === 'https://view.radimal.ai') {
+            flaskApiEndpoint = 'https://radimal-reporter.onrender.com';
+          } else {
+            flaskApiEndpoint = 'https://radimal-reporter.onrender.com';
+          }
+          
+          console.log('viewReport: Using Flask API endpoint:', flaskApiEndpoint);
+          
           const flaskResponse = await fetch(
-            `https://radimal-reporter.onrender.com/consultation/pdf?key=${key}`,
+            `${flaskApiEndpoint}/consultation/pdf?key=${key}`,
             {
               method: 'GET',
             }
@@ -645,6 +658,7 @@ const commandsModule = ({
           }
 
           let presignedUrl = await flaskResponse.text();
+          console.log('viewReport: Raw Flask response text:', JSON.stringify(presignedUrl));
           console.log('viewReport: Raw Flask response (actual):', presignedUrl);
 
           presignedUrl = presignedUrl.trim();
