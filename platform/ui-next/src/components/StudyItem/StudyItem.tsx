@@ -42,7 +42,53 @@ const StudyItem = ({
               <div className="flex flex-col items-start text-[13px]">
                 <div className="flex items-center gap-2">
                   <div className="text-white">{date}</div>
-                  <Icons.Pdf className="h-4 w-4 text-primary-main" hasCase={hasRadimalCase} />
+                  {hasRadimalCase && (
+                    <Icons.Pdf
+                      className="text-primary-main relative z-10 h-4 w-4 cursor-pointer transition-opacity hover:opacity-80"
+                      hasCase={hasRadimalCase}
+                      onClick={async e => {
+                        e.stopPropagation();
+
+                        const origin = window.location.origin;
+                        let apiEndpoint;
+
+                        if (origin === 'http://localhost:3000') {
+                          apiEndpoint = 'http://localhost:5007';
+                        } else if (origin === 'https://viewer.stage-1.radimal.ai') {
+                          apiEndpoint = 'https://reporter-staging.onrender.com';
+                        } else if (origin === 'https://view.radimal.ai') {
+                          apiEndpoint = 'https://radial-reporter.onrender.com';
+                        } else {
+                          apiEndpoint = 'https://radimal-reporter.onrender.com';
+                        }
+
+                        try {
+                          const response = await fetch(`${apiEndpoint}/case/${studyInstanceUid}`);
+                          const caseData = await response.json();
+                          const platformUrl = caseData.platform_url;
+                          const s3_url = caseData.cases[0].consultations[0].s3_url;
+
+                          if (s3_url) {
+                            const key = s3_url.split('s3.amazonaws.com/')[1];
+                            const flaskResponse = await fetch(
+                              `${apiEndpoint}/consultation/pdf?key=${key}`
+                            );
+                            let presignedUrl = await flaskResponse.text();
+                            presignedUrl = presignedUrl.trim();
+                            if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
+                              presignedUrl = presignedUrl.slice(1, -1);
+                            }
+                            presignedUrl = presignedUrl.trim();
+
+                            const consultationUrl = `${platformUrl}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
+                            window.open(consultationUrl, '_blank');
+                          }
+                        } catch (error) {
+                          console.error('Error opening report:', error);
+                        }
+                      }}
+                    />
+                  )}
                 </div>
                 <div className="text-muted-foreground h-[18px] max-w-[160px] overflow-hidden truncate whitespace-nowrap">
                   {description}
