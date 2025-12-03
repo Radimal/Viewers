@@ -474,7 +474,7 @@ const commandsModule = ({
       const isProduction = window.location.origin === 'https://view.radimal.ai';
 
       const apiEndpoint = isProduction
-        ? 'https://reporter.radimal.ai'
+        ? 'https://http://radimal-reporter.onrender.com'
         : 'https://reporter-staging.onrender.com';
 
       const apiUrl = `${apiEndpoint}/case/${studyInstanceUID}`;

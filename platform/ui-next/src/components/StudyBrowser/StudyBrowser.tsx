@@ -69,7 +69,8 @@ const StudyBrowser = ({
       console.log(`StudyBrowser: API response data for ${studyInstanceUid}:`, caseData);
       
       const hasCase = caseData?.cases?.length > 0 && 
-                     caseData.cases[0]?.consultations?.length > 0;
+                     caseData.cases[0]?.consultations?.length > 0 &&
+                     caseData.cases[0]?.consultations[0]?.s3_url;
       
       console.log(`StudyBrowser: Checked case for study ${studyInstanceUid}: ${hasCase}`);
       return hasCase;
