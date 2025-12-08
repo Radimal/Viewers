@@ -169,6 +169,7 @@ export default function PanelStudyBrowserTracking({
           numInstances: qidoStudy.NumInstances,
           birthDate: qidoStudy.BirthDate,
           institutionName: qidoStudy.InstitutionName,
+          patientName: qidoStudy.PatientName, // Add PatientName for differentiation
         };
       });
       setStudyDisplayList(prevArray => {
