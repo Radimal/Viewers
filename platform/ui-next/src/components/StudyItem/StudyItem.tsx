@@ -24,6 +24,7 @@ const StudyItem = ({
   onThumbnailContextMenu,
   servicesManager,
   hasRadimalCase,
+  isRadimalCaseChecked,
 }) => {
   return (
     <Accordion
@@ -42,53 +43,66 @@ const StudyItem = ({
               <div className="flex flex-col items-start text-[13px]">
                 <div className="flex items-center gap-2">
                   <div className="text-white">{date}</div>
-                  {hasRadimalCase && (
-                    <Icons.Pdf
-                      className="text-primary-main relative z-10 h-4 w-4 cursor-pointer transition-opacity hover:opacity-80"
-                      hasCase={hasRadimalCase}
-                      onClick={async e => {
-                        e.stopPropagation();
+                  <div
+                    className="relative z-20"
+                    style={{ pointerEvents: hasRadimalCase ? 'auto' : 'none' }}
+                    onClick={async e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      console.log('🔥 RadimalPdf icon clicked!', { studyInstanceUid, hasRadimalCase, isRadimalCaseChecked, timestamp: new Date().toISOString() });
 
-                        const origin = window.location.origin;
-                        let apiEndpoint;
+                      if (!hasRadimalCase) {
+                        console.log('No Radimal case available for this study');
+                        return;
+                      }
 
-                        if (origin === 'http://localhost:3000') {
-                          apiEndpoint = 'http://localhost:5007';
-                        } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-                          apiEndpoint = 'https://reporter-staging.onrender.com';
-                        } else if (origin === 'https://view.radimal.ai') {
-                          apiEndpoint = 'https://radial-reporter.onrender.com';
-                        } else {
-                          apiEndpoint = 'https://radimal-reporter.onrender.com';
-                        }
+                      const origin = window.location.origin;
+                      let apiEndpoint;
 
-                        try {
-                          const response = await fetch(`${apiEndpoint}/case/${studyInstanceUid}`);
-                          const caseData = await response.json();
-                          const platformUrl = caseData.platform_url;
-                          const s3_url = caseData.cases[0].consultations[0].s3_url;
+                      if (origin === 'http://localhost:3000') {
+                        apiEndpoint = 'http://localhost:5007';
+                      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
+                        apiEndpoint = 'https://reporter-staging.onrender.com';
+                      } else if (origin === 'https://view.radimal.ai') {
+                        apiEndpoint = 'https://radimal-reporter.onrender.com';
+                      } else {
+                        apiEndpoint = 'https://radimal-reporter.onrender.com';
+                      }
 
-                          if (s3_url) {
-                            const key = s3_url.split('s3.amazonaws.com/')[1];
-                            const flaskResponse = await fetch(
-                              `${apiEndpoint}/consultation/pdf?key=${key}`
-                            );
-                            let presignedUrl = await flaskResponse.text();
-                            presignedUrl = presignedUrl.trim();
-                            if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
-                              presignedUrl = presignedUrl.slice(1, -1);
-                            }
-                            presignedUrl = presignedUrl.trim();
+                      try {
+                        const response = await fetch(`${apiEndpoint}/case/${studyInstanceUid}`);
+                        const caseData = await response.json();
+                        const platformUrl = caseData.platform_url;
+                        const s3_url = caseData.cases[0].consultations[0].s3_url;
 
-                            const consultationUrl = `${platformUrl}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
-                            window.open(consultationUrl, '_blank');
+                        if (s3_url) {
+                          const key = s3_url.split('s3.amazonaws.com/')[1];
+                          const flaskResponse = await fetch(
+                            `${apiEndpoint}/consultation/pdf?key=${key}`
+                          );
+                          let presignedUrl = await flaskResponse.text();
+                          presignedUrl = presignedUrl.trim();
+                          if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
+                            presignedUrl = presignedUrl.slice(1, -1);
                           }
-                        } catch (error) {
-                          console.error('Error opening report:', error);
+                          presignedUrl = presignedUrl.trim();
+
+                          const consultationUrl = `${platformUrl}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
+                          window.open(consultationUrl, '_blank');
                         }
-                      }}
+                      } catch (error) {
+                        console.error('Error opening report:', error);
+                      }
+                    }}
+                  >
+                    <Icons.RadimalPdf
+                      className={`h-4 w-4 transition-opacity ${
+                        hasRadimalCase ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                      }`}
+                      hasCase={hasRadimalCase}
+                      isChecked={isRadimalCaseChecked}
                     />
-                  )}
+                  </div>
                 </div>
                 <div className="text-muted-foreground h-[18px] max-w-[160px] overflow-hidden truncate whitespace-nowrap">
                   {description}
@@ -118,6 +132,7 @@ const StudyItem = ({
               onThumbnailContextMenu={onThumbnailContextMenu}
               servicesManager={servicesManager}
               hasRadimalCase={hasRadimalCase}
+              isRadimalCaseChecked={isRadimalCaseChecked}
             />
           )}
         </AccordionContent>
@@ -143,6 +158,7 @@ StudyItem.propTypes = {
   onClickUntrack: PropTypes.func,
   viewPreset: PropTypes.string,
   hasRadimalCase: PropTypes.bool,
+  isRadimalCaseChecked: PropTypes.bool,
   servicesManager: PropTypes.object,
 };
 

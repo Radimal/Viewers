@@ -34,6 +34,7 @@ const StudyBrowser = ({
   onThumbnailContextMenu,
 }) => {
   const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
+  const [checkedStudies, setCheckedStudies] = useState<Set<string>>(new Set());
 
   const checkStudyForCases = async (studyInstanceUid: string) => {
     try {
@@ -86,17 +87,27 @@ const StudyBrowser = ({
       const tabData = tabs.find(tab => tab.name === activeTabName);
       if (!tabData?.studies) return;
       
-      const newMap = new Map();
-      tabData.studies.forEach(study => {
-        newMap.set(study.studyInstanceUid, false);
-      });
-      setStudyCaseStatusMap(newMap);
-      console.log('StudyBrowser: Initialized all studies to false:', newMap);
+      // Filter out studies we've already checked
+      const studiesToCheck = tabData.studies.filter(study => 
+        !checkedStudies.has(study.studyInstanceUid)
+      );
+      
+      if (studiesToCheck.length === 0) {
+        return;
+      }
+      
       
       // Then check each study and update the map
-      for (const study of tabData.studies) {
-        const hasCase = await checkStudyForCases(study.studyInstanceUid);
-        setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
+      for (const study of studiesToCheck) {
+        try {
+          const hasCase = await checkStudyForCases(study.studyInstanceUid);
+          
+          setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
+          
+          setCheckedStudies(prev => new Set(prev.add(study.studyInstanceUid)));
+        } catch (error) {
+          setCheckedStudies(prev => new Set(prev.add(study.studyInstanceUid)));
+        }
       }
     };
     
@@ -107,14 +118,26 @@ const StudyBrowser = ({
   const debugSetCaseStatus = (studyInstanceUid: string, hasCase: boolean) => {
     console.log(`DEBUG: Manually setting case status for ${studyInstanceUid} to ${hasCase}`);
     setStudyCaseStatusMap(prev => new Map(prev.set(studyInstanceUid, hasCase)));
+    setCheckedStudies(prev => new Set(prev.add(studyInstanceUid)));
+  };
+
+  const debugClearCache = () => {
+    console.log('DEBUG: Clearing case status cache');
+    setStudyCaseStatusMap(new Map());
+    setCheckedStudies(new Set());
   };
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       window.debugSetCaseStatus = debugSetCaseStatus;
+      window.debugClearCache = debugClearCache;
       window.debugGetCaseStatusMap = () => {
         console.log('Current case status map:', studyCaseStatusMap);
         return studyCaseStatusMap;
+      };
+      window.debugGetCheckedStudies = () => {
+        console.log('Checked studies set:', checkedStudies);
+        return checkedStudies;
       };
       window.debugGetStudyIds = () => {
         const tabData = tabs.find(tab => tab.name === activeTabName);
@@ -123,7 +146,7 @@ const StudyBrowser = ({
         return studyIds;
       };
     }
-  }, [studyCaseStatusMap, tabs, activeTabName]);
+  }, [studyCaseStatusMap, checkedStudies, tabs, activeTabName]);
   const getTabContent = () => {
     const tabData = tabs.find(tab => tab.name === activeTabName);
     const viewPreset = viewPresets
@@ -133,7 +156,8 @@ const StudyBrowser = ({
       ({ studyInstanceUid, date, description, numInstances, modalities, displaySets }) => {
         const isExpanded = expandedStudyInstanceUIDs.includes(studyInstanceUid);
         const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) ?? false;
-        console.log(`StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`, hasRadimalCase, 'statusMap:', studyCaseStatusMap);
+        const isChecked = checkedStudies.has(studyInstanceUid);
+        console.log(`StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`, hasRadimalCase, 'isChecked:', isChecked);
         return (
           <React.Fragment key={studyInstanceUid}>
             <StudyItem
@@ -158,6 +182,7 @@ const StudyBrowser = ({
               onThumbnailContextMenu={onThumbnailContextMenu}
               servicesManager={servicesManager}
               hasRadimalCase={hasRadimalCase}
+              isRadimalCaseChecked={isChecked}
             />
           </React.Fragment>
         );

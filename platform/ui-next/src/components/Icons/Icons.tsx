@@ -3124,6 +3124,80 @@ export const Icons = {
     );
   },
 
+  RadimalPdf: (props: IconProps & { hasCase?: boolean; isChecked?: boolean }) => {
+    const { hasCase, isChecked, ...svgProps } = props;
+    console.log('RadimalPdf rendering with hasCase:', hasCase, 'isChecked:', isChecked);
+    
+    // Generate unique IDs for this instance to avoid conflicts
+    const instanceId = Math.random().toString(36).substr(2, 9);
+    const patternId = `pattern0_5_8_${instanceId}`;
+    const imageId = `image0_5_8_${instanceId}`;
+    
+    // Show icon only when checked and has case, hidden otherwise
+    const shouldShow = isChecked && hasCase;
+    
+    // State to track if the image has loaded
+    const [imageLoaded, setImageLoaded] = React.useState(false);
+    
+    // Only show when both conditions are met: shouldShow AND image is loaded
+    const finalOpacity = shouldShow && imageLoaded ? 1 : 0;
+    
+    return (
+      <svg
+        width="16"
+        height="20"
+        viewBox="0 0 17 21"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        xmlnsXlink="http://www.w3.org/1999/xlink"
+        style={{
+          opacity: finalOpacity,
+          transition: 'opacity 0.2s ease'
+        }}
+        {...svgProps}
+      >
+        <path
+          d="M2.5 0.5C1.4 0.5 0.5 1.4 0.5 2.5V18.5C0.5 19.6 1.4 20.5 2.5 20.5H14.5C15.6 20.5 16.5 19.6 16.5 18.5V6.5L10.5 0.5H2.5Z"
+          fill="black"
+          stroke="#B51078"
+        />
+        <rect 
+          x="2.15333" 
+          y="6.80666" 
+          width="12" 
+          height="10" 
+          fill={`url(#${patternId})`}
+        />
+        <defs>
+          <pattern 
+            id={patternId} 
+            patternContentUnits="objectBoundingBox" 
+            width="1" 
+            height="1"
+          >
+            <use 
+              xlinkHref={`#${imageId}`} 
+              transform="matrix(0.000905797 0 0 0.00108696 -0.000452899 0)"
+            />
+          </pattern>
+          <image 
+            id={imageId} 
+            width="1105" 
+            height="920" 
+            preserveAspectRatio="none" 
+            xlinkHref="/assets/logo.png"
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageLoaded(true)} // Show icon even if image fails to load
+            style={{
+              filter: 'none',
+              opacity: 1
+            }}
+          />
+        </defs>
+      </svg>
+    );
+  },
+
   /** Adds an icon to the set of icons */
   addIcon: (name: string, icon) => {
     if (Icons[name]) {
