@@ -3160,6 +3160,7 @@ export const Icons = {
           d="M2.5 0.5C1.4 0.5 0.5 1.4 0.5 2.5V18.5C0.5 19.6 1.4 20.5 2.5 20.5H14.5C15.6 20.5 16.5 19.6 16.5 18.5V6.5L10.5 0.5H2.5Z"
           fill="black"
           stroke="#B51078"
+          strokeWidth="1.5"
         />
         <rect 
           x="2.15333" 
@@ -3175,9 +3176,9 @@ export const Icons = {
             width="1" 
             height="1"
           >
-            <use 
-              xlinkHref={`#${imageId}`} 
-              transform="matrix(0.000905797 0 0 0.00108696 -0.000452899 0)"
+            <use
+              xlinkHref={`#${imageId}`}
+              transform="matrix(0.000905797 0 0 0.00108696 0.050000000 0)"
             />
           </pattern>
           <image 
