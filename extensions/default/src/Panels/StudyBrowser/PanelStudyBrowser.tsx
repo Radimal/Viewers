@@ -115,7 +115,11 @@ function PanelStudyBrowser({
       // try to fetch the prior studies based on the patientID if the
       // server can respond.
       try {
-        qidoStudiesForPatient = await getStudiesForPatientByMRN(qidoForStudyUID);
+        const priorStudies = await getStudiesForPatientByMRN(qidoForStudyUID);
+        // Only use the result if it actually returned studies
+        if (priorStudies && priorStudies.length > 0) {
+          qidoStudiesForPatient = priorStudies;
+        }
       } catch (error) {
         console.warn(error);
       }
