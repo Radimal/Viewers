@@ -1,7 +1,7 @@
 {
-  "name": "OHIF Viewer",
-  "short_name": "Viewer",
-  "description": "OHIF Viewer",
+  "name": "Radimal Viewer",
+  "short_name": "Radimal",
+  "description": "Radimal Viewer",
   "dir": "auto",
   "lang": "en-US",
   "orientation": "any",
