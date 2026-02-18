@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router';
 import PropTypes from 'prop-types';
+import objectHash from 'object-hash';
 import { utils } from '@ohif/core';
 import { DragAndDropProvider, ImageViewerProvider } from '@ohif/ui';
 import { useSearchParams } from '@hooks';
@@ -177,7 +178,19 @@ export default function ModeRoute({
     const userPreferredHotkeys = JSON.parse(localStorage.getItem(hotkeyName));
 
     if (userPreferredHotkeys?.length) {
-      hotkeysManager.setHotkeys(userPreferredHotkeys, hotkeyName);
+      const savedCommandNames = new Set(
+        userPreferredHotkeys.map(h =>
+          objectHash({ commandName: h.commandName, commandOptions: h.commandOptions })
+        )
+      );
+      const newDefaults = hotkeys.filter(
+        h =>
+          !savedCommandNames.has(
+            objectHash({ commandName: h.commandName, commandOptions: h.commandOptions })
+          )
+      );
+      const merged = [...userPreferredHotkeys, ...newDefaults];
+      hotkeysManager.setHotkeys(merged, hotkeyName);
     } else {
       hotkeysManager.setHotkeys(hotkeys, hotkeyName);
     }
