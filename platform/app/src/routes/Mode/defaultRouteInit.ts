@@ -7,6 +7,18 @@ import { utils, Enums } from '@ohif/core';
 const { sortingCriteria, getSplitParam } = utils;
 
 /**
+ * Check if an error from dicomweb-client indicates a duplicate/conflicting study
+ * in Orthanc (same StudyInstanceUID with different PatientIDs).
+ */
+function isDuplicateStudyError(error: any): boolean {
+  const details = error?.response?.Details;
+  if (typeof details === 'string') {
+    return /Multiple Series found/i.test(details);
+  }
+  return false;
+}
+
+/**
  * Initialize the route.
  *
  * @param props.servicesManager to read services from
@@ -95,6 +107,22 @@ export async function defaultRouteInit(
   allRetrieves.forEach(retrieve => {
     retrieve.catch(error => {
       console.error(error);
+      uiNotificationService.show(
+        isDuplicateStudyError(error)
+          ? {
+              title: 'Study Load Error',
+              message:
+                'This study may be a duplicate and could not be loaded. Please download the study using the download button in the top right of the viewer instead.',
+              type: 'error',
+              autoClose: false,
+            }
+          : {
+              title: 'Study Load Error',
+              message: 'Failed to load study metadata. Please try refreshing the page.',
+              type: 'error',
+              autoClose: false,
+            }
+      );
     });
   });
 
@@ -144,7 +172,44 @@ export async function defaultRouteInit(
       }
     });
 
-    await Promise.allSettled(allPromises).then(applyHangingProtocol);
+    await Promise.allSettled(allPromises).then(studyResults => {
+      let hasDuplicateStudyError = false;
+      let hasOtherSeriesError = false;
+
+      studyResults.forEach(studyResult => {
+        if (studyResult.status === 'fulfilled' && Array.isArray(studyResult.value)) {
+          studyResult.value.forEach(seriesResult => {
+            if (seriesResult.status === 'rejected') {
+              console.error('Series metadata fetch failed:', seriesResult.reason);
+              if (isDuplicateStudyError(seriesResult.reason)) {
+                hasDuplicateStudyError = true;
+              } else {
+                hasOtherSeriesError = true;
+              }
+            }
+          });
+        }
+      });
+
+      if (hasDuplicateStudyError) {
+        uiNotificationService.show({
+          title: 'Study Load Error',
+          message:
+            'This study may be a duplicate and could not be loaded. Please download the study using the download button in the top right of the viewer instead.',
+          type: 'error',
+          autoClose: false,
+        });
+      } else if (hasOtherSeriesError) {
+        uiNotificationService.show({
+          title: 'Study Load Error',
+          message: 'Some series in this study failed to load. Please try refreshing the page.',
+          type: 'error',
+          autoClose: false,
+        });
+      }
+
+      applyHangingProtocol();
+    });
     startRemainingPromises(remainingPromises);
     applyHangingProtocol();
   });
