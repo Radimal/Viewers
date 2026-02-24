@@ -1,6 +1,5 @@
 import objectHash from 'object-hash';
 import { hotkeys } from '../utils';
-import isequal from 'lodash.isequal';
 import Hotkey from './Hotkey';
 
 /**
@@ -68,11 +67,7 @@ export class HotkeysManager {
   setHotkeys(hotkeyDefinitions = [], name = 'hotkey-definitions') {
     try {
       const definitions = this.getValidDefinitions(hotkeyDefinitions);
-      if (isequal(definitions, this.hotkeyDefaults)) {
-        localStorage.removeItem(name);
-      } else {
-        localStorage.setItem(name, JSON.stringify(definitions));
-      }
+      localStorage.setItem(name, JSON.stringify(definitions));
       definitions.forEach(definition => this.registerHotkeys(definition));
     } catch (error) {
       const { uiNotificationService } = this._servicesManager.services;
@@ -230,8 +225,9 @@ export class HotkeysManager {
    *
    * @returns {undefined}
    */
-  restoreDefaultBindings() {
-    this.setHotkeys(this.hotkeyDefaults);
+  restoreDefaultBindings(name = 'hotkey-definitions') {
+    localStorage.removeItem(name);
+    this.setHotkeys(this.hotkeyDefaults, name);
   }
 
   /**
