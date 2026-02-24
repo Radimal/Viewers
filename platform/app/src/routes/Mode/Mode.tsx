@@ -178,17 +178,13 @@ export default function ModeRoute({
     const userPreferredHotkeys = JSON.parse(localStorage.getItem(hotkeyName));
 
     if (userPreferredHotkeys?.length) {
-      const savedCommandNames = new Set(
-        userPreferredHotkeys.map(h =>
-          objectHash({ commandName: h.commandName, commandOptions: h.commandOptions })
-        )
-      );
-      const newDefaults = hotkeys.filter(
-        h =>
-          !savedCommandNames.has(
-            objectHash({ commandName: h.commandName, commandOptions: h.commandOptions })
-          )
-      );
+      // Normalize commandOptions so undefined and {} produce the same hash,
+      // preventing duplicate entries when merging saved and default hotkeys.
+      const hotkeyHash = h =>
+        objectHash({ commandName: h.commandName, commandOptions: h.commandOptions || {} });
+
+      const savedCommandNames = new Set(userPreferredHotkeys.map(hotkeyHash));
+      const newDefaults = hotkeys.filter(h => !savedCommandNames.has(hotkeyHash(h)));
       const merged = [...userPreferredHotkeys, ...newDefaults];
       hotkeysManager.setHotkeys(merged, hotkeyName);
     } else {
