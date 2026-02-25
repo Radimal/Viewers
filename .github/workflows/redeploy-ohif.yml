@@ -1,0 +1,65 @@
+name: Redeploy Ohif
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: Select Environment
+        options:
+        - prod
+        - stage
+        - veg-prod
+        - veg-stage
+
+env:
+  ACCOUNT_ID: 668564009563
+  AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID_GH_ORTHANC }}
+  AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY_GH_ORTHANC }}
+  AWS_DEFAULT_REGION: us-east-1
+
+jobs:
+  restart-ohif:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Redeploy OHIF in ECS
+        run: |
+          case ${{ github.event.inputs.environment }} in
+            veg-prod )
+              OHIF_CLUSTER=orthanc-veg-prod-1
+              OHIF_SERVICE=ohif-veg-prod-1
+              OHIF_REGION=us-west-2
+              OHIF_CLOUDFRONT_ALIAS=veg-view.prod-1.radimal.ai
+              ;;
+            veg-stage )
+              OHIF_CLUSTER=orthanc-veg-stage-1
+              OHIF_SERVICE=ohif-veg-stage-1
+              OHIF_REGION=us-west-1
+              OHIF_CLOUDFRONT_ALIAS=veg-view.stage-1.radimal.ai
+              ;;
+            * )
+              OHIF_CLUSTER=orthanc-${{ github.event.inputs.environment }}-1
+              OHIF_SERVICE=ohif-${{ github.event.inputs.environment }}-1
+              OHIF_REGION=$AWS_DEFAULT_REGION
+              if [ "${{ github.event.inputs.environment }}" = "stage" ]
+              then
+                OHIF_CLOUDFRONT_ALIAS=view.stage-1.radimal.ai
+              else
+                OHIF_CLOUDFRONT_ALIAS=""
+              fi
+              ;;
+          esac
+          echo "Forcing a redeployment of ${OHIF_SERVICE} in ${OHIF_CLUSTER} cluster in ${OHIF_REGION} region..."
+          aws ecs update-service --force-new-deployment --service $OHIF_SERVICE --cluster $OHIF_CLUSTER --region $OHIF_REGION
+          sleep 15
+          aws ecs wait services-stable --services $OHIF_SERVICE --cluster $OHIF_CLUSTER --region $OHIF_REGION
+          if [ -n "${OHIF_CLOUDFRONT_ALIAS}" ]
+          then
+            echo "Find Cloudfront distribution..."
+            CF_DIST=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items!=null] | [?contains(Aliases.Items, '$OHIF_CLOUDFRONT_ALIAS')].Id | [0]" --output text)
+            echo "Invalidating cache for all objects under CF distrobution ${CF_DIST}"
+            aws cloudfront create-invalidation --distribution-id $CF_DIST --paths "/*"
+          else
+            echo "No Cloudfront distribution front-ends this viewer - no cache invalidation required"
+          fi
+
