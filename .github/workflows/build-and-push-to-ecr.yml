@@ -57,9 +57,37 @@ jobs:
           build-args: |
             REACT_APP_HASURA_ADMIN_SECRET_PROD=${{ secrets.HASURA_ADMIN_SECRET_PROD }}
             REACT_APP_HASURA_ADMIN_SECRET_DEV=${{ secrets.HASURA_ADMIN_SECRET_DEV }}
+      - name: Extract dist from built image
+        run: |
+          docker pull "${{ env.ECR }}:${{ github.ref_name }}"
+          CID=$(docker create "${{ env.ECR }}:${{ github.ref_name }}")
+          docker cp "$CID:/usr/share/nginx/html" ./dist
+          docker rm "$CID"
 
-#  push-ecr:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - name: Push to ECR
-#        run: |
+      - name: Read version from build
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' ./dist/version.json)
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected build version: $VERSION"
+
+      - name: Upload static assets to S3
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          SYNC_ARGS='--exclude "index.html" --exclude "app-config.js" --exclude "google.js" --cache-control "public, max-age=31536000, immutable"'
+
+          for BUCKET in s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-stage-1; do
+            # Flat copy at bucket root for serving via CloudFront
+            aws s3 sync ./dist "$BUCKET/" \
+              --exclude "index.html" \
+              --exclude "app-config.js" \
+              --exclude "google.js" \
+              --cache-control "public, max-age=31536000, immutable"
+
+            # Versioned copy for tracking deployed builds
+            aws s3 sync ./dist "$BUCKET/$VERSION/" \
+              --exclude "index.html" \
+              --exclude "app-config.js" \
+              --exclude "google.js" \
+              --cache-control "public, max-age=31536000, immutable"
+          done
