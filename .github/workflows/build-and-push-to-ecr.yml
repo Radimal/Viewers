@@ -76,7 +76,7 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           SYNC_ARGS='--exclude "index.html" --exclude "app-config.js" --exclude "google.js" --cache-control "public, max-age=31536000, immutable"'
 
-          for BUCKET in s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-stage-1; do
+          for BUCKET in s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1 s3://radimal-viewer-assets-veg-prod-1; do
             # Flat copy at bucket root for serving via CloudFront
             aws s3 sync ./dist "$BUCKET/" \
               --exclude "index.html" \
