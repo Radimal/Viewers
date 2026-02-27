@@ -90,28 +90,35 @@ export function createStudyBrowserTabs(
           return oldestPrimaryTimeStamp - studyTimeStamp < recentTimeframeMS;
         })
       : [];
-  // Newest first
-  const _byDate = (a, b) => {
-    const dateA = Date.parse(a);
-    const dateB = Date.parse(b);
+  // Newest first, considering both date and time
+  const _byDateTime = (studyA, studyB) => {
+    const dateA = Date.parse(studyA.date) || 0;
+    const dateB = Date.parse(studyB.date) || 0;
 
-    return dateB - dateA;
+    if (dateA !== dateB) {
+      return dateB - dateA;
+    }
+
+    // When dates are the same, compare by StudyTime (DICOM format: HHmmss or HHmmss.SSS)
+    const timeA = studyA.time || '';
+    const timeB = studyB.time || '';
+    return timeB.localeCompare(timeA);
   };
   const tabs = [
     {
       name: 'primary',
       label: 'Primary',
-      studies: primaryStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: primaryStudies.sort(_byDateTime),
     },
     {
       name: 'recent',
       label: 'Recent',
-      studies: recentStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: recentStudies.sort(_byDateTime),
     },
     {
       name: 'all',
       label: 'All',
-      studies: patientStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: patientStudies.sort(_byDateTime),
     },
   ];
 
