@@ -16,10 +16,11 @@ const NotificationProvider = ({ children, service }) => {
   };
 
   const show = useCallback(options => {
-    const { title, message, duration, position, type, promise } = {
+    const { title, message, duration, position, type, promise, autoClose } = {
       ...DEFAULT_OPTIONS,
       ...options,
     };
+    const effectiveDuration = autoClose === false ? Infinity : duration;
 
     if (promise) {
       return toast.promise(promise, {
@@ -36,7 +37,7 @@ const NotificationProvider = ({ children, service }) => {
     }
 
     return toast[type](title, {
-      duration,
+      duration: effectiveDuration,
       position,
       description: message,
     });
