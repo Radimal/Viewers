@@ -108,7 +108,7 @@ export async function defaultRouteInit(
           ? {
               title: 'Study Load Error',
               message:
-                'This study is a duplicate and could not be loaded. Please download the study using the download button in the top right of the viewer instead.',
+                'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
               type: 'error',
               autoClose: false,
             }
@@ -191,7 +191,7 @@ export async function defaultRouteInit(
         uiNotificationService.show({
           title: 'Study Load Error',
           message:
-            'This study is a duplicate and could not be loaded. Please download the study using the download button in the top right of the viewer instead.',
+            'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
           type: 'error',
           autoClose: false,
         });
