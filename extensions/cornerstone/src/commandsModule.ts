@@ -5,6 +5,7 @@ import {
   utilities as csUtils,
   Types as CoreTypes,
   BaseVolumeViewport,
+  cache,
 } from '@cornerstonejs/core';
 import {
   ToolGroupManager,
@@ -52,6 +53,7 @@ function commandsModule({
     colorbarService,
     hangingProtocolService,
     syncGroupService,
+    displaySetService,
   } = servicesManager.services;
 
   const setupAutoImageSliceSync = () => {
@@ -1814,6 +1816,161 @@ function commandsModule({
         console.error('Error refreshing page:', error);
       }
     },
+
+    autoTrimBorders: ({ viewportId: viewportIdParam }) => {
+      const { activeViewportId } = viewportGridService.getState();
+      const viewportId = viewportIdParam || activeViewportId;
+
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+      if (!viewport || !(viewport instanceof StackViewport)) {
+        return false;
+      }
+
+      const imageId = viewport.getCurrentImageId();
+      if (!imageId) {
+        return false;
+      }
+
+      const image = cache.getImage(imageId);
+      if (!image) {
+        return false;
+      }
+
+      const pixelData = image.getPixelData();
+      const rows = image.rows;
+      const columns = image.columns;
+
+      if (!pixelData || !rows || !columns) {
+        return false;
+      }
+
+      // Determine if image is MONOCHROME1 (inverted: black = high values)
+      const isInverted = image.photometricInterpretation === 'MONOCHROME1' || image.invert;
+
+      // Calculate threshold: 5% of the value range
+      const minVal = image.minPixelValue ?? 0;
+      const maxVal = image.maxPixelValue ?? 255;
+      const range = maxVal - minVal;
+      const threshold = isInverted
+        ? maxVal - range * 0.05  // For MONOCHROME1, "black" is near maxVal
+        : minVal + range * 0.05; // For MONOCHROME2, "black" is near minVal
+
+      const isBackground = (val: number) =>
+        isInverted ? val >= threshold : val <= threshold;
+
+      const SAMPLE_STEP = 4; // Sample every 4th pixel for performance
+      const MIN_BORDER_FRACTION = 0.02; // Minimum 2% of dimension to count as border
+
+      // Scan from top
+      let top = 0;
+      for (let r = 0; r < rows; r++) {
+        let hasContent = false;
+        for (let c = 0; c < columns; c += SAMPLE_STEP) {
+          if (!isBackground(pixelData[r * columns + c])) {
+            hasContent = true;
+            break;
+          }
+        }
+        if (hasContent) {
+          top = r;
+          break;
+        }
+        if (r === rows - 1) {
+          // Entire image is background — don't trim
+          return true;
+        }
+      }
+
+      // Scan from bottom
+      let bottom = rows - 1;
+      for (let r = rows - 1; r >= top; r--) {
+        let hasContent = false;
+        for (let c = 0; c < columns; c += SAMPLE_STEP) {
+          if (!isBackground(pixelData[r * columns + c])) {
+            hasContent = true;
+            break;
+          }
+        }
+        if (hasContent) {
+          bottom = r;
+          break;
+        }
+      }
+
+      // Scan from left
+      let left = 0;
+      for (let c = 0; c < columns; c++) {
+        let hasContent = false;
+        for (let r = top; r <= bottom; r += SAMPLE_STEP) {
+          if (!isBackground(pixelData[r * columns + c])) {
+            hasContent = true;
+            break;
+          }
+        }
+        if (hasContent) {
+          left = c;
+          break;
+        }
+      }
+
+      // Scan from right
+      let right = columns - 1;
+      for (let c = columns - 1; c >= left; c--) {
+        let hasContent = false;
+        for (let r = top; r <= bottom; r += SAMPLE_STEP) {
+          if (!isBackground(pixelData[r * columns + c])) {
+            hasContent = true;
+            break;
+          }
+        }
+        if (hasContent) {
+          right = c;
+          break;
+        }
+      }
+
+      // Check if borders are significant enough to trim
+      const topBorder = top / rows;
+      const bottomBorder = (rows - 1 - bottom) / rows;
+      const leftBorder = left / columns;
+      const rightBorder = (columns - 1 - right) / columns;
+
+      if (
+        topBorder < MIN_BORDER_FRACTION &&
+        bottomBorder < MIN_BORDER_FRACTION &&
+        leftBorder < MIN_BORDER_FRACTION &&
+        rightBorder < MIN_BORDER_FRACTION
+      ) {
+        // No significant borders detected
+        return true;
+      }
+
+      // Add small padding (1% of content region) to avoid clipping
+      const padRows = Math.round(rows * 0.01);
+      const padCols = Math.round(columns * 0.01);
+      top = Math.max(0, top - padRows);
+      bottom = Math.min(rows - 1, bottom + padRows);
+      left = Math.max(0, left - padCols);
+      right = Math.min(columns - 1, right + padCols);
+
+      // Compute display area fractions
+      const contentWidth = (right - left + 1) / columns;
+      const contentHeight = (bottom - top + 1) / rows;
+      const centerX = (left + right) / 2 / columns;
+      const centerY = (top + bottom) / 2 / rows;
+
+      const displayArea = {
+        imageArea: [contentWidth, contentHeight] as [number, number],
+        imageCanvasPoint: {
+          imagePoint: [centerX, centerY] as [number, number],
+          canvasPoint: [0.5, 0.5] as [number, number],
+        },
+      };
+
+      viewport.setDisplayArea(displayArea);
+      viewport.render();
+      return true;
+    },
   };
 
   const definitions = {
@@ -2089,6 +2246,9 @@ function commandsModule({
     },
     refreshPageToApplyToolBindings: {
       commandFn: actions.refreshPageToApplyToolBindings,
+    },
+    autoTrimBorders: {
+      commandFn: actions.autoTrimBorders,
     },
   };
 

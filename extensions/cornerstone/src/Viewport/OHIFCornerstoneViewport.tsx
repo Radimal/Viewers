@@ -29,6 +29,16 @@ const STACK = 'stack';
  */
 let cacheJumpToMeasurementEvent;
 
+/**
+ * Tracks auto-trim state per displaySet.
+ * After auto-trim, we snapshot the zoom/pan so we can later detect whether the user
+ * has manually modified zoom/pan (in which case we should not re-apply auto-trim).
+ */
+const autoTrimStateCache = new Map<
+  string,
+  { zoom: number; panX: number; panY: number }
+>();
+
 // Todo: This should be done with expose of internal API similar to react-vtkjs-viewport
 // Then we don't need to worry about the re-renders if the props change.
 const OHIFCornerstoneViewport = React.memo(
@@ -536,6 +546,86 @@ const OHIFCornerstoneViewport = React.memo(
         clearTimeout(fallbackTimer);
       };
     }, [viewportPersistenceService, viewportId]);
+
+    useEffect(() => {
+      if (appConfig.autoTrimCollimationBorders === false) {
+        return;
+      }
+
+      const element = elementRef.current;
+      if (!element) {
+        return;
+      }
+
+      // Only apply to CR/DX modalities
+      const modality = displaySets?.[0]?.Modality;
+      if (!modality || !['CR', 'DX'].includes(modality)) {
+        return;
+      }
+
+      let trimDone = false;
+      let attempts = 0;
+      const MAX_ATTEMPTS = 10;
+      const displaySetKey = displaySets.map(ds => ds.displaySetInstanceUID).join(',');
+
+      const handleImageRendered = () => {
+        if (trimDone || attempts >= MAX_ATTEMPTS) {
+          return;
+        }
+        attempts++;
+
+        // Delay slightly to ensure image data is fully available in cache
+        setTimeout(() => {
+          try {
+            const cached = autoTrimStateCache.get(displaySetKey);
+            if (cached) {
+              const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+              if (csViewport) {
+                const camera = csViewport.getCamera();
+                const zoom = csViewport.getZoom?.() ?? camera?.parallelScale;
+                const pan = csViewport.getPan?.() ?? [0, 0];
+                const zoomDiff = Math.abs((zoom || 0) - cached.zoom);
+                const panDiff =
+                  Math.abs((pan[0] || 0) - cached.panX) +
+                  Math.abs((pan[1] || 0) - cached.panY);
+
+                if (zoomDiff > 0.01 || panDiff > 0.5) {
+                  trimDone = true;
+                  return;
+                }
+              }
+            }
+
+            const result = commandsManager.runCommand('autoTrimBorders', { viewportId });
+
+            if (result === false) {
+              return;
+            }
+
+            trimDone = true;
+
+            const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            if (csViewport) {
+              const zoom = csViewport.getZoom?.() ?? 0;
+              const pan = csViewport.getPan?.() ?? [0, 0];
+              autoTrimStateCache.set(displaySetKey, {
+                zoom,
+                panX: pan[0] || 0,
+                panY: pan[1] || 0,
+              });
+            }
+          } catch (error) {
+            console.warn('Auto-trim borders failed:', error);
+          }
+        }, 100);
+      };
+
+      element.addEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+
+      return () => {
+        element.removeEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+      };
+    }, [viewportId, displaySets, viewportOptions, appConfig.autoTrimCollimationBorders, commandsManager]);
 
     // Set up the window level action menu in the viewport action corners.
     useEffect(() => {
