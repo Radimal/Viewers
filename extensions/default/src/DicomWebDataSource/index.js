@@ -492,7 +492,9 @@ function createDicomWebApi(dicomWebConfig, servicesManager) {
       });
 
       if (returnPromises) {
-        Promise.all(seriesDeliveredPromises).then(() => setSuccessFlag());
+        Promise.all(seriesDeliveredPromises)
+          .then(() => setSuccessFlag())
+          .catch(() => {});
         return seriesPromises;
       } else {
         await Promise.all(seriesDeliveredPromises);

@@ -304,17 +304,21 @@ export default function ModeRoute({
     };
 
     let unsubscriptions;
-    setupRouteInit().then(unsubs => {
-      unsubscriptions = unsubs;
+    setupRouteInit()
+      .then(unsubs => {
+        unsubscriptions = unsubs;
 
-      // Some code may need to run after hanging protocol initialization
-      // (eg: workflowStepsService initialization on 4D mode)
-      mode?.onSetupRouteComplete?.({
-        servicesManager,
-        extensionManager,
-        commandsManager,
+        // Some code may need to run after hanging protocol initialization
+        // (eg: workflowStepsService initialization on 4D mode)
+        mode?.onSetupRouteComplete?.({
+          servicesManager,
+          extensionManager,
+          commandsManager,
+        });
+      })
+      .catch(error => {
+        console.error('setupRouteInit failed:', error);
       });
-    });
 
     return () => {
       // The mode.onModeExit must be done first to allow it to store

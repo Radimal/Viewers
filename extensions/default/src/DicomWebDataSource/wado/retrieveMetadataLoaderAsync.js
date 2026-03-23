@@ -29,11 +29,13 @@ export class DeferredPromise {
     this.internalPromise = this.processFunction();
     // in case then and reject functions called before start
     if (this.thenFunction) {
-      this.then(this.thenFunction);
+      // Catch the dangling .then() chain to prevent uncaught promise rejections.
+      // The caller handles the internalPromise rejection directly (e.g. via Promise.allSettled).
+      this.internalPromise.then(this.thenFunction).catch(() => {});
       this.thenFunction = undefined;
     }
     if (this.rejectFunction) {
-      this.reject(this.rejectFunction);
+      this.internalPromise.catch(this.rejectFunction);
       this.rejectFunction = undefined;
     }
     return this.internalPromise;

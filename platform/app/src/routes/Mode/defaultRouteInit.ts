@@ -14,6 +14,11 @@ function isDuplicateStudyError(error: any): boolean {
   return false;
 }
 
+// Tracks whether the duplicate study notification has already been shown
+// for a given study to prevent stacking multiple identical notifications
+// (defaultRouteInit may be called more than once for the same study).
+let shownDuplicateStudyNotification = false;
+
 /**
  * Initialize the route.
  *
@@ -103,22 +108,25 @@ export async function defaultRouteInit(
   allRetrieves.forEach(retrieve => {
     retrieve.catch(error => {
       console.error(error);
-      uiNotificationService.show(
-        isDuplicateStudyError(error)
-          ? {
-              title: 'Study Load Error',
-              message:
-                'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
-              type: 'error',
-              autoClose: false,
-            }
-          : {
-              title: 'Study Load Error',
-              message: 'Failed to load study metadata. Please try refreshing the page.',
-              type: 'error',
-              autoClose: false,
-            }
-      );
+      if (isDuplicateStudyError(error)) {
+        if (!shownDuplicateStudyNotification) {
+          shownDuplicateStudyNotification = true;
+          uiNotificationService.show({
+            title: 'Study Load Error',
+            message:
+              'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
+            type: 'error',
+            autoClose: false,
+          });
+        }
+      } else {
+        uiNotificationService.show({
+          title: 'Study Load Error',
+          message: 'Failed to load study metadata. Please try refreshing the page.',
+          type: 'error',
+          autoClose: false,
+        });
+      }
     });
   });
 
@@ -143,7 +151,13 @@ export async function defaultRouteInit(
     const remainingPromises = [];
 
     function startRemainingPromises(remainingPromises) {
-      remainingPromises.forEach(p => p.forEach(p => p.start()));
+      remainingPromises.forEach(p =>
+        p.forEach(p => {
+          p.start().catch(error => {
+            console.error('Remaining series metadata fetch failed:', error);
+          });
+        })
+      );
     }
 
     promises.forEach(promise => {
@@ -153,16 +167,22 @@ export async function defaultRouteInit(
       }
 
       if (displaySetFromUrl) {
-        const requiredSeriesPromises = retrieveSeriesMetadataPromise.map(promise =>
-          promise.start()
-        );
+        const requiredSeriesPromises = retrieveSeriesMetadataPromise.map(promise => {
+          const p = promise.start();
+          p.catch(() => {}); // Handled by Promise.allSettled below
+          return p;
+        });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
       } else {
         const { requiredSeries, remaining } = hangingProtocolService.filterSeriesRequiredForRun(
           hangingProtocolId,
           retrieveSeriesMetadataPromise
         );
-        const requiredSeriesPromises = requiredSeries.map(promise => promise.start());
+        const requiredSeriesPromises = requiredSeries.map(promise => {
+          const p = promise.start();
+          p.catch(() => {}); // Handled by Promise.allSettled below
+          return p;
+        });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
         remainingPromises.push(remaining);
       }
@@ -187,7 +207,8 @@ export async function defaultRouteInit(
         }
       });
 
-      if (hasDuplicateStudyError) {
+      if (hasDuplicateStudyError && !shownDuplicateStudyNotification) {
+        shownDuplicateStudyNotification = true;
         uiNotificationService.show({
           title: 'Study Load Error',
           message:
