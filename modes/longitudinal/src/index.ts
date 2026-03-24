@@ -209,7 +209,7 @@ function modeFactory({ modeConfiguration }) {
               rightPanelClosed: true,
               viewports: [
                 {
-                  namespace: '@ohif/extension-cornerstone.viewportModule.cornerstone',
+                  namespace: tracked.viewport,
                   displaySetsToDisplay: [
                     ohif.sopClassHandler,
                     dicomvideo.sopClassHandler,

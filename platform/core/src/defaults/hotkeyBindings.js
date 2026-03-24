@@ -165,6 +165,12 @@ const bindings = [
     isEditable: true,
   },
   {
+    commandName: 'clearMeasurements',
+    label: 'Delete All Measurements',
+    keys: ['delete'],
+    isEditable: true,
+  },
+  {
     commandName: 'cancelMeasurement',
     label: 'Cancel Cornerstone Measurement',
     keys: ['esc'],

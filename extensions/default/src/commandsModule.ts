@@ -98,7 +98,7 @@ const commandsModule = ({
       });
     },
     clearMeasurements: () => {
-      measurementService.clear();
+      measurementService.clearMeasurements();
     },
 
     /**
@@ -851,7 +851,7 @@ const commandsModule = ({
         to: displaySetIndexToShow,
         direction: direction > 0 ? 'next' : 'previous',
         targetDisplaySetUID: displaySetInstanceUID,
-        studyUID: currentStudyInstanceUID
+        studyUID: currentStudyInstanceUID,
       });
 
       let updatedViewports = [];
