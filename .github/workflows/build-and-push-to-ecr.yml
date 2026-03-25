@@ -14,6 +14,10 @@ on:
 #    tags:
 #      - 'v3.9.*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   ECR: ${{secrets.ECR_OHIF_LOCATION}} 
   AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID_GH_ORTHANC }}
