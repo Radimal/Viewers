@@ -4,6 +4,13 @@ server {
   gunzip       on;
   listen ${PORT} default_server;
   listen [::]:${PORT} default_server;
+  # Strip version prefix (e.g. /1.0.TIMESTAMP/app.hash.js) and serve from root.
+  # Fallback for when versioned asset requests hit nginx instead of S3.
+  location ~ ^/1\.0\.\d+/(.+)$ {
+    root   /usr/share/nginx/html;
+    try_files /$1 =404;
+  }
+
   location / {
     root   /usr/share/nginx/html;
     index  index.html index.htm;
