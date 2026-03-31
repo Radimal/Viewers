@@ -167,7 +167,7 @@ const bindings = [
   {
     commandName: 'clearMeasurements',
     label: 'Delete All Measurements',
-    keys: ['delete'],
+    keys: ['q'],
     isEditable: true,
   },
   {
