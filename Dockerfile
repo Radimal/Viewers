@@ -61,13 +61,7 @@ ENV QUICK_BUILD=true
 # ENV REACT_APP_CONFIG=config/default.js
 
 
-# Generate version.json first, then build with PUBLIC_URL set to the version
-# so all chunk references in index.html point to the versioned S3 folder.
-# Note: calls lerna directly instead of `yarn build` to avoid update-version.js running twice.
-RUN node scripts/update-version.js && \
-    export PUBLIC_URL="/$(node -p "require('./platform/app/public/version.json').version")/" && \
-    echo "Building with PUBLIC_URL=$PUBLIC_URL" && \
-    lerna run build:viewer --stream
+RUN yarn run build
 
 # Stage 3: Bundle the built application into a Docker container
 # which runs Nginx using Alpine Linux
