@@ -57,11 +57,37 @@ const Row = ({ title, value, link }) => {
   );
 };
 
-const AboutModal = ({ buildNumber, versionNumber, commitHash }) => {
+const formatBuildTimeEastern = (isoString?: string) => {
+  if (!isoString) {
+    return null;
+  }
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+  const datePart = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'America/New_York',
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/New_York',
+  })
+    .format(date)
+    .replace(' ', '');
+  return `${datePart} at ${timePart}`;
+};
+
+const AboutModal = ({ buildNumber, versionNumber, commitHash, buildTime }) => {
   const radimalVersion = `${versionNumber} + Radimalv3.10.0`;
   const { os, version, name } = detect();
   const browser = `${name[0].toUpperCase()}${name.substr(1)} ${version}`;
   const { t } = useTranslation('AboutModal');
+  const buildTimeDisplay = formatBuildTimeEastern(buildTime);
 
   const renderRowTitle = title => (
     <div className="mb-3 border-b-2 border-black pb-3">
@@ -123,6 +149,12 @@ const AboutModal = ({ buildNumber, versionNumber, commitHash }) => {
           title={t('Version number')}
           value={radimalVersion}
         />
+        {buildTimeDisplay && (
+          <Row
+            title={t('Last updated')}
+            value={buildTimeDisplay}
+          />
+        )}
         {buildNumber && (
           <Row
             title={t('Build number')}
@@ -151,6 +183,8 @@ const AboutModal = ({ buildNumber, versionNumber, commitHash }) => {
 AboutModal.propTypes = {
   buildNumber: PropTypes.string,
   versionNumber: PropTypes.string,
+  commitHash: PropTypes.string,
+  buildTime: PropTypes.string,
 };
 
 export default AboutModal;

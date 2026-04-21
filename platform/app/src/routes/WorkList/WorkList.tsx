@@ -449,6 +449,7 @@ function WorkList({
   const hasStudies = numOfStudies > 0;
   const versionNumber = process.env.VERSION_NUMBER;
   const commitHash = process.env.COMMIT_HASH;
+  const buildTime = process.env.BUILD_TIME;
 
   const menuOptions = [
     {
@@ -458,7 +459,7 @@ function WorkList({
         show({
           content: AboutModal,
           title: t('AboutModal:About OHIF Viewer'),
-          contentProps: { versionNumber, commitHash },
+          contentProps: { versionNumber, commitHash, buildTime },
           containerDimensions: 'max-w-4xl max-h-4xl',
         }),
     },

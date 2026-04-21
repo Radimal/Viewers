@@ -32,6 +32,8 @@ const VERSION_NUMBER = fs.readFileSync(path.join(__dirname, '../version.txt'), '
 
 const COMMIT_HASH = fs.readFileSync(path.join(__dirname, '../commit.txt'), 'utf8') || '';
 
+const BUILD_TIME = new Date().toISOString();
+
 //
 dotenv.config();
 
@@ -44,6 +46,7 @@ const defineValues = {
   'process.env.BUILD_NUM': JSON.stringify(BUILD_NUM),
   'process.env.VERSION_NUMBER': JSON.stringify(VERSION_NUMBER),
   'process.env.COMMIT_HASH': JSON.stringify(COMMIT_HASH),
+  'process.env.BUILD_TIME': JSON.stringify(BUILD_TIME),
   /* i18n */
   'process.env.USE_LOCIZE': JSON.stringify(process.env.USE_LOCIZE || ''),
   'process.env.LOCIZE_PROJECTID': JSON.stringify(process.env.LOCIZE_PROJECTID || ''),
