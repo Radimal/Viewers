@@ -108,7 +108,7 @@ const AboutModal = ({ buildNumber, versionNumber, commitHash, buildTime }) => {
           href="https://community.ohif.org/"
           showIcon={true}
         >
-            {t('Visit the forum')}
+          {t('Visit the forum')}
         </Link>
         <span className="ml-4">
           <Link
@@ -123,7 +123,7 @@ const AboutModal = ({ buildNumber, versionNumber, commitHash, buildTime }) => {
             href="https://ohif.org/"
             showIcon={true}
           >
-          {t('More details')}
+            {t('More details')}
           </Link>
         </span>
       </div>
@@ -151,7 +151,7 @@ const AboutModal = ({ buildNumber, versionNumber, commitHash, buildTime }) => {
         />
         {buildTimeDisplay && (
           <Row
-            title={t('Last updated')}
+            title={t('Last updated date')}
             value={buildTimeDisplay}
           />
         )}
