@@ -89,6 +89,7 @@
     "lodash.isequal": "4.5.0",
     "oidc-client": "1.11.5",
     "oidc-client-ts": "^3.0.1",
+    "posthog-js": "^1.335.4",
     "prop-types": "^15.7.2",
     "query-string": "^6.12.1",
     "react": "^18.3.1",

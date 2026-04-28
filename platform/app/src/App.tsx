@@ -30,6 +30,7 @@ import {
   NotificationProvider,
   TooltipProvider,
 } from '@ohif/ui-next';
+import { PostHogProvider } from 'posthog-js/react';
 // Viewer Project
 // TODO: Should this influence study list?
 import { AppConfigProvider } from '@state';
@@ -37,6 +38,7 @@ import createRoutes from './routes';
 import appInit from './appInit.js';
 import OpenIdConnectRoutes from './utils/OpenIdConnectRoutes';
 import { ShepherdJourneyProvider } from 'react-shepherd';
+import { initPostHog, posthog } from './utils/posthog';
 
 let commandsManager: CommandsManager,
   extensionManager: ExtensionManager,
@@ -67,6 +69,7 @@ function App({
 }) {
   const [init, setInit] = useState(null);
   useEffect(() => {
+    initPostHog(config?.posthog);
     const run = async () => {
       appInit(config, defaultExtensions, defaultModes).then(setInit).catch(console.error);
     };
@@ -116,6 +119,7 @@ function App({
 
   const providers = [
     [AppConfigProvider, { value: appConfigState }],
+    [PostHogProvider, { client: posthog }],
     [UserAuthenticationProvider, { service: userAuthenticationService }],
     [I18nextProvider, { i18n }],
     [ThemeWrapperNext],

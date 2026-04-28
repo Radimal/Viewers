@@ -5,6 +5,7 @@ import CallbackPage from '../routes/CallbackPage';
 import SignoutCallbackComponent from '../routes/SignoutCallbackComponent';
 import LegacyClient from './legacyOIDCClient';
 import NextClient from './nextOIDCClient';
+import { identifyPostHogUser } from './posthog';
 
 function _isAbsoluteUrl(url) {
   return url.includes('http://') || url.includes('https://');
@@ -201,6 +202,15 @@ function OpenIdConnectRoutes({ oidc, routerBasename, userAuthenticationService }
               );
 
               userAuthenticationService.setUser(user);
+
+              const profile = user?.profile;
+              const distinctId = profile?.sub || profile?.email;
+              if (distinctId) {
+                identifyPostHogUser(distinctId, {
+                  email: profile.email,
+                  name: profile.name,
+                });
+              }
 
               navigate({
                 pathname,
