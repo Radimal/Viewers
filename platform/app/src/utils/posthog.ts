@@ -43,6 +43,19 @@ export function initPostHog(config?: PostHogConfig): void {
       maskAllInputs: false,
       maskInputOptions: { password: true },
     },
+    loaded: ph => {
+      // Expose for console debugging in DevTools.
+      (window as unknown as { posthog?: typeof posthog }).posthog = ph;
+      console.info('[PostHog] loaded; distinct_id =', ph.get_distinct_id());
+
+      // Smoke-test event so we always have at least one capture per page load
+      // until domain events are wired up.
+      try {
+        ph.capture('viewer_loaded', { app: 'viewer' });
+      } catch (e) {
+        console.warn('[PostHog] viewer_loaded capture failed', e);
+      }
+    },
   });
 
   // Cross-app identity hand-off: vet.radimal.ai (and other entry points)
@@ -50,13 +63,14 @@ export function initPostHog(config?: PostHogConfig): void {
   // their PostHog session continues across the domain boundary.
   const params = new URLSearchParams(window.location.search);
   const distinctId = params.get('distinct_id');
+  console.info('[PostHog] URL distinct_id param:', distinctId);
   if (distinctId) {
     try {
       posthog.identify(distinctId);
       _identifiedFromUrl = true;
       posthog.startSessionRecording?.(true);
     } catch (e) {
-      console.warn('PostHog URL identify failed', e);
+      console.warn('[PostHog] URL identify failed', e);
     }
   }
 }
