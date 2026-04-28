@@ -179,11 +179,27 @@ function PanelStudyBrowser({
         return;
       }
       // When the image arrives, render it and store the result in the thumbnailImgSrcMap
-      newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(imageId);
+      try {
+        newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(imageId);
 
-      setThumbnailImageSrcMap(prevState => {
-        return { ...prevState, ...newImageSrcEntry };
-      });
+        setThumbnailImageSrcMap(prevState => {
+          return { ...prevState, ...newImageSrcEntry };
+        });
+      } catch (error) {
+        try {
+          (window as any).__capturePostHogEvent?.('thumbnail_load_failed', {
+            studyInstanceUid: dSet.StudyInstanceUID,
+            seriesInstanceUid: dSet.SeriesInstanceUID,
+            displaySetInstanceUid: dSet.displaySetInstanceUID,
+            modality: dSet.Modality,
+            imageId,
+            errorMessage: error?.message ?? String(error),
+            source: 'activeDisplaySets',
+          });
+        } catch (e) {
+          // Never let analytics break the viewer.
+        }
+      }
     });
   }, [
     StudyInstanceUIDs,
@@ -230,14 +246,30 @@ function PanelStudyBrowser({
             return;
           }
           // When the image arrives, render it and store the result in the thumbnailImgSrcMap
-          newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(
-            imageId,
-            dSet.initialViewport
-          );
+          try {
+            newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(
+              imageId,
+              dSet.initialViewport
+            );
 
-          setThumbnailImageSrcMap(prevState => {
-            return { ...prevState, ...newImageSrcEntry };
-          });
+            setThumbnailImageSrcMap(prevState => {
+              return { ...prevState, ...newImageSrcEntry };
+            });
+          } catch (error) {
+            try {
+              (window as any).__capturePostHogEvent?.('thumbnail_load_failed', {
+                studyInstanceUid: dSet.StudyInstanceUID,
+                seriesInstanceUid: dSet.SeriesInstanceUID,
+                displaySetInstanceUid: dSet.displaySetInstanceUID,
+                modality: dSet.Modality,
+                imageId,
+                errorMessage: error?.message ?? String(error),
+                source: 'displaySetsAdded',
+              });
+            } catch (e) {
+              // Never let analytics break the viewer.
+            }
+          }
         });
       }
     );

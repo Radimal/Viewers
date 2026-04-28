@@ -2,6 +2,47 @@ import objectHash from 'object-hash';
 import { hotkeys } from '../utils';
 import Hotkey from './Hotkey';
 
+function _capturePostHogSafe(event: string, properties?: Record<string, unknown>): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const capture = (window as unknown as {
+    __capturePostHogEvent?: (n: string, p?: Record<string, unknown>) => void;
+  }).__capturePostHogEvent;
+  if (!capture) {
+    return;
+  }
+  try {
+    capture(event, properties);
+  } catch {
+    // Never let analytics break hotkeys.
+  }
+}
+
+function _logHotkeysOncePerSession(name: string, definitions: Hotkey[]): void {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return;
+  }
+  try {
+    const sessionKey = `posthog_hotkeys_logged_${name}`;
+    if (window.sessionStorage.getItem(sessionKey)) {
+      return;
+    }
+    window.sessionStorage.setItem(sessionKey, '1');
+    _capturePostHogSafe('hotkeys_loaded', {
+      name,
+      count: definitions.length,
+      // Cap to keep event payload small and bounded.
+      bindings: definitions.slice(0, 60).map(d => {
+        const keys = Array.isArray(d.keys) ? d.keys.join('+') : d.keys ?? '';
+        return `${d.commandName}=${keys}`;
+      }),
+    });
+  } catch {
+    // sessionStorage in private mode etc. — ignore.
+  }
+}
+
 /**
  *
  *
@@ -67,8 +108,20 @@ export class HotkeysManager {
   setHotkeys(hotkeyDefinitions = [], name = 'hotkey-definitions') {
     try {
       const definitions = this.getValidDefinitions(hotkeyDefinitions);
+
+      // Refuse to overwrite saved customizations with an empty set. Reachable
+      // from UI paths (e.g. Preferences opened from the worklist before the
+      // Mode effect has populated hotkeyDefinitions) where the input is empty
+      // even though localStorage holds prior-session customizations.
+      if (definitions.length === 0) {
+        _capturePostHogSafe('hotkeys_empty_set_blocked', { name });
+        return;
+      }
+
       localStorage.setItem(name, JSON.stringify(definitions));
       definitions.forEach(definition => this.registerHotkeys(definition));
+
+      _logHotkeysOncePerSession(name, definitions);
     } catch (error) {
       const { uiNotificationService } = this._servicesManager.services;
       uiNotificationService.show({

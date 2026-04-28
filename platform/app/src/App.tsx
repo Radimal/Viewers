@@ -39,6 +39,7 @@ import appInit from './appInit.js';
 import OpenIdConnectRoutes from './utils/OpenIdConnectRoutes';
 import { ShepherdJourneyProvider } from 'react-shepherd';
 import { initPostHog, posthog } from './utils/posthog';
+import { startPostHogEventBridge, stopPostHogEventBridge } from './utils/posthogEventBridge';
 
 let commandsManager: CommandsManager,
   extensionManager: ExtensionManager,
@@ -81,6 +82,13 @@ function App({
       window.cacheManager = cacheManager;
     }
   }, []);
+
+  useEffect(() => {
+    if (init?.servicesManager) {
+      startPostHogEventBridge(init.servicesManager);
+    }
+    return () => stopPostHogEventBridge();
+  }, [init]);
 
   if (!init) {
     return null;

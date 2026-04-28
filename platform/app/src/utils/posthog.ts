@@ -16,6 +16,15 @@ function isProductionBuild(): boolean {
 }
 
 export function initPostHog(config?: PostHogConfig): void {
+  try {
+    _initPostHogUnsafe(config);
+  } catch (e) {
+    // PostHog init must never break the viewer.
+    console.warn('[PostHog] init failed', e);
+  }
+}
+
+function _initPostHogUnsafe(config?: PostHogConfig): void {
   if (typeof window === 'undefined') {
     return;
   }
@@ -46,24 +55,40 @@ export function initPostHog(config?: PostHogConfig): void {
     loaded: ph => {
       // Expose for console debugging in DevTools.
       (window as unknown as { posthog?: typeof posthog }).posthog = ph;
-      console.info('[PostHog] loaded; distinct_id =', ph.get_distinct_id());
-
-      // Smoke-test event so we always have at least one capture per page load
-      // until domain events are wired up.
+      // Tags every event with app=viewer so dashboards can filter viewer
+      // activity apart from vet.radimal.ai (shared PostHog project).
       try {
-        ph.capture('viewer_loaded', { app: 'viewer' });
+        ph.register({ app: 'viewer' });
+      } catch (e) {
+        console.warn('[PostHog] register super properties failed', e);
+      }
+      // Start session recording for everyone — including anonymous users —
+      // so we can debug user-reported issues (e.g. hotkey resets) regardless
+      // of whether the user came in via vet.radimal.ai with a distinct_id.
+      try {
+        ph.startSessionRecording?.();
+      } catch (e) {
+        console.warn('[PostHog] startSessionRecording failed', e);
+      }
+      try {
+        ph.capture('viewer_loaded');
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }
     },
   });
 
+  // Expose the capture helper so extensions (which can't import from @ohif/app)
+  // can still emit events. Optional-chained at call sites for safety.
+  (window as unknown as {
+    __capturePostHogEvent?: (n: string, p?: Record<string, unknown>) => void;
+  }).__capturePostHogEvent = capturePostHogEvent;
+
   // Cross-app identity hand-off: vet.radimal.ai (and other entry points)
   // can append ?distinct_id=<id> when redirecting users into the viewer so
   // their PostHog session continues across the domain boundary.
   const params = new URLSearchParams(window.location.search);
   const distinctId = params.get('distinct_id');
-  console.info('[PostHog] URL distinct_id param:', distinctId);
   if (distinctId) {
     try {
       posthog.identify(distinctId);
