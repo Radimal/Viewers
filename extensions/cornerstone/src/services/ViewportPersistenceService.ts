@@ -1,6 +1,17 @@
 import { PubSubService } from '@ohif/core';
 import { Enums, eventTarget } from '@cornerstonejs/core';
 
+interface RotationFlipState {
+  rotation?: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
+}
+
+interface StoredState {
+  rotationFlip: RotationFlipState;
+  timestamp: number;
+}
+
 class ViewportPersistenceService extends PubSubService {
   public static readonly EVENTS = {
     VIEWPORT_STATE_STORED: 'event::viewportStateStored',
@@ -12,19 +23,23 @@ class ViewportPersistenceService extends PubSubService {
   public static REGISTRATION = {
     name: 'viewportPersistenceService',
     altName: 'ViewportPersistenceService',
-    create: ({ configuration = {}, servicesManager }) => {
-      return new ViewportPersistenceService({ servicesManager });
-    },
+    create: ({ servicesManager }) => new ViewportPersistenceService({ servicesManager }),
   };
 
   private servicesManager: any;
   private readonly STORAGE_KEY_PREFIX = 'ohif_viewport_state_';
+  private readonly RESTORE_TIMEOUT_MS = 5000;
 
   private subscriptions: Array<() => void> = [];
   private isInitialized = false;
-  private isInitialLoad = true;
-  private initialLoadTimer: NodeJS.Timeout | null = null;
-  private pendingRestorations: Map<string, { viewportId: string; timestamp: number }> = new Map();
+  private pendingRestorations: Map<string, number> = new Map();
+
+  // Per-viewport, per-series state for the lifetime of the page session. Each
+  // viewport's rotation/flip is independent — rotating one MPR view doesn't
+  // affect the others. localStorage is keyed only by series and serves as
+  // the cross-session fallback when a viewport encounters a series for the
+  // first time in this session.
+  private viewportStates: Map<string, Map<string, StoredState>> = new Map();
 
   constructor({ servicesManager }) {
     super(ViewportPersistenceService.EVENTS);
@@ -34,144 +49,135 @@ class ViewportPersistenceService extends PubSubService {
   init(): void {
     if (this.isInitialized) return;
     this.isInitialized = true;
-
-    // Set up event listeners for immediate restoration
     this._setupEventListeners();
-
-    // Mark as no longer initial load after a delay
-    this.initialLoadTimer = setTimeout(() => {
-      this.isInitialLoad = false;
-      console.log('📱 Initial load period ended');
-    }, 3000); // 3 seconds should be enough for initial app setup
   }
 
   private _setupEventListeners(): void {
-    // Listen for viewport new image set events
-    const viewportNewImageSetHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportImageChange(element.id);
+    // VIEWPORT_NEW_IMAGE_SET: a new image set was assigned to the viewport
+    // (display set switch). The viewport may not be rendered yet, so only
+    // queue — actual restoration runs on the ready events below.
+    const handleNewImageSet = (event: any) => {
+      const viewportId = this._extractViewportId(event);
+      if (viewportId) {
+        this._queueRestoration(viewportId);
       }
     };
 
-    // Listen for image rendered events
-    const imageRenderedHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportReady(element.id);
+    // STACK_NEW_IMAGE: scrolling within a stack viewport. With series-level
+    // hashing the stored entry doesn't depend on which slice is showing —
+    // restoration only needs to run if the viewport hasn't been restored yet.
+    const handleStackImageChange = (event: any) => {
+      const viewportId = this._extractViewportId(event);
+      if (!viewportId) return;
+      if (this.pendingRestorations.has(viewportId) && this._tryRestore(viewportId)) {
+        this.pendingRestorations.delete(viewportId);
       }
     };
 
-    // Listen for stack new image events
-    const stackNewImageHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportImageChange(element.id);
+    // Viewport-is-ready events: drain pending restorations.
+    // - IMAGE_RENDERED: stack viewports are renderable
+    // - VOLUME_VIEWPORT_NEW_VOLUME: volume viewport has mounted a new volume
+    //   actor and is ready for setViewPresentation()
+    const handleViewportReady = (event: any) => {
+      const viewportId = this._extractViewportId(event);
+      if (!viewportId) return;
+      if (this.pendingRestorations.has(viewportId) && this._tryRestore(viewportId)) {
+        this.pendingRestorations.delete(viewportId);
       }
     };
 
-    // Listen for volume loaded events (for CT/MRI/US)
-    const volumeLoadedHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportReady(element.id);
-      }
-    };
+    eventTarget.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, handleNewImageSet);
+    eventTarget.addEventListener(Enums.Events.STACK_NEW_IMAGE, handleStackImageChange);
+    eventTarget.addEventListener(Enums.Events.IMAGE_RENDERED, handleViewportReady);
+    eventTarget.addEventListener(Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME, handleViewportReady);
 
-    // Add event listeners
-    eventTarget.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler);
-    eventTarget.addEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler);
-    eventTarget.addEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler);
-    eventTarget.addEventListener(Enums.Events.VOLUME_LOADED, volumeLoadedHandler);
-    eventTarget.addEventListener(Enums.Events.VOLUME_RENDERED, volumeLoadedHandler);
-
-    // Store cleanup functions
     this.subscriptions.push(
-      () => eventTarget.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler),
-      () => eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler),
-      () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler),
-      () => eventTarget.removeEventListener(Enums.Events.VOLUME_LOADED, volumeLoadedHandler),
-      () => eventTarget.removeEventListener(Enums.Events.VOLUME_RENDERED, volumeLoadedHandler)
+      () => eventTarget.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, handleNewImageSet),
+      () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, handleStackImageChange),
+      () => eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, handleViewportReady),
+      () => eventTarget.removeEventListener(Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME, handleViewportReady)
     );
   }
 
-  private _handleViewportImageChange(viewportId: string): void {
-    // Store current state before image changes
-    this.storeRotationFlipState(viewportId);
-    
-    // Immediately trigger restoration for the new image
-    this.attemptViewportRestoration(viewportId);
+  private _extractViewportId(event: any): string | null {
+    return (
+      event?.detail?.viewportId ??
+      event?.detail?.viewport?.id ??
+      event?.detail?.element?.id ??
+      null
+    );
   }
 
-  private _handleViewportReady(viewportId: string): void {
-    if (!this.pendingRestorations.has(viewportId)) {
-      return;
-    }
-
-    // Small delay to ensure viewport is fully stabilized
+  // Retry the apply step after a short delay. Used when cs3d's actor isn't
+  // ready yet and the apply silently no-ops (verified via getCamera /
+  // getViewPresentation comparison). Stops automatically when the viewport
+  // is no longer in pendingRestorations — either because a retry succeeded
+  // or because the queue timeout fired (5s safety net).
+  private _scheduleApplyRetry(viewportId: string): void {
     setTimeout(() => {
-      if (this.pendingRestorations.has(viewportId)) {
-        this._restoreViewportStateWithRetry(viewportId, 0);
+      if (!this.pendingRestorations.has(viewportId)) return;
+      if (this._tryRestore(viewportId)) {
+        this.pendingRestorations.delete(viewportId);
       }
-    }, 10);
+      // On continued failure, _tryRestore schedules its own next retry.
+    }, 100);
   }
 
-  // Generate a simple hash based on the current image
+  private _queueRestoration(viewportId: string): void {
+    this.pendingRestorations.set(viewportId, Date.now());
+    setTimeout(() => {
+      const queuedAt = this.pendingRestorations.get(viewportId);
+      if (queuedAt !== undefined && Date.now() - queuedAt >= this.RESTORE_TIMEOUT_MS) {
+        this.pendingRestorations.delete(viewportId);
+        // Always broadcast so the visibility state machine in
+        // OHIFCornerstoneViewport.tsx unhides the viewport.
+        this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+          viewportId,
+          hash: null,
+          state: null,
+          timeout: true,
+        });
+      }
+    }, this.RESTORE_TIMEOUT_MS);
+  }
+
   generateViewportHash(viewport: any): string | null {
     try {
       let currentImageId = viewport.getCurrentImageId?.();
-
       if (!currentImageId && viewport.getImageIds) {
         const imageIds = viewport.getImageIds();
-        const currentIndex = viewport.getCurrentImageIdIndex?.() || 0;
-        currentImageId = imageIds[currentIndex] || imageIds[0];
+        const idx = viewport.getCurrentImageIdIndex?.() ?? 0;
+        currentImageId = imageIds[idx] ?? imageIds[0];
       }
+      if (!currentImageId) return null;
 
-      if (!currentImageId) {
-        console.log('❌ No current image ID found for hash generation');
-        return null;
-      }
+      const uids = this._extractUIDsFromImageId(currentImageId);
+      if (!uids?.studyUID || !uids?.seriesUID) return null;
 
-      console.log('🔍 Hash generation details:', {
-        currentImageId,
-        viewportType: viewport.constructor?.name,
-        currentIndex: viewport.getCurrentImageIdIndex?.() || 'unknown',
-      });
-
-      const imageUids = this._extractUIDsFromImageId(currentImageId);
-      console.log('🔍 Extracted UIDs:', imageUids);
-
-      if (!imageUids?.studyUID || !imageUids?.seriesUID || !imageUids?.instanceUID) {
-        console.log('❌ Missing required UIDs for hash generation');
-        return null;
-      }
-
-      const hash = `${imageUids.studyUID}-${imageUids.seriesUID}-${imageUids.instanceUID}`;
-      console.log('🔍 Generated hash:', hash);
-
-      return hash;
+      // Hash by study+series only. Rotation/flip are viewport-level state in
+      // cs3d 4.x (they apply to the entire series), not per-image. Hashing
+      // per-instance caused state to be stored under one slice's hash while
+      // restore keyed off a different slice's hash — e.g. flipping vertically
+      // on a volume-backed stack navigates to a different slice mid-command.
+      return `${uids.studyUID}-${uids.seriesUID}`;
     } catch (error) {
-      console.error('❌ Error in hash generation:', error);
+      console.error('Error generating viewport hash:', error);
       return null;
     }
   }
 
-  private _extractUIDsFromImageId(imageId: string): {
-    studyUID: string;
-    seriesUID: string;
-    instanceUID: string;
-    frameIndex?: number;
-  } | null {
+  private _extractUIDsFromImageId(
+    imageId: string
+  ): { studyUID: string; seriesUID: string; instanceUID: string } | null {
     try {
       const dicomWebMatch = imageId.match(
-        /studies\/([^\/]+)\/series\/([^\/]+)\/instances\/([^\/]+)(?:\/frames\/(\d+))?/
+        /studies\/([^\/]+)\/series\/([^\/]+)\/instances\/([^\/]+)/
       );
       if (dicomWebMatch) {
         return {
           studyUID: dicomWebMatch[1],
           seriesUID: dicomWebMatch[2],
           instanceUID: dicomWebMatch[3],
-          frameIndex: dicomWebMatch[4] ? parseInt(dicomWebMatch[4]) : 0,
         };
       }
 
@@ -179,12 +185,10 @@ class ViewportPersistenceService extends PubSubService {
         /studyUID=([^&]+).*?seriesUID=([^&]+).*?objectUID=([^&]+)/
       );
       if (wadouriMatch) {
-        const frameMatch = imageId.match(/frameNumber=(\d+)/);
         return {
           studyUID: wadouriMatch[1],
           seriesUID: wadouriMatch[2],
           instanceUID: wadouriMatch[3],
-          frameIndex: frameMatch ? parseInt(frameMatch[1]) - 1 : 0,
         };
       }
 
@@ -194,25 +198,33 @@ class ViewportPersistenceService extends PubSubService {
     }
   }
 
-  public storeRotationFlipState(viewportId: string): void {
-    const { cornerstoneViewportService } = this.servicesManager.services;
+  public storeRotationFlipState(
+    viewportId: string,
+    opts: { fromUserAction?: boolean } = {}
+  ): void {
+    const { fromUserAction = false } = opts;
 
+    // Only persist state from explicit user actions (rotate/flip commands).
+    // Event-driven callers (volume mount timers, displaySet transitions, etc.)
+    // capture cs3d's intrinsic camera state — which in cs3d 4.x includes
+    // acquisition-orientation rotations applied automatically for tilted
+    // series. Persisting that state would replay it as if it were user
+    // intent, causing pointless apply/verify cycles on revisit.
+    if (!fromUserAction) {
+      return;
+    }
+
+    const { cornerstoneViewportService } = this.servicesManager.services;
     try {
       const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
       if (!viewport) return;
 
       const hash = this.generateViewportHash(viewport);
       const state = this._extractRotationFlipState(viewport);
-
       if (!hash || !state) return;
 
+      this._setInSessionState(viewportId, hash, state);
       this._storeViewportState(hash, state);
-
-      console.log('📦 Storing state:', {
-        viewportId,
-        hash,
-        state: state.rotationFlip,
-      });
 
       this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_STORED, {
         viewportId,
@@ -224,233 +236,203 @@ class ViewportPersistenceService extends PubSubService {
     }
   }
 
+  private _isDefaultRotationFlip(state: RotationFlipState | undefined): boolean {
+    if (!state) return true;
+    const rotationIsDefault = state.rotation === undefined || state.rotation === 0;
+    return rotationIsDefault && !state.flipHorizontal && !state.flipVertical;
+  }
+
   public checkIfRestorationNeeded(viewportId: string): boolean {
     const { cornerstoneViewportService } = this.servicesManager.services;
-
     try {
       const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-      if (!viewport?.getCurrentImageId?.()) {
-        return false;
-      }
+      if (!viewport) return false;
 
       const hash = this.generateViewportHash(viewport);
-      if (!hash) {
-        return false;
-      }
+      if (!hash) return false;
 
-      const storedState = this._getViewportState(hash);
-      if (!storedState?.rotationFlip) {
-        return false;
-      }
+      const stored = this._getViewportState(hash);
+      if (!stored?.rotationFlip) return false;
 
-      // Check if current state matches stored state
-      const currentState = this._extractRotationFlipState(viewport);
-      return !this._statesMatch(currentState?.rotationFlip, storedState.rotationFlip);
-    } catch (error) {
+      const current = this._extractRotationFlipState(viewport);
+      return !this._statesMatch(current?.rotationFlip, stored.rotationFlip);
+    } catch {
       return false;
     }
   }
 
   public attemptViewportRestoration(viewportId: string): void {
-    // Add to pending restorations for event-based handling
-    this.pendingRestorations.set(viewportId, {
-      viewportId,
-      timestamp: Date.now()
-    });
-
-    // Try immediate restoration first
-    if (this._restoreViewportState(viewportId)) {
-      // Success - remove from pending and we're done
+    if (this._tryRestore(viewportId)) {
       this.pendingRestorations.delete(viewportId);
       return;
     }
-
-    // If immediate restoration fails, the viewport will be restored via events
-
-    // Fallback: remove from pending after timeout to prevent memory leaks
-    // Longer timeout for stack viewports that might be multi-frame (CT scans)
-    const timeout = 8000; // 8 second timeout for slow-loading images
-    setTimeout(() => {
-      if (this.pendingRestorations.has(viewportId)) {
-        this.pendingRestorations.delete(viewportId);
-      }
-    }, timeout);
+    // Viewport not ready yet — wait for the next viewport-ready event.
+    this._queueRestoration(viewportId);
   }
 
-  private _restoreViewportStateWithRetry(viewportId: string, retryCount: number): void {
-    const maxRetries = 5;
-    const retryDelay = 25; // Further reduced retry delay for faster restoration
-
-    if (this._restoreViewportState(viewportId)) {
-      // Success - restoration completed
-      this.pendingRestorations.delete(viewportId);
-      
-      if (this.isInitialLoad && retryCount === 0) {
-        // For initial load, add an additional restoration attempt
-        setTimeout(() => {
-          this._restoreViewportState(viewportId);
-        }, 800);
-      }
-      return;
-    }
-
-    // If restoration failed and we have retries left
-    if (retryCount < maxRetries) {
-      setTimeout(() => {
-        this._restoreViewportStateWithRetry(viewportId, retryCount + 1);
-      }, retryDelay);
-    }
-  }
-
-  private _restoreViewportState(viewportId: string): boolean {
+  // Returns true iff we either applied state or definitively determined
+  // there was nothing to apply (and thus broadcast the RESTORED event).
+  private _tryRestore(viewportId: string): boolean {
     const { cornerstoneViewportService } = this.servicesManager.services;
-
     try {
       const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-      if (!viewport?.getCurrentImageId?.()) {
-        return false;
-      }
-
-      // Wait for image data to be available before restoration (fixes CT/MRI issues)
-      const imageData = viewport.getImageData?.();
-      if (!imageData) {
-        return false;
-      }
+      if (!viewport) return false;
 
       const hash = this.generateViewportHash(viewport);
       if (!hash) {
-        // Even if we can't generate hash, broadcast completion to clear black screen with same delay
-        setTimeout(() => {
-          this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-            viewportId,
-            hash: null,
-            state: null,
-            noHash: true,
-          });
-        }, 200);
+        // Viewport not ready (no current imageId yet). Try again later.
         return false;
       }
 
-      const storedState = this._getViewportState(hash);
-      if (!storedState?.rotationFlip) {
+      // In-session state (per-viewport) takes precedence over localStorage
+      // (per-series). This is what keeps MPR / multi-viewport same-series
+      // setups independent within a session: rotating viewport A stores
+      // under A's in-session entry; viewport B's in-session entry for the
+      // same series is unaffected.
+      const inSession = this._getInSessionState(viewportId, hash);
+      const stored = inSession?.rotationFlip ? null : this._getViewportState(hash);
+      const partial =
+        inSession?.rotationFlip || stored?.rotationFlip ? null : this._findPartialMatch(hash);
+      const target = inSession?.rotationFlip ?? stored?.rotationFlip ?? partial;
 
-        // Try to find a close match
-        const allStoredKeys = Object.keys(localStorage).filter(key =>
-          key.startsWith(this.STORAGE_KEY_PREFIX)
-        );
-        
-        const partialMatches = allStoredKeys.filter(key => {
-          const storedHash = key.replace(this.STORAGE_KEY_PREFIX, '');
-          const hashParts = hash.split('-');
-          const storedParts = storedHash.split('-');
-
-          // Check if study and series match (ignore instance UID differences)
-          return hashParts[0] === storedParts[0] && hashParts[1] === storedParts[1];
-        });
-
-        if (partialMatches.length > 0) {
-
-          // Use the most recent partial match
-          let mostRecentKey = partialMatches[0];
-          let mostRecentTime = 0;
-
-          for (const key of partialMatches) {
-            try {
-              const state = JSON.parse(localStorage.getItem(key) || '{}');
-              if (state.timestamp > mostRecentTime) {
-                mostRecentTime = state.timestamp;
-                mostRecentKey = key;
-              }
-            } catch (e) {
-              // Silent error handling
-            }
-          }
-
-          const fallbackState = localStorage.getItem(mostRecentKey);
-          if (fallbackState) {
-            const parsedState = JSON.parse(fallbackState);
-
-            // Update the stored state with the current hash for future use
-            this._storeViewportState(hash, parsedState);
-
-            this._applyViewportState(viewport, parsedState);
-
-            // Wait for the application to complete before broadcasting
-            setTimeout(() => {
-              this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-                viewportId,
-                hash,
-                state: parsedState,
-              });
-            }, 200); // Balanced delay to prevent flicker while staying responsive
-
-            return true;
-          }
-        }
-
-        // Store default state for this image
-        const defaultState = this._extractRotationFlipState(viewport);
-        if (defaultState) {
-          this._storeViewportState(hash, defaultState);
-          
-          // Apply the default state (even though it's the same) to ensure uniformity
-          this._applyViewportState(viewport, defaultState);
-          
-          // Wait for the application to complete before broadcasting
-          setTimeout(() => {
-            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-              viewportId,
-              hash,
-              state: defaultState,
-              wasDefault: true,
-            });
-          }, 200); // Same delay as transformed images for uniformity
-        } else {
-          // No stored state found, broadcast completion to clear black screen
-          setTimeout(() => {
-            this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-              viewportId,
-              hash,
-              state: null,
-              noStoredState: true,
-            });
-          }, 200); // Same delay for uniformity
-        }
-        
-        return false;
-      }
-
-      // Apply stored state regardless of current state
-      this._applyViewportState(viewport, storedState);
-
-      // Wait for the application to complete before broadcasting
-      setTimeout(() => {
+      if (!target || this._isDefaultRotationFlip(target)) {
+        // Nothing to restore (or stored state is the default unrotated /
+        // unflipped state, which is what a fresh viewport already has).
+        // Broadcast immediately so visibility unhides — no apply, no retries.
         this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
           viewportId,
           hash,
-          state: storedState,
+          state: null,
+          noStoredState: true,
         });
-      }, 200); // Balanced delay to prevent flicker while staying responsive
+        return true;
+      }
 
+      if (
+        typeof viewport.setViewPresentation !== 'function' ||
+        typeof viewport.getViewPresentation !== 'function'
+      ) {
+        // setViewPresentation should always exist in cs3d 4.x for both stack
+        // and volume viewports. If missing, we can't safely restore.
+        return false;
+      }
+
+      // Apply flips via setCamera. This is the same path the user-facing
+      // flipViewport commands use. cs3d 4.x's flip() silently early-returns
+      // when getDefaultImageData() is null — which happens on the first
+      // IMAGE_RENDERED tick before the volume actor's mapper input is ready.
+      // We verify the apply actually took effect below; if not, we schedule
+      // a retry rather than relying on subsequent events firing (they often
+      // don't on initial load).
+      if (target.flipHorizontal !== undefined || target.flipVertical !== undefined) {
+        const cameraUpdates: any = {};
+        if (target.flipHorizontal !== undefined) {
+          cameraUpdates.flipHorizontal = target.flipHorizontal;
+        }
+        if (target.flipVertical !== undefined) {
+          cameraUpdates.flipVertical = target.flipVertical;
+        }
+        viewport.setCamera?.(cameraUpdates);
+
+        const cameraAfter = viewport.getCamera?.();
+        // Normalize undefined → false. cs3d's getCamera() doesn't always
+        // populate flip fields on freshly-mounted viewports, but undefined
+        // is semantically equivalent to "no flip" (false).
+        const normalizeFlip = (v: any) => v === true;
+        const flipsApplied =
+          (target.flipHorizontal === undefined ||
+            normalizeFlip(cameraAfter?.flipHorizontal) ===
+              normalizeFlip(target.flipHorizontal)) &&
+          (target.flipVertical === undefined ||
+            normalizeFlip(cameraAfter?.flipVertical) ===
+              normalizeFlip(target.flipVertical));
+        if (!flipsApplied) {
+          this._scheduleApplyRetry(viewportId);
+          return false;
+        }
+      }
+
+      // Apply rotation via setViewPresentation. Spread current presentation so
+      // unspecified fields (displayArea, zoom, pan, flipH, flipV) keep their
+      // values — passing only rotation triggers setDisplayArea(undefined) and
+      // can wipe other state on multi-image stacks.
+      if (target.rotation !== undefined) {
+        const nextPresentation: any = {
+          ...viewport.getViewPresentation(),
+          rotation: target.rotation,
+        };
+        viewport.setViewPresentation(nextPresentation);
+
+        const presentationAfter = viewport.getViewPresentation?.();
+        if (
+          presentationAfter?.rotation !== undefined &&
+          target.rotation !== presentationAfter.rotation
+        ) {
+          this._scheduleApplyRetry(viewportId);
+          return false;
+        }
+      }
+
+      viewport.render?.();
+
+      // Remember the just-applied state in-session so this viewport keeps
+      // its independent rotation/flip across displaySet navigation within
+      // the session, regardless of what localStorage holds for the series.
+      this._setInSessionState(viewportId, hash, {
+        rotationFlip: target,
+        timestamp: Date.now(),
+      });
+
+      // Promote a partial match into a direct entry so future loads are exact.
+      if (!stored) {
+        this._storeViewportState(hash, { rotationFlip: target, timestamp: Date.now() });
+      }
+
+      this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
+        viewportId,
+        hash,
+        state: { rotationFlip: target, timestamp: Date.now() },
+      });
       return true;
     } catch (error) {
       console.error('Error restoring viewport state:', error);
-      // Even on error, broadcast completion to clear black screen with same delay
-      setTimeout(() => {
-        this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
-          viewportId,
-          hash: null,
-          state: null,
-          error: true,
-        });
-      }, 300);
       return false;
     }
   }
 
-  private _statesMatch(current: any, stored: any): boolean {
-    if (!current || !stored) return false;
+  // Look for legacy per-instance entries stored under `<study>-<series>-<instance>`
+  // before we switched to series-level hashing. Used as a fallback so users
+  // don't lose previously-persisted rotation/flip after the format change.
+  private _findPartialMatch(hash: string): RotationFlipState | null {
+    try {
+      const legacyPrefix = `${this.STORAGE_KEY_PREFIX}${hash}-`;
 
+      let mostRecent: { state: RotationFlipState; timestamp: number } | null = null;
+      for (const key of Object.keys(localStorage)) {
+        if (!key.startsWith(legacyPrefix)) continue;
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || '{}') as Partial<StoredState>;
+          if (parsed?.rotationFlip) {
+            const ts = parsed.timestamp ?? 0;
+            if (!mostRecent || ts > mostRecent.timestamp) {
+              mostRecent = { state: parsed.rotationFlip, timestamp: ts };
+            }
+          }
+        } catch {
+          // ignore malformed entry
+        }
+      }
+      return mostRecent?.state ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private _statesMatch(
+    current: RotationFlipState | undefined,
+    stored: RotationFlipState
+  ): boolean {
+    if (!current || !stored) return false;
     return (
       current.rotation === stored.rotation &&
       current.flipHorizontal === stored.flipHorizontal &&
@@ -458,368 +440,113 @@ class ViewportPersistenceService extends PubSubService {
     );
   }
 
-  private _extractRotationFlipState(viewport: any): any | null {
+  private _extractRotationFlipState(viewport: any): StoredState | null {
     try {
-      const state: any = {
-        viewportId: viewport.id,
-        timestamp: Date.now(),
-        type: 'rotation_flip_only',
-      };
+      if (typeof viewport.getViewPresentation !== 'function') return null;
+      const presentation = viewport.getViewPresentation();
 
-      const rotationFlipState: any = {};
-
-      // For volume viewports (CT/MRI), check camera first
-      if (viewport.getCamera) {
-        const camera = viewport.getCamera();
-
-        if (camera.flipHorizontal !== undefined) {
-          rotationFlipState.flipHorizontal = camera.flipHorizontal;
-        }
-
-        if (camera.flipVertical !== undefined) {
-          rotationFlipState.flipVertical = camera.flipVertical;
-        }
-
-        // Some volume viewports store rotation in camera
-        if (camera.rotation !== undefined) {
-          rotationFlipState.rotation = camera.rotation;
-        }
+      const rotationFlip: RotationFlipState = {};
+      if (presentation?.rotation !== undefined) rotationFlip.rotation = presentation.rotation;
+      if (presentation?.flipHorizontal !== undefined) {
+        rotationFlip.flipHorizontal = presentation.flipHorizontal;
+      }
+      if (presentation?.flipVertical !== undefined) {
+        rotationFlip.flipVertical = presentation.flipVertical;
       }
 
-      // For stack viewports and as fallback, check view presentation
-      if (viewport.getViewPresentation) {
-        const presentation = viewport.getViewPresentation();
-        if (presentation?.rotation !== undefined) {
-          rotationFlipState.rotation = presentation.rotation;
-        }
-
-        // Some viewports store flips in presentation too
-        if (presentation?.flipHorizontal !== undefined) {
-          rotationFlipState.flipHorizontal = presentation.flipHorizontal;
-        }
-        if (presentation?.flipVertical !== undefined) {
-          rotationFlipState.flipVertical = presentation.flipVertical;
-        }
-      }
-
-      // Check properties as another fallback
-      if (viewport.getProperties) {
-        const properties = viewport.getProperties();
-        if (properties?.rotation !== undefined && rotationFlipState.rotation === undefined) {
-          rotationFlipState.rotation = properties.rotation;
-        }
-        if (
-          properties?.flipHorizontal !== undefined &&
-          rotationFlipState.flipHorizontal === undefined
-        ) {
-          rotationFlipState.flipHorizontal = properties.flipHorizontal;
-        }
-        if (
-          properties?.flipVertical !== undefined &&
-          rotationFlipState.flipVertical === undefined
-        ) {
-          rotationFlipState.flipVertical = properties.flipVertical;
-        }
-      }
-
-      console.log('🔍 Extracting state from viewport:', {
-        viewportType: viewport.constructor?.name,
-        extractedState: rotationFlipState,
-        viewportId: viewport.id,
-      });
-
-      if (Object.keys(rotationFlipState).length > 0) {
-        state.rotationFlip = rotationFlipState;
-        return state;
-      }
-
-      return null;
+      if (Object.keys(rotationFlip).length === 0) return null;
+      return { rotationFlip, timestamp: Date.now() };
     } catch (error) {
       console.error('Error extracting rotation/flip state:', error);
       return null;
     }
   }
 
-  private _storeViewportState(hash: string, viewportState: any): void {
+  private _getInSessionState(viewportId: string, hash: string): StoredState | null {
+    return this.viewportStates.get(viewportId)?.get(hash) ?? null;
+  }
+
+  private _setInSessionState(viewportId: string, hash: string, state: StoredState): void {
+    let viewportMap = this.viewportStates.get(viewportId);
+    if (!viewportMap) {
+      viewportMap = new Map();
+      this.viewportStates.set(viewportId, viewportMap);
+    }
+    viewportMap.set(hash, state);
+  }
+
+  private _clearInSessionState(viewportId: string, hash: string): void {
+    this.viewportStates.get(viewportId)?.delete(hash);
+  }
+
+  private _storeViewportState(hash: string, state: StoredState): void {
     try {
-      const storageKey = `${this.STORAGE_KEY_PREFIX}${hash}`;
-      localStorage.setItem(storageKey, JSON.stringify(viewportState));
+      localStorage.setItem(`${this.STORAGE_KEY_PREFIX}${hash}`, JSON.stringify(state));
     } catch (error) {
       console.error('Error storing to localStorage:', error);
     }
   }
 
-  private _getViewportState(hash: string): any | null {
+  private _getViewportState(hash: string): StoredState | null {
     try {
-      const storageKey = `${this.STORAGE_KEY_PREFIX}${hash}`;
-      const storedState = localStorage.getItem(storageKey);
-      return storedState ? JSON.parse(storedState) : null;
+      const raw = localStorage.getItem(`${this.STORAGE_KEY_PREFIX}${hash}`);
+      return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
     }
   }
 
-  private _applyViewportState(viewport: any, state: any): void {
-    try {
-      if (!state.rotationFlip) return;
-
-      console.log('🔧 Applying state to viewport:', {
-        viewportType: viewport.constructor?.name,
-        targetState: state.rotationFlip,
-        viewportId: viewport.id,
-        imageIds: viewport.getImageIds?.()?.length || 'unknown',
-        currentImageIndex: viewport.getCurrentImageIdIndex?.() || 'unknown',
-      });
-
-      // Special handling for stack viewports with multiple images (like CT stacks)
-      const isStackViewport = viewport.constructor?.name === 'StackViewport';
-      const imageIds = viewport.getImageIds?.() || [];
-      const isMultiImageStack = isStackViewport && imageIds.length > 1;
-
-      if (isMultiImageStack) {
-        console.log('📚 Detected multi-image stack (CT/MRI), using stack-specific application');
-        this._applyStackTransformations(viewport, state.rotationFlip);
-      } else {
-        console.log('🖼️ Single image or volume viewport, using standard application');
-        // Ensure the viewport is ready before applying transformations
-        try {
-          // Force a render first to ensure the viewport is in a good state
-          if (viewport.render) {
-            viewport.render();
-          }
-
-          // Small delay to let the render complete, then apply transformations
-          setTimeout(() => {
-            this._applyTransformations(viewport, state.rotationFlip);
-          }, 50);
-        } catch (error) {
-          console.error('Error in viewport preparation:', error);
-          // Fallback: try applying immediately
-          this._applyTransformations(viewport, state.rotationFlip);
-        }
-      }
-    } catch (error) {
-      console.error('Error applying viewport state:', error);
-    }
-  }
-
-  private _applyStackTransformations(viewport: any, rotationFlipState: any): void {
-    try {
-      console.log('🔄 Applying transformations to stack viewport...');
-
-      // For stack viewports, we need to be more careful about timing
-      // and ensure transformations apply to the entire stack, not per-image
-
-      let rotationApplied = false;
-      let flipsApplied = false;
-
-      // Method 1: Try setViewPresentation first (most reliable for stacks)
-      if (rotationFlipState.rotation !== undefined && viewport.setViewPresentation) {
-        try {
-          viewport.setViewPresentation({
-            rotation: rotationFlipState.rotation,
-          });
-          console.log(
-            '✅ Applied stack rotation via setViewPresentation:',
-            rotationFlipState.rotation
-          );
-          rotationApplied = true;
-        } catch (error) {
-          console.log('❌ Failed stack setViewPresentation rotation:', error.message);
-        }
-      }
-
-      // Method 2: Try setCamera for flips and fallback rotation
-      if (viewport.setCamera) {
-        const cameraUpdates: any = {};
-
-        if (rotationFlipState.flipHorizontal !== undefined) {
-          cameraUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
-        }
-
-        if (rotationFlipState.flipVertical !== undefined) {
-          cameraUpdates.flipVertical = rotationFlipState.flipVertical;
-        }
-
-        // Add rotation to camera if setViewPresentation failed
-        if (!rotationApplied && rotationFlipState.rotation !== undefined) {
-          cameraUpdates.rotation = rotationFlipState.rotation;
-        }
-
-        if (Object.keys(cameraUpdates).length > 0) {
-          try {
-            viewport.setCamera(cameraUpdates);
-            console.log('✅ Applied stack camera updates:', cameraUpdates);
-            flipsApplied = true;
-            if (!rotationApplied && cameraUpdates.rotation !== undefined) {
-              rotationApplied = true;
-            }
-          } catch (error) {
-            console.log('❌ Failed stack setCamera:', error.message);
-          }
-        }
-      }
-
-      // Force a full re-render to ensure consistency across all images in stack
-      setTimeout(() => {
-        if (viewport.render) {
-          viewport.render();
-        }
-
-        // Additional render after a brief delay to handle any async updates
-        setTimeout(() => {
-          if (viewport.render) {
-            viewport.render();
-          }
-        }, 100);
-      }, 50);
-
-      if (!rotationApplied && !flipsApplied) {
-        console.log(
-          '⚠️ Stack transformation application failed for viewport type:',
-          viewport.constructor?.name
-        );
-      } else {
-        console.log('✅ Stack transformations completed successfully');
-      }
-    } catch (error) {
-      console.error('Error applying stack transformations:', error);
-    }
-  }
-
-  private _applyTransformations(viewport: any, rotationFlipState: any): void {
-    try {
-      let rotationApplied = false;
-      let flipsApplied = false;
-
-      // Try applying rotation via different methods based on viewport type
-      if (rotationFlipState.rotation !== undefined) {
-        // Method 1: setViewPresentation (stack viewports)
-        if (viewport.setViewPresentation) {
-          try {
-            viewport.setViewPresentation({
-              rotation: rotationFlipState.rotation,
-            });
-            console.log('✅ Applied rotation via setViewPresentation:', rotationFlipState.rotation);
-            rotationApplied = true;
-          } catch (error) {
-            console.log('❌ Failed setViewPresentation:', error.message);
-          }
-        }
-
-        // Method 2: setCamera (volume viewports)
-        if (!rotationApplied && viewport.setCamera) {
-          try {
-            viewport.setCamera({ rotation: rotationFlipState.rotation });
-            console.log('✅ Applied rotation via setCamera:', rotationFlipState.rotation);
-            rotationApplied = true;
-          } catch (error) {
-            console.log('❌ Failed setCamera rotation:', error.message);
-          }
-        }
-
-        // Method 3: setProperties (fallback)
-        if (!rotationApplied && viewport.setProperties) {
-          try {
-            viewport.setProperties({ rotation: rotationFlipState.rotation });
-            console.log('✅ Applied rotation via setProperties:', rotationFlipState.rotation);
-            rotationApplied = true;
-          } catch (error) {
-            console.log('❌ Failed setProperties rotation:', error.message);
-          }
-        }
-      }
-
-      // Apply flips via camera (most common method)
-      if (
-        viewport.setCamera &&
-        (rotationFlipState.flipHorizontal !== undefined ||
-          rotationFlipState.flipVertical !== undefined)
-      ) {
-        const cameraUpdates: any = {};
-
-        if (rotationFlipState.flipHorizontal !== undefined) {
-          cameraUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
-        }
-
-        if (rotationFlipState.flipVertical !== undefined) {
-          cameraUpdates.flipVertical = rotationFlipState.flipVertical;
-        }
-
-        try {
-          viewport.setCamera(cameraUpdates);
-          console.log('✅ Applied flips via setCamera:', cameraUpdates);
-          flipsApplied = true;
-        } catch (error) {
-          console.log('❌ Failed setCamera flips:', error.message);
-        }
-      }
-
-      // Fallback: try setViewPresentation for flips
-      if (
-        !flipsApplied &&
-        viewport.setViewPresentation &&
-        (rotationFlipState.flipHorizontal !== undefined ||
-          rotationFlipState.flipVertical !== undefined)
-      ) {
-        try {
-          const presentationUpdates: any = {};
-          if (rotationFlipState.flipHorizontal !== undefined) {
-            presentationUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
-          }
-          if (rotationFlipState.flipVertical !== undefined) {
-            presentationUpdates.flipVertical = rotationFlipState.flipVertical;
-          }
-          viewport.setViewPresentation(presentationUpdates);
-          console.log('✅ Applied flips via setViewPresentation:', presentationUpdates);
-          flipsApplied = true;
-        } catch (error) {
-          console.log('❌ Failed setViewPresentation flips:', error.message);
-        }
-      }
-
-      // Final render after all transformations
-      setTimeout(() => {
-        if (viewport.render) {
-          viewport.render();
-        }
-      }, 10);
-
-      if (!rotationApplied && !flipsApplied) {
-        console.log(
-          '⚠️ No state application method succeeded for viewport type:',
-          viewport.constructor?.name
-        );
-      }
-    } catch (error) {
-      console.error('Error applying transformations:', error);
-    }
-  }
-
   cleanupInvalidStates(): void {
     try {
-      const keys = Object.keys(localStorage).filter(key => key.startsWith(this.STORAGE_KEY_PREFIX));
+      const keys = Object.keys(localStorage).filter(key =>
+        key.startsWith(this.STORAGE_KEY_PREFIX)
+      );
       keys.forEach(key => {
         try {
-          const storedState = JSON.parse(localStorage.getItem(key) || '{}');
-          // Remove old format states
-          if (storedState.camera && !storedState.type) {
+          const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+          if (!parsed?.rotationFlip) {
             localStorage.removeItem(key);
           }
-        } catch (error) {
+        } catch {
           localStorage.removeItem(key);
         }
       });
-    } catch (error) {
-      // Silent error handling
+    } catch {
+      // ignore
     }
   }
 
   clearViewportState(hash: string): void {
     try {
       localStorage.removeItem(`${this.STORAGE_KEY_PREFIX}${hash}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  // Clear every stored entry for the same study+series as the viewport's
+  // current image. Called from `resetViewport` so that "reset" actually means
+  // "back to default" — including across page reloads. Wipes both the new
+  // series-level entry and any legacy per-instance entries.
+  clearSeriesStateForViewport(viewportId: string): void {
+    const { cornerstoneViewportService } = this.servicesManager.services;
+    try {
+      const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+      if (!viewport) return;
+
+      const hash = this.generateViewportHash(viewport);
+      if (!hash) return;
+
+      this._clearInSessionState(viewportId, hash);
+
+      const directKey = `${this.STORAGE_KEY_PREFIX}${hash}`;
+      const legacyPrefix = `${this.STORAGE_KEY_PREFIX}${hash}-`;
+
+      Object.keys(localStorage)
+        .filter(key => key === directKey || key.startsWith(legacyPrefix))
+        .forEach(key => localStorage.removeItem(key));
     } catch (error) {
-      // Silent error handling
+      console.error('Error clearing series state:', error);
     }
   }
 
@@ -828,45 +555,41 @@ class ViewportPersistenceService extends PubSubService {
       Object.keys(localStorage)
         .filter(key => key.startsWith(this.STORAGE_KEY_PREFIX))
         .forEach(key => localStorage.removeItem(key));
-    } catch (error) {
-      // Silent error handling
+    } catch {
+      // ignore
     }
   }
 
-  getAllViewportStates(): Record<string, any> {
-    const states: Record<string, any> = {};
+  getAllViewportStates(): Record<string, StoredState> {
+    const states: Record<string, StoredState> = {};
     try {
       Object.keys(localStorage)
         .filter(key => key.startsWith(this.STORAGE_KEY_PREFIX))
         .forEach(key => {
           const hash = key.replace(this.STORAGE_KEY_PREFIX, '');
-          const state = JSON.parse(localStorage.getItem(key) || '{}');
-          states[hash] = state;
+          try {
+            states[hash] = JSON.parse(localStorage.getItem(key) || '{}');
+          } catch {
+            // ignore malformed entry
+          }
         });
-    } catch (error) {
-      // Silent error handling
+    } catch {
+      // ignore
     }
     return states;
   }
 
   cleanup(): void {
-    this.subscriptions.forEach(unsubscribe => {
+    this.subscriptions.forEach(unsub => {
       try {
-        unsubscribe();
-      } catch (error) {
-        // Silent error handling
+        unsub();
+      } catch {
+        // ignore
       }
     });
     this.subscriptions = [];
-
-    if (this.initialLoadTimer) {
-      clearTimeout(this.initialLoadTimer);
-      this.initialLoadTimer = null;
-    }
-
-    // Clear pending restorations
     this.pendingRestorations.clear();
-
+    this.viewportStates.clear();
     this.isInitialized = false;
   }
 

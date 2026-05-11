@@ -984,7 +984,9 @@ function commandsModule({
         if (servicesManager?.services?.viewportPersistenceService && enabledElement.viewport?.id) {
           const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
           if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
-            viewportPersistenceService.storeRotationFlipState(enabledElement.viewport.id);
+            viewportPersistenceService.storeRotationFlipState(enabledElement.viewport.id, {
+              fromUserAction: true,
+            });
           }
         }
       } catch (error) {
@@ -1007,7 +1009,9 @@ function commandsModule({
         if (servicesManager?.services?.viewportPersistenceService && viewport?.id) {
           const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
           if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
-            viewportPersistenceService.storeRotationFlipState(viewport.id);
+            viewportPersistenceService.storeRotationFlipState(viewport.id, {
+              fromUserAction: true,
+            });
           }
         }
       } catch (error) {
@@ -1029,7 +1033,9 @@ function commandsModule({
         if (servicesManager?.services?.viewportPersistenceService && viewport?.id) {
           const viewportPersistenceService = servicesManager.services.viewportPersistenceService;
           if (typeof viewportPersistenceService.storeRotationFlipState === 'function') {
-            viewportPersistenceService.storeRotationFlipState(viewport.id);
+            viewportPersistenceService.storeRotationFlipState(viewport.id, {
+              fromUserAction: true,
+            });
           }
         }
       } catch (error) {
@@ -1067,6 +1073,12 @@ function commandsModule({
       viewport.resetCamera();
 
       viewport.render();
+
+      // Clear persisted rotation/flip for this series so reset survives reload.
+      const viewportPersistenceService = servicesManager?.services?.viewportPersistenceService;
+      if (viewportPersistenceService && viewport?.id) {
+        viewportPersistenceService.clearSeriesStateForViewport?.(viewport.id);
+      }
     },
     scaleViewport: ({ direction }) => {
       const enabledElement = _getActiveViewportEnabledElement();
@@ -1967,7 +1979,32 @@ function commandsModule({
         },
       };
 
+      // Preserve user-applied rotation/flip across setDisplayArea. cs3d's
+      // setDisplayArea calls setCamera(this.fitToCanvasCamera) internally,
+      // which resets the camera and wipes any flip / rotation the user has
+      // applied (or that ViewportPersistenceService just restored).
+      const cameraBefore = viewport.getCamera();
+      const presentationBefore = viewport.getViewPresentation?.();
+      const savedFlipH = cameraBefore?.flipHorizontal ?? false;
+      const savedFlipV = cameraBefore?.flipVertical ?? false;
+      const savedRotation = presentationBefore?.rotation ?? 0;
+
       viewport.setDisplayArea(displayArea);
+
+      const cameraAfter = viewport.getCamera();
+      if ((cameraAfter?.flipHorizontal ?? false) !== savedFlipH) {
+        viewport.setCamera({ flipHorizontal: savedFlipH });
+      }
+      if ((cameraAfter?.flipVertical ?? false) !== savedFlipV) {
+        viewport.setCamera({ flipVertical: savedFlipV });
+      }
+      if (savedRotation !== 0 && viewport.getViewPresentation && viewport.setViewPresentation) {
+        const presentationAfter = viewport.getViewPresentation();
+        if (presentationAfter.rotation !== savedRotation) {
+          viewport.setViewPresentation({ ...presentationAfter, rotation: savedRotation });
+        }
+      }
+
       viewport.render();
       return true;
     },
