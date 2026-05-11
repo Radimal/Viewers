@@ -76,7 +76,9 @@ function App({
     };
 
     run();
-    cacheManager.startVersionChecking();
+    // Auto-update polling disabled: force-reload on version change disrupted
+    // in-progress measurements. Users pick up new versions on next refresh.
+    // cacheManager.startVersionChecking();
     // Make cache manager globally accessible for debugging
     if (typeof window !== 'undefined') {
       window.cacheManager = cacheManager;
