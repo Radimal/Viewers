@@ -1863,92 +1863,103 @@ function commandsModule({
         return false;
       }
 
-      // Determine if image is MONOCHROME1 (inverted: black = high values)
+      // MONOCHROME1 is inverted: black = high pixel values.
       const isInverted = image.photometricInterpretation === 'MONOCHROME1' || image.invert;
 
-      // Calculate threshold: 5% of the value range
       const minVal = image.minPixelValue ?? 0;
       const maxVal = image.maxPixelValue ?? 255;
       const range = maxVal - minVal;
       const threshold = isInverted
-        ? maxVal - range * 0.05  // For MONOCHROME1, "black" is near maxVal
-        : minVal + range * 0.05; // For MONOCHROME2, "black" is near minVal
+        ? maxVal - range * 0.05
+        : minVal + range * 0.05;
 
       const isBackground = (val: number) =>
         isInverted ? val >= threshold : val <= threshold;
 
-      const SAMPLE_STEP = 4; // Sample every 4th pixel for performance
-      const MIN_BORDER_FRACTION = 0.02; // Minimum 2% of dimension to count as border
+      const SAMPLE_STEP = 4;
+      const MIN_BORDER_FRACTION = 0.02;
+      // Require at least this fraction of sampled pixels per row/col to clear
+      // the threshold for the row/col to count as content. Lone noisy pixels
+      // (sensor noise, hot pixels) on an otherwise-black row would otherwise
+      // promote the whole row to "content" and bloat the bbox.
+      const MIN_CONTENT_PIXEL_FRACTION = 0.05;
 
-      // Scan from top
-      let top = 0;
-      for (let r = 0; r < rows; r++) {
-        let hasContent = false;
+      // RGB DICOMs (often JPEG-converted) store interleaved bytes
+      // [R0,G0,B0, R1,G1,B1, ...]. Read those as grayscale and we end up
+      // sampling scrambled channels at scrambled positions — effectively
+      // noise. Detect by buffer length and read max(R,G,B) per pixel.
+      const stride = pixelData.length >= rows * columns * 3 ? 3 : 1;
+
+      const pixelLuma = (r: number, c: number) => {
+        const base = (r * columns + c) * stride;
+        if (stride === 1) {
+          return pixelData[base];
+        }
+        const v0 = pixelData[base];
+        const v1 = pixelData[base + 1];
+        const v2 = pixelData[base + 2];
+        return v0 > v1 ? (v0 > v2 ? v0 : v2) : (v1 > v2 ? v1 : v2);
+      };
+
+      const isContentRow = (r: number) => {
+        let count = 0;
+        let sampled = 0;
         for (let c = 0; c < columns; c += SAMPLE_STEP) {
-          if (!isBackground(pixelData[r * columns + c])) {
-            hasContent = true;
-            break;
+          sampled++;
+          if (!isBackground(pixelLuma(r, c))) {
+            count++;
           }
         }
-        if (hasContent) {
+        return count >= sampled * MIN_CONTENT_PIXEL_FRACTION;
+      };
+
+      const isContentCol = (c: number, rTop: number, rBottom: number) => {
+        let count = 0;
+        let sampled = 0;
+        for (let r = rTop; r <= rBottom; r += SAMPLE_STEP) {
+          sampled++;
+          if (!isBackground(pixelLuma(r, c))) {
+            count++;
+          }
+        }
+        return count >= sampled * MIN_CONTENT_PIXEL_FRACTION;
+      };
+
+      let top = 0;
+      for (let r = 0; r < rows; r++) {
+        if (isContentRow(r)) {
           top = r;
           break;
         }
         if (r === rows - 1) {
-          // Entire image is background — don't trim
           return true;
         }
       }
 
-      // Scan from bottom
       let bottom = rows - 1;
       for (let r = rows - 1; r >= top; r--) {
-        let hasContent = false;
-        for (let c = 0; c < columns; c += SAMPLE_STEP) {
-          if (!isBackground(pixelData[r * columns + c])) {
-            hasContent = true;
-            break;
-          }
-        }
-        if (hasContent) {
+        if (isContentRow(r)) {
           bottom = r;
           break;
         }
       }
 
-      // Scan from left
       let left = 0;
       for (let c = 0; c < columns; c++) {
-        let hasContent = false;
-        for (let r = top; r <= bottom; r += SAMPLE_STEP) {
-          if (!isBackground(pixelData[r * columns + c])) {
-            hasContent = true;
-            break;
-          }
-        }
-        if (hasContent) {
+        if (isContentCol(c, top, bottom)) {
           left = c;
           break;
         }
       }
 
-      // Scan from right
       let right = columns - 1;
       for (let c = columns - 1; c >= left; c--) {
-        let hasContent = false;
-        for (let r = top; r <= bottom; r += SAMPLE_STEP) {
-          if (!isBackground(pixelData[r * columns + c])) {
-            hasContent = true;
-            break;
-          }
-        }
-        if (hasContent) {
+        if (isContentCol(c, top, bottom)) {
           right = c;
           break;
         }
       }
 
-      // Check if borders are significant enough to trim
       const topBorder = top / rows;
       const bottomBorder = (rows - 1 - bottom) / rows;
       const leftBorder = left / columns;
@@ -1960,11 +1971,9 @@ function commandsModule({
         leftBorder < MIN_BORDER_FRACTION &&
         rightBorder < MIN_BORDER_FRACTION
       ) {
-        // No significant borders detected
         return true;
       }
 
-      // Add small padding (1% of content region) to avoid clipping
       const padRows = Math.round(rows * 0.01);
       const padCols = Math.round(columns * 0.01);
       top = Math.max(0, top - padRows);
@@ -1972,13 +1981,13 @@ function commandsModule({
       left = Math.max(0, left - padCols);
       right = Math.min(columns - 1, right + padCols);
 
-      // Compute display area fractions
       const contentWidth = (right - left + 1) / columns;
       const contentHeight = (bottom - top + 1) / rows;
       const centerX = (left + right) / 2 / columns;
       const centerY = (top + bottom) / 2 / rows;
 
       const displayArea = {
+        storeAsInitialCamera: true,
         imageArea: [contentWidth, contentHeight] as [number, number],
         imageCanvasPoint: {
           imagePoint: [centerX, centerY] as [number, number],
