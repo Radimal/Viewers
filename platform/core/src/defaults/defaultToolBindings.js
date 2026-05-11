@@ -9,7 +9,7 @@ const defaultToolBindings = [
     label: 'Left Mouse Button',
     mouseButton: 'Primary',
     isEditable: true,
-    availableTools: ['WindowLevel', 'Pan', 'Zoom'],
+    availableTools: ['WindowLevel', 'Pan', 'Zoom', 'Length'],
   },
   {
     id: 'rightMouseButton',
@@ -18,7 +18,7 @@ const defaultToolBindings = [
     label: 'Right Mouse Button',
     mouseButton: 'Secondary',
     isEditable: true,
-    availableTools: ['WindowLevel', 'Pan', 'Zoom'],
+    availableTools: ['WindowLevel', 'Pan', 'Zoom', 'Length'],
   },
   {
     id: 'middleMouseButton',
@@ -27,7 +27,7 @@ const defaultToolBindings = [
     label: 'Middle Mouse Button',
     mouseButton: 'Auxiliary',
     isEditable: true,
-    availableTools: ['WindowLevel', 'Pan', 'Zoom'],
+    availableTools: ['WindowLevel', 'Pan', 'Zoom', 'Length'],
   },
   {
     id: 'scrollWheel',

@@ -1758,8 +1758,8 @@ function commandsModule({
               return;
             }
             
-            // Step 1: Set the three core tools to passive to clear bindings
-            const coreTools = ['WindowLevel', 'Pan', 'Zoom'];
+            // Step 1: Set the mouse-bindable tools to passive to clear bindings
+            const coreTools = ['WindowLevel', 'Pan', 'Zoom', 'Length'];
             coreTools.forEach(tool => {
               if (toolGroup.hasTool(tool)) {
                 try {
