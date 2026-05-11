@@ -52,28 +52,22 @@ const StudyBrowser = ({
       }
       
       const apiUrl = `${apiEndpoint}/case/${studyInstanceUid}`;
-      console.log(`StudyBrowser: Making API call to: ${apiUrl} (origin: ${origin}, endpoint: ${apiEndpoint})`);
-      
+
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
-      
-      console.log(`StudyBrowser: API response status: ${response.status} for ${studyInstanceUid}`);
-      
+
       if (!response.ok) {
-        console.log(`StudyBrowser: API call failed for ${studyInstanceUid}, returning false`);
         return false;
       }
-      
+
       const caseData = await response.json();
-      console.log(`StudyBrowser: API response data for ${studyInstanceUid}:`, caseData);
-      
-      const hasCase = caseData?.cases?.length > 0 && 
+
+      const hasCase = caseData?.cases?.length > 0 &&
                      caseData.cases[0]?.consultations?.length > 0 &&
                      caseData.cases[0]?.consultations[0]?.s3_url;
-      
-      console.log(`StudyBrowser: Checked case for study ${studyInstanceUid}: ${hasCase}`);
+
       return hasCase;
     } catch (error) {
       console.error(`StudyBrowser: Error checking case for ${studyInstanceUid}:`, error);
@@ -114,15 +108,13 @@ const StudyBrowser = ({
     checkAllStudies();
   }, [tabs, activeTabName]);
 
-  // Debug function for console testing
+  // Debug helpers exposed on window for console testing
   const debugSetCaseStatus = (studyInstanceUid: string, hasCase: boolean) => {
-    console.log(`DEBUG: Manually setting case status for ${studyInstanceUid} to ${hasCase}`);
     setStudyCaseStatusMap(prev => new Map(prev.set(studyInstanceUid, hasCase)));
     setCheckedStudies(prev => new Set(prev.add(studyInstanceUid)));
   };
 
   const debugClearCache = () => {
-    console.log('DEBUG: Clearing case status cache');
     setStudyCaseStatusMap(new Map());
     setCheckedStudies(new Set());
   };
@@ -131,19 +123,11 @@ const StudyBrowser = ({
     if (typeof window !== 'undefined') {
       window.debugSetCaseStatus = debugSetCaseStatus;
       window.debugClearCache = debugClearCache;
-      window.debugGetCaseStatusMap = () => {
-        console.log('Current case status map:', studyCaseStatusMap);
-        return studyCaseStatusMap;
-      };
-      window.debugGetCheckedStudies = () => {
-        console.log('Checked studies set:', checkedStudies);
-        return checkedStudies;
-      };
+      window.debugGetCaseStatusMap = () => studyCaseStatusMap;
+      window.debugGetCheckedStudies = () => checkedStudies;
       window.debugGetStudyIds = () => {
         const tabData = tabs.find(tab => tab.name === activeTabName);
-        const studyIds = tabData?.studies?.map(s => s.studyInstanceUid) || [];
-        console.log('Available study IDs:', studyIds);
-        return studyIds;
+        return tabData?.studies?.map(s => s.studyInstanceUid) || [];
       };
     }
   }, [studyCaseStatusMap, checkedStudies, tabs, activeTabName]);
@@ -157,7 +141,6 @@ const StudyBrowser = ({
         const isExpanded = expandedStudyInstanceUIDs.includes(studyInstanceUid);
         const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) ?? false;
         const isChecked = checkedStudies.has(studyInstanceUid);
-        console.log(`StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`, hasRadimalCase, 'isChecked:', isChecked);
         return (
           <React.Fragment key={studyInstanceUid}>
             <StudyItem

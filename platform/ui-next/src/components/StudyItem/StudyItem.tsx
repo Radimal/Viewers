@@ -49,10 +49,8 @@ const StudyItem = ({
                     onClick={async e => {
                       e.stopPropagation();
                       e.preventDefault();
-                      console.log('🔥 RadimalPdf icon clicked!', { studyInstanceUid, hasRadimalCase, isRadimalCaseChecked, timestamp: new Date().toISOString() });
 
                       if (!hasRadimalCase) {
-                        console.log('No Radimal case available for this study');
                         return;
                       }
 

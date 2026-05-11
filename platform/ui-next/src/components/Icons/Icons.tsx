@@ -3106,7 +3106,6 @@ export const Icons = {
 
   RadimalIcon: (props: IconProps & { hasCase?: boolean }) => {
     const { hasCase, ...imgProps } = props;
-    console.log('RadimalIcon rendering with hasCase:', hasCase);
     return (
       <img
         src="/assets/logo.png"
@@ -3126,8 +3125,7 @@ export const Icons = {
 
   RadimalPdf: (props: IconProps & { hasCase?: boolean; isChecked?: boolean }) => {
     const { hasCase, isChecked, ...svgProps } = props;
-    console.log('RadimalPdf rendering with hasCase:', hasCase, 'isChecked:', isChecked);
-    
+
     // Generate unique IDs for this instance to avoid conflicts
     const instanceId = Math.random().toString(36).substr(2, 9);
     const patternId = `pattern0_5_8_${instanceId}`;
