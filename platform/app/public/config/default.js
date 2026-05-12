@@ -6,6 +6,10 @@ window.config = {
   extensions: [],
   modes: [],
   customizationService: {},
+  posthog: {
+    apiKey: 'phc_jtIAczfFVla7mOaQ22HDCrOUaskz9LlQdWx6Jb7SRDK',
+    apiHost: 'https://us.i.posthog.com',
+  },
   showStudyList: true,
   // some windows systems have issues with more than 3 web workers
   maxNumberOfWebWorkers: 3,
