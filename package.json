@@ -1,6 +1,8 @@
 {
   "name": "ohif-monorepo-root",
   "private": true,
+  "proxy": "http://localhost:80",
+  "packageManager": "yarn@1.22.22",
   "workspaces": {
     "packages": [
       "platform/*",
@@ -116,6 +118,7 @@
     "**/@docusaurus/core/serve-handler/path-to-regexp": "3.3.0",
     "**/react-router/**/path-to-regexp": "1.9.0",
     "rollup": "2.79.2",
-    "body-parser": "1.20.3"
+    "body-parser": "1.20.3",
+    "form-data": "^4.0.4"
   }
 }
