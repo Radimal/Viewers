@@ -29,16 +29,6 @@ function ViewerHeader({
   const { uiNotificationService } = servicesManager.services;
 
   const handleDownloadStudy = async () => {
-    if (!studyInfo?.PatientID || !studyInfo?.StudyInstanceUID) {
-      uiNotificationService.show({
-        title: 'Download Error',
-        message: 'Missing required study information for download',
-        type: 'error',
-        duration: 5000,
-      });
-      return;
-    }
-
     let reporterOrigin;
     if (window.location.origin === 'http://localhost:3000') {
       reporterOrigin = 'http://localhost:5007';
@@ -50,6 +40,16 @@ function ViewerHeader({
       reporterOrigin = 'https://radimal-reporter.onrender.com';
     }
 
+    // Resolve which copy to download, in order of decreasing certainty:
+    //   1. `?studyId=` — Orthanc study UUID from the vet app (unambiguous).
+    //   2. `?patientId=` + `?StudyInstanceUIDs=` — compute UUID client-side.
+    //   3. studyInfo from loaded metadata — only works when metadata loaded.
+    const params = new URLSearchParams(window.location.search);
+    const studyId = params.get('studyId');
+    const distinctId = params.get('distinct_id');
+    const patientIdParam = params.get('patientId') || params.get('PatientID');
+    const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
+
     try {
       uiNotificationService.show({
         title: 'Download Started',
@@ -58,11 +58,29 @@ function ViewerHeader({
         duration: 3000,
       });
 
-      await orthancUtils.downloadStudyByDICOMIds(
-        studyInfo.PatientID,
-        studyInfo.StudyInstanceUID,
-        reporterOrigin
-      );
+      if (studyId) {
+        await orthancUtils.downloadOrthancStudy(studyId, reporterOrigin, distinctId);
+      } else if (patientIdParam && studyInstanceUIDParam) {
+        await orthancUtils.downloadStudyByDICOMIds(
+          patientIdParam,
+          studyInstanceUIDParam,
+          reporterOrigin
+        );
+      } else if (studyInfo?.PatientID && studyInfo?.StudyInstanceUID) {
+        await orthancUtils.downloadStudyByDICOMIds(
+          studyInfo.PatientID,
+          studyInfo.StudyInstanceUID,
+          reporterOrigin
+        );
+      } else {
+        uiNotificationService.show({
+          title: 'Download Error',
+          message: 'Missing required study information for download',
+          type: 'error',
+          duration: 5000,
+        });
+        return;
+      }
 
       uiNotificationService.show({
         title: 'Download Complete',

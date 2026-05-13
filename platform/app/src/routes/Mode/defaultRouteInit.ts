@@ -4,7 +4,7 @@ import isSeriesFilterUsed from '../../utils/isSeriesFilterUsed';
 
 import { utils, Enums } from '@ohif/core';
 
-const { sortingCriteria, getSplitParam } = utils;
+const { sortingCriteria, getSplitParam, orthancUtils } = utils;
 
 function isDuplicateStudyError(error: any): boolean {
   const details = error?.response?.Details;
@@ -18,6 +18,70 @@ function isDuplicateStudyError(error: any): boolean {
 // for a given study to prevent stacking multiple identical notifications
 // (defaultRouteInit may be called more than once for the same study).
 let shownDuplicateStudyNotification = false;
+
+function getReporterOrigin(): string {
+  const origin = window.location.origin;
+  if (origin === 'http://localhost:3000') return 'http://localhost:5007';
+  if (origin === 'https://view.stage-1.radimal.ai') return 'https://reporter-staging.onrender.com';
+  return 'https://radimal-reporter.onrender.com';
+}
+
+// When Orthanc reports a duplicate StudyInstanceUID, the WADO-RS metadata
+// endpoint cannot disambiguate the two patient records and 404s. The vet app
+// passes the intended Orthanc study UUID as `?studyId=` so we can auto-download
+// the exact copy that matches the consultation. `?patientId=` is a backup that
+// lets us compute the UUID locally if `studyId` isn't passed. `distinct_id` is
+// forwarded as user_id for Flask-side attribution.
+function handleDuplicateStudyError(uiNotificationService: any): void {
+  if (shownDuplicateStudyNotification) return;
+  shownDuplicateStudyNotification = true;
+
+  const params = new URLSearchParams(window.location.search);
+  const studyId = params.get('studyId');
+  const distinctId = params.get('distinct_id');
+  const patientIdParam = params.get('patientId') || params.get('PatientID');
+  const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
+
+  let downloadPromise: Promise<void> | null = null;
+  if (studyId) {
+    downloadPromise = orthancUtils.downloadOrthancStudy(studyId, getReporterOrigin(), distinctId);
+  } else if (patientIdParam && studyInstanceUIDParam) {
+    downloadPromise = orthancUtils.downloadStudyByDICOMIds(
+      patientIdParam,
+      studyInstanceUIDParam,
+      getReporterOrigin()
+    );
+  }
+
+  if (!downloadPromise) {
+    uiNotificationService.show({
+      title: 'Study Load Error',
+      message:
+        'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
+      type: 'error',
+      autoClose: false,
+    });
+    return;
+  }
+
+  uiNotificationService.show({
+    title: 'Study Load Error',
+    message:
+      'Multiple patients share this study ID. Downloading the correct copy automatically — check your browser for the file.',
+    type: 'warning',
+    autoClose: false,
+  });
+
+  downloadPromise.catch((downloadError: any) => {
+    console.error('Auto-download for duplicate study failed:', downloadError);
+    uiNotificationService.show({
+      title: 'Download Failed',
+      message: `Automatic download failed: ${downloadError?.message || 'Unknown error'}. Please use the download button in the top right.`,
+      type: 'error',
+      autoClose: false,
+    });
+  });
+}
 
 /**
  * Initialize the route.
@@ -109,16 +173,7 @@ export async function defaultRouteInit(
     retrieve.catch(error => {
       console.error(error);
       if (isDuplicateStudyError(error)) {
-        if (!shownDuplicateStudyNotification) {
-          shownDuplicateStudyNotification = true;
-          uiNotificationService.show({
-            title: 'Study Load Error',
-            message:
-              'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
-            type: 'error',
-            autoClose: false,
-          });
-        }
+        handleDuplicateStudyError(uiNotificationService);
       } else {
         uiNotificationService.show({
           title: 'Study Load Error',
@@ -207,15 +262,8 @@ export async function defaultRouteInit(
         }
       });
 
-      if (hasDuplicateStudyError && !shownDuplicateStudyNotification) {
-        shownDuplicateStudyNotification = true;
-        uiNotificationService.show({
-          title: 'Study Load Error',
-          message:
-            'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
-          type: 'error',
-          autoClose: false,
-        });
+      if (hasDuplicateStudyError) {
+        handleDuplicateStudyError(uiNotificationService);
       } else if (hasOtherSeriesError) {
         uiNotificationService.show({
           title: 'Study Load Error',
