@@ -1758,25 +1758,44 @@ function commandsModule({
               return;
             }
             
-            // Step 1: Set the mouse-bindable tools to passive to clear bindings
-            const coreTools = ['WindowLevel', 'Pan', 'Zoom', 'Length'];
-            coreTools.forEach(tool => {
+            // Strip Primary/Secondary/Auxiliary bindings (but NOT Wheel) from any tool that
+            // might currently hold a mouse button. setToolPassive() without options only strips
+            // Primary, so tools bound to Secondary/Auxiliary (e.g. Zoom, Pan, StackScroll) would
+            // otherwise survive as Active and shadow the newly-assigned tool on that button.
+            // We preserve Wheel because the scroll-wheel binding is configured separately by
+            // initToolGroups and is not re-applied by this command.
+            const mouseButtonBindings = [
+              { mouseButton: Enums.MouseBindings.Primary },
+              { mouseButton: Enums.MouseBindings.Secondary },
+              { mouseButton: Enums.MouseBindings.Auxiliary },
+            ];
+            const clearMouseBindings = tool => {
               if (toolGroup.hasTool(tool)) {
                 try {
-                  toolGroup.setToolPassive(tool);
+                  toolGroup.setToolPassive(tool, { removeAllBindings: mouseButtonBindings });
                 } catch (e) {
                   // Ignore errors
                 }
               }
-            });
-            
-            // Step 2: Ensure our target tools exist
+            };
+
+            // Step 1: Clear bindings from tools known to occupy mouse buttons by default.
+            ['WindowLevel', 'Pan', 'Zoom', 'StackScroll', 'Length'].forEach(clearMouseBindings);
+
+            // Step 2: Ensure our target tools exist, and clear any leftover bindings on them.
+            // setToolActive merges new bindings with previous ones, so without this a tool that
+            // was already bound to a different button would end up bound to both.
             [primaryTool, secondaryTool, auxiliaryTool].forEach(tool => {
-              if (tool && tool !== 'None' && !toolGroup.hasTool(tool)) {
+              if (!tool || tool === 'None') {
+                return;
+              }
+              if (!toolGroup.hasTool(tool)) {
                 try {
                   toolGroup.addTool(tool);
                 } catch (e) {
                 }
+              } else {
+                clearMouseBindings(tool);
               }
             });
             
