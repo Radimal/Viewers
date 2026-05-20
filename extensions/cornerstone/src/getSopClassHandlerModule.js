@@ -21,6 +21,10 @@ function _getDisplaySetsFromSeries(instances, servicesManager, extensionManager)
     throw new Error('No instances were provided');
   }
 
+  if (instances[0].SeriesDescription?.includes('DNR ')) {
+    return [];
+  }
+
   const instance = instances[0];
 
   let singleFrameInstance = instance;
