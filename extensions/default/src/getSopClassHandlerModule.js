@@ -157,6 +157,10 @@ function getDisplaySetsFromSeries(instances) {
     throw new Error('No instances were provided');
   }
 
+  if (instances[0].SeriesDescription?.includes('DNR ')) {
+    return [];
+  }
+
   const displaySets = [];
   const sopClassUids = getSopClassUids(instances);
 

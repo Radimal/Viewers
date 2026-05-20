@@ -600,6 +600,7 @@ function _mapDisplaySets(
   const thumbnailNoImageDisplaySets = [];
   displaySets
     .filter(ds => !ds.excludeFromThumbnailBrowser)
+    .filter(ds => !ds.SeriesDescription?.includes('DNR '))
     .sort((a, b) => {
       const aNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
       const bNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
