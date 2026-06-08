@@ -13,16 +13,17 @@
  * patch-package can't be used here because the critical artifact is a binary .wasm.
  *
  * Two modes:
- *   (default)  best-effort APPLY — copies the vendored 1.3.0 artifacts over EVERY
- *              installed copy of codec-openjpeg@1.3.0, leaving other versions (e.g.
- *              dicom-microscopy-viewer's nested 1.2.4) untouched. NEVER fails: yarn's
- *              two-phase install (deps-only, then full) hoists different versions to
- *              the root at different stages, so the 1.3.0 copy may not exist yet on
- *              the first pass. Run via the root `postinstall`.
- *   --check    VERIFY gate — fails (exit 1) if no 1.3.0 copy exists (version drift:
- *              dicom-image-loader bumped its codec dep => the vendored WASM is stale,
- *              rebuild it) or if any 1.3.0 copy is not byte-identical to the vendored
- *              WASM. Run as an explicit Dockerfile step AFTER the full install.
+ *   (default)  best-effort APPLY — copies the vendored EXPECTED_VERSION artifacts over
+ *              EVERY installed copy of codec-openjpeg@EXPECTED_VERSION (this includes
+ *              both the cornerstone viewport path and dicom-microscopy-viewer's copy,
+ *              which currently share this version), leaving other versions untouched.
+ *              NEVER fails: yarn's two-phase install (deps-only, then full) hoists
+ *              different versions to the root at different stages, so the target copy
+ *              may not exist yet on the first pass. Run via the root `postinstall`.
+ *   --check    VERIFY gate — fails (exit 1) if no EXPECTED_VERSION copy exists (version
+ *              drift: dicom-image-loader bumped its codec dep => the vendored WASM is
+ *              stale, rebuild it) or if any such copy is not byte-identical to the
+ *              vendored WASM. Run as an explicit Dockerfile step AFTER the full install.
  *
  * On drift: rebuild the codec at the new version with the two flags above, re-vendor
  * into vendor/codec-openjpeg-<version>-patched/, and bump EXPECTED_VERSION below.
@@ -31,7 +32,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const EXPECTED_VERSION = '1.3.0';
+const EXPECTED_VERSION = '1.2.4';
 const PKG = '@cornerstonejs/codec-openjpeg';
 const tag = '[apply-openjpeg-patch]';
 const CHECK = process.argv.includes('--check');
