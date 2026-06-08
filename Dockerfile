@@ -30,6 +30,10 @@ COPY ["package.json", "yarn.lock", "preinstall.js", "./"]
 COPY extensions /usr/src/app/extensions
 COPY modes /usr/src/app/modes
 COPY platform /usr/src/app/platform
+# Needed by the root postinstall (scripts/apply-openjpeg-patch.js) which runs
+# during the deps-only `yarn install` below, before the full `COPY . .`.
+COPY scripts /usr/src/app/scripts
+COPY vendor /usr/src/app/vendor
 
 # Find and remove non-package.json files
 #RUN find extensions \! -name "package.json" -mindepth 2 -maxdepth 2 -print | xargs rm -rf

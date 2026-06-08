@@ -68,6 +68,11 @@ if (installedVersion !== EXPECTED_VERSION) {
   process.exit(1);
 }
 
+if (!fs.existsSync(VENDOR_DIR)) {
+  console.error(`${tag} ERROR: vendored artifacts not found at ${VENDOR_DIR}`);
+  process.exit(1);
+}
+
 const destDir = path.join(codecDir, 'dist');
 const files = fs.readdirSync(VENDOR_DIR).filter(f => f !== 'README.md');
 for (const f of files) {
