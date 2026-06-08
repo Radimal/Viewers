@@ -59,6 +59,11 @@ COPY . .
 # To restore workspaces symlinks
 RUN yarn install --frozen-lockfile --verbose
 
+# Apply + verify the multi-tile JPEG2000 codec patch with the full tree present.
+# postinstall already applies it best-effort; this re-applies deterministically and
+# HARD-FAILS the build if codec-openjpeg@1.3.0 is missing (version drift) or unpatched.
+RUN node scripts/apply-openjpeg-patch.js && node scripts/apply-openjpeg-patch.js --check
+
 ENV PATH=/usr/src/app/node_modules/.bin:$PATH
 ENV QUICK_BUILD=true
 # ENV GENERATE_SOURCEMAP=false
