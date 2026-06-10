@@ -99,31 +99,19 @@ const OHIFCornerstoneViewport = React.memo(
     const [scrollbarHeight, setScrollbarHeight] = useState('100px');
     const [enabledVPElement, setEnabledVPElement] = useState(null);
     const [showBlackScreen, setShowBlackScreen] = useState(true); // Start with black screen
-    const [isImageReady, setIsImageReady] = useState(false);
-    
-    // Immediate check for any non-standard viewport types - bypass black screen if needed
-    useEffect(() => {
-      const isVolumeViewport = viewportOptions.viewportType === 'volume';
-      const isStackViewport = viewportOptions.viewportType === 'stack';
-      const isMultiFrame = displaySets?.[0]?.images?.length > 1; // CT scans have multiple frames
-      const isUnknownViewport = !isVolumeViewport && !isStackViewport; // Catch any other viewport types
-      const isUltrasound = displaySets?.[0]?.Modality === 'US'; // Ultrasound modality
-      const isSlowLoading = isVolumeViewport || isMultiFrame || isUnknownViewport || isUltrasound;
-      
-      if (isSlowLoading && displaySets && displaySets.length > 0) {
-        const emergencyTimer = setTimeout(() => {
-          setIsImageReady(true);
-          setShowBlackScreen(false);
-          
-          const element = elementRef.current;
-          if (element) {
-            element.style.visibility = 'visible';
-          }
-        }, 1000); // 1 second for slow-loading images to match standard timing
-        
-        return () => clearTimeout(emergencyTimer);
-      }
-    }, [viewportId, viewportOptions.viewportType, displaySets]);
+
+    // Visibility gating: applying persisted rotation/flip just after load causes a
+    // visible "snap". To hide that, single-frame projection images (DX/CR/MG) are
+    // kept hidden until persistence has run. Slow/multi-frame modalities
+    // (US/MRI/CT/volume) are NOT gated — gating races against their long load and
+    // can leave the viewport stuck on a black screen, so they are shown as soon as
+    // Cornerstone paints (accepting a small rotation/flip snap as the trade-off).
+    const GATED_VISIBILITY_MODALITIES = ['DX', 'CR', 'MG'];
+    const shouldGateVisibility =
+      viewportOptions.viewportType !== 'volume' &&
+      (displaySets?.[0]?.images?.length ?? 1) <= 1 &&
+      GATED_VISIBILITY_MODALITIES.includes(displaySets?.[0]?.Modality);
+
     const elementRef = useRef() as React.MutableRefObject<HTMLDivElement>;
     const [appConfig] = useAppConfig();
 
@@ -285,49 +273,40 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
-    // Keep viewport hidden until restoration is complete - simple approach
+    // On displaySet change: store the outgoing image's rotation/flip, then decide
+    // whether to gate visibility. Gated (DX/CR/MG single-frame) viewports are
+    // hidden until the reveal effect below shows them; everything else is shown
+    // immediately so slow loads can never get stuck on a black screen.
     useEffect(() => {
       const element = elementRef.current;
       if (!element) {
         return;
       }
 
-      // Force viewport to be invisible immediately when displaySets change
-      element.style.visibility = 'hidden';
-      
-      // For volume viewports, add additional timeout as they load slower
-      const isVolumeViewport = viewportOptions.viewportType === 'volume';
-      if (isVolumeViewport) {
-        // For volume viewports, just show them after a short delay
-        // The restoration system seems unreliable for volumes
-        const volumeShowTimer = setTimeout(() => {
-          const element = elementRef.current;
-          if (element) {
-            element.style.visibility = 'visible';
-            setIsImageReady(true);
-            setShowBlackScreen(false);
-            
-            // Try to store state for future use
-            try {
-              const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-              if (viewport) {
-                viewportPersistenceService?.storeRotationFlipState(viewportId);
-              }
-            } catch (error) {
-              console.warn('Error storing volume state:', error);
-            }
-          }
-        }, 1000); // 1 second delay for volumes
-        
-        return () => {
-          clearTimeout(volumeShowTimer);
-        };
+      // Store the outgoing image's state before we switch.
+      try {
+        const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+        if (viewport?.getCurrentImageId?.()) {
+          viewportPersistenceService?.storeRotationFlipState(viewportId);
+        }
+      } catch (error) {
+        console.warn('Error storing current state during transition:', error);
       }
-      
-      return () => {
-        // Cleanup - but restoration events will handle showing
-      };
-    }, [displaySets, viewportOptions.viewportType, viewportId, cornerstoneViewportService, viewportPersistenceService]);
+
+      if (shouldGateVisibility) {
+        element.style.visibility = 'hidden';
+        setShowBlackScreen(true);
+      } else {
+        element.style.visibility = 'visible';
+        setShowBlackScreen(false);
+      }
+    }, [
+      displaySets,
+      shouldGateVisibility,
+      viewportId,
+      cornerstoneViewportService,
+      viewportPersistenceService,
+    ]);
 
     useEffect(() => {
       if (!viewportPersistenceService || !cornerstoneViewportService) return;
@@ -469,83 +448,41 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [displaySets, elementRef, viewportId, isJumpToMeasurementDisabled, servicesManager]);
 
-    // Manage black screen during displaySet transitions
+    // Reveal a gated viewport once persistence has applied rotation/flip (smooth,
+    // no snap). A safety timer — re-armed on every displaySet change — guarantees a
+    // gated viewport is never left stuck on the black overlay if restoration is
+    // slow or never fires. Non-gated viewports are already shown by the effect
+    // above and don't need this.
     useEffect(() => {
-      if (displaySets && displaySets.length > 0) {
-        setShowBlackScreen(true);
-        setIsImageReady(false);
-        
-        // Store current state before switching if there was a previous viewport
-        const storeCurrentState = () => {
-          try {
-            const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-            if (viewport?.getCurrentImageId?.()) {
-              viewportPersistenceService?.storeRotationFlipState(viewportId);
-            }
-          } catch (error) {
-            console.warn('Error storing current state during transition:', error);
-          }
-        };
-        
-        storeCurrentState();
-      } else {
-        setShowBlackScreen(true);
-        setIsImageReady(false);
+      if (!shouldGateVisibility) {
+        return;
       }
-    }, [displaySets, viewportId, viewportOptions.viewportType, cornerstoneViewportService, viewportPersistenceService]);
 
-    // Listen for restoration events and image loading to clear black screen
-    useEffect(() => {
-      if (!viewportPersistenceService) return;
-
-      const restorationCompleteSubscription = viewportPersistenceService.subscribe(
-        viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_RESTORED,
-        event => {
-          if (event.viewportId === viewportId) {
-            // Show the viewport and clear black screen
-            setTimeout(() => {
-              const element = elementRef.current;
-              if (element) {
-                element.style.visibility = 'visible';
-              }
-              setIsImageReady(true);
-              setShowBlackScreen(false);
-            }, 50);
-          }
-        }
-      );
-
-      // Fallback timeout to prevent getting stuck on black screen
-      // Shorter timeout for volume viewports since they often don't trigger restoration events properly
-      const isVolumeViewport = viewportOptions.viewportType === 'volume';
-      const fallbackDelay = isVolumeViewport ? 2000 : 2000; // Same for both, but volume gets additional checks above
-      
-      const fallbackTimer = setTimeout(() => {
+      const reveal = () => {
         const element = elementRef.current;
         if (element) {
           element.style.visibility = 'visible';
         }
-        setIsImageReady(true);
         setShowBlackScreen(false);
-        
-        // For volume viewports, also try to store default state
-        if (isVolumeViewport) {
-          try {
-            const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-            if (viewport) {
-              viewportPersistenceService?.storeRotationFlipState(viewportId);
-            }
-          } catch (error) {
-            console.warn('Error storing volume viewport state in fallback:', error);
+      };
+
+      const restorationCompleteSubscription = viewportPersistenceService?.subscribe(
+        viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_RESTORED,
+        event => {
+          if (event.viewportId === viewportId) {
+            reveal();
           }
         }
-      }, fallbackDelay);
+      );
+
+      // Hard safety net: never leave a gated viewport black.
+      const safetyTimer = setTimeout(reveal, 1200);
 
       return () => {
         restorationCompleteSubscription?.unsubscribe();
-        clearTimeout(fallbackTimer);
+        clearTimeout(safetyTimer);
       };
-    }, [viewportPersistenceService, viewportId]);
+    }, [shouldGateVisibility, displaySets, viewportPersistenceService, viewportId]);
 
     useEffect(() => {
       if (appConfig.autoTrimCollimationBorders === false) {
