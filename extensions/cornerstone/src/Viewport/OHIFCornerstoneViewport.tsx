@@ -3,7 +3,12 @@ import { useResizeDetector } from 'react-resize-detector';
 import * as cs3DTools from '@cornerstonejs/tools';
 import { Enums, eventTarget, getEnabledElement } from '@cornerstonejs/core';
 import { MeasurementService } from '@ohif/core';
-import { AllInOneMenu, Notification, useViewportDialog } from '@ohif/ui';
+import {
+  AllInOneMenu,
+  LoadingIndicatorProgress,
+  Notification,
+  useViewportDialog,
+} from '@ohif/ui';
 import type { Types as csTypes } from '@cornerstonejs/core';
 
 import { setEnabledElement } from '../state';
@@ -98,19 +103,8 @@ const OHIFCornerstoneViewport = React.memo(
 
     const [scrollbarHeight, setScrollbarHeight] = useState('100px');
     const [enabledVPElement, setEnabledVPElement] = useState(null);
-    const [showBlackScreen, setShowBlackScreen] = useState(true); // Start with black screen
-
-    // Visibility gating: applying persisted rotation/flip just after load causes a
-    // visible "snap". To hide that, single-frame projection images (DX/CR/MG) are
-    // kept hidden until persistence has run. Slow/multi-frame modalities
-    // (US/MRI/CT/volume) are NOT gated — gating races against their long load and
-    // can leave the viewport stuck on a black screen, so they are shown as soon as
-    // Cornerstone paints (accepting a small rotation/flip snap as the trade-off).
-    const GATED_VISIBILITY_MODALITIES = ['DX', 'CR', 'MG'];
-    const shouldGateVisibility =
-      viewportOptions.viewportType !== 'volume' &&
-      (displaySets?.[0]?.images?.length ?? 1) <= 1 &&
-      GATED_VISIBILITY_MODALITIES.includes(displaySets?.[0]?.Modality);
+    // Start hidden behind the loading overlay until rotation/flip restoration has run
+    const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
 
     const elementRef = useRef() as React.MutableRefObject<HTMLDivElement>;
     const [appConfig] = useAppConfig();
@@ -273,10 +267,11 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
-    // On displaySet change: store the outgoing image's rotation/flip, then decide
-    // whether to gate visibility. Gated (DX/CR/MG single-frame) viewports are
-    // hidden until the reveal effect below shows them; everything else is shown
-    // immediately so slow loads can never get stuck on a black screen.
+    // On displaySet change: store the outgoing image's rotation/flip, then hide
+    // the viewport behind the loading overlay while the new image loads and
+    // persisted rotation/flip is applied. The reveal effect below shows it once
+    // restoration has run, so the user sees a loading indicator instead of the
+    // image snapping through its transforms.
     useEffect(() => {
       const element = elementRef.current;
       if (!element) {
@@ -293,20 +288,9 @@ const OHIFCornerstoneViewport = React.memo(
         console.warn('Error storing current state during transition:', error);
       }
 
-      if (shouldGateVisibility) {
-        element.style.visibility = 'hidden';
-        setShowBlackScreen(true);
-      } else {
-        element.style.visibility = 'visible';
-        setShowBlackScreen(false);
-      }
-    }, [
-      displaySets,
-      shouldGateVisibility,
-      viewportId,
-      cornerstoneViewportService,
-      viewportPersistenceService,
-    ]);
+      element.style.visibility = 'hidden';
+      setShowLoadingOverlay(true);
+    }, [displaySets, viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
     useEffect(() => {
       if (!viewportPersistenceService || !cornerstoneViewportService) return;
@@ -448,22 +432,32 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [displaySets, elementRef, viewportId, isJumpToMeasurementDisabled, servicesManager]);
 
-    // Reveal a gated viewport once persistence has applied rotation/flip (smooth,
-    // no snap). A safety timer — re-armed on every displaySet change — guarantees a
-    // gated viewport is never left stuck on the black overlay if restoration is
-    // slow or never fires. Non-gated viewports are already shown by the effect
-    // above and don't need this.
+    // Reveal the viewport once persistence has applied rotation/flip (smooth, no
+    // snap). Fallbacks make sure the overlay can never get stuck, even on slow
+    // US/CT/MRI/volume loads:
+    //  - once the viewport has actually painted (IMAGE_RENDERED), restoration
+    //    gets a short grace period and then we reveal regardless — keyed to the
+    //    real render, so it can't race a long load like a fixed timer would;
+    //  - an absolute cap clears the overlay even if nothing ever renders
+    //    (e.g. a failed load), so error states stay visible.
     useEffect(() => {
-      if (!shouldGateVisibility) {
+      const element = elementRef.current;
+      if (!element) {
         return;
       }
 
+      let revealed = false;
+      let renderGraceTimer: ReturnType<typeof setTimeout> | null = null;
+
       const reveal = () => {
-        const element = elementRef.current;
-        if (element) {
-          element.style.visibility = 'visible';
+        if (revealed) {
+          return;
         }
-        setShowBlackScreen(false);
+        revealed = true;
+        if (elementRef.current) {
+          elementRef.current.style.visibility = 'visible';
+        }
+        setShowLoadingOverlay(false);
       };
 
       const restorationCompleteSubscription = viewportPersistenceService?.subscribe(
@@ -475,14 +469,23 @@ const OHIFCornerstoneViewport = React.memo(
         }
       );
 
-      // Hard safety net: never leave a gated viewport black.
-      const safetyTimer = setTimeout(reveal, 1200);
+      const handleImageRendered = () => {
+        if (!renderGraceTimer && !revealed) {
+          renderGraceTimer = setTimeout(reveal, 1500);
+        }
+      };
+      element.addEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+
+      // Absolute safety net: never leave the loading overlay stuck.
+      const safetyTimer = setTimeout(reveal, 10000);
 
       return () => {
         restorationCompleteSubscription?.unsubscribe();
+        element.removeEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+        clearTimeout(renderGraceTimer);
         clearTimeout(safetyTimer);
       };
-    }, [shouldGateVisibility, displaySets, viewportPersistenceService, viewportId]);
+    }, [displaySets, viewportPersistenceService, viewportId]);
 
     useEffect(() => {
       if (appConfig.autoTrimCollimationBorders === false) {
@@ -693,13 +696,9 @@ const OHIFCornerstoneViewport = React.memo(
             viewportId={viewportId}
             servicesManager={servicesManager}
           />
-          {/* Black screen overlay until image is ready */}
-          {showBlackScreen && (
-            <div className="pointer-events-none absolute top-0 left-0 z-50 h-full w-full bg-black">
-              <div className="flex h-full items-center justify-center text-white">
-                {/* Optional: Add loading indicator */}
-              </div>
-            </div>
+          {/* Loading overlay until the image is ready with rotation/flip applied */}
+          {showLoadingOverlay && (
+            <LoadingIndicatorProgress className="pointer-events-none h-full w-full bg-black" />
           )}
         </div>
         {/* top offset of 24px to account for ViewportActionCorners. */}
