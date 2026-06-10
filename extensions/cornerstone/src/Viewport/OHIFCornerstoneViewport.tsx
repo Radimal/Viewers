@@ -3,12 +3,7 @@ import { useResizeDetector } from 'react-resize-detector';
 import * as cs3DTools from '@cornerstonejs/tools';
 import { Enums, eventTarget, getEnabledElement } from '@cornerstonejs/core';
 import { MeasurementService } from '@ohif/core';
-import {
-  AllInOneMenu,
-  LoadingIndicatorProgress,
-  Notification,
-  useViewportDialog,
-} from '@ohif/ui';
+import { AllInOneMenu, LoadingIndicatorProgress, Notification, useViewportDialog } from '@ohif/ui';
 import type { Types as csTypes } from '@cornerstonejs/core';
 
 import { setEnabledElement } from '../state';
@@ -432,12 +427,16 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [displaySets, elementRef, viewportId, isJumpToMeasurementDisabled, servicesManager]);
 
-    // Reveal the viewport once persistence has applied rotation/flip (smooth, no
-    // snap). Fallbacks make sure the overlay can never get stuck, even on slow
-    // US/CT/MRI/volume loads:
-    //  - once the viewport has actually painted (IMAGE_RENDERED), restoration
-    //    gets a short grace period and then we reveal regardless — keyed to the
-    //    real render, so it can't race a long load like a fixed timer would;
+    // Reveal the viewport only when BOTH are true, whichever happens last:
+    //  - restoration has resolved (VIEWPORT_STATE_RESTORED). The service
+    //    broadcasts this as soon as it knows there is nothing to restore —
+    //    for stack viewports that's before any pixel data has loaded, so the
+    //    event alone must NOT reveal (a slow US would show a black canvas for
+    //    the whole download);
+    //  - the viewport has actually painted (IMAGE_RENDERED).
+    // Fallbacks so the overlay can never get stuck:
+    //  - painted but restoration event never arrives → short grace period,
+    //    then reveal (keyed to the real render, so it can't race a long load);
     //  - an absolute cap clears the overlay even if nothing ever renders
     //    (e.g. a failed load), so error states stay visible.
     useEffect(() => {
@@ -447,6 +446,8 @@ const OHIFCornerstoneViewport = React.memo(
       }
 
       let revealed = false;
+      let restored = false;
+      let rendered = false;
       let renderGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
       const reveal = () => {
@@ -463,13 +464,22 @@ const OHIFCornerstoneViewport = React.memo(
       const restorationCompleteSubscription = viewportPersistenceService?.subscribe(
         viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_RESTORED,
         event => {
-          if (event.viewportId === viewportId) {
+          if (event.viewportId !== viewportId) {
+            return;
+          }
+          restored = true;
+          if (rendered) {
             reveal();
           }
         }
       );
 
       const handleImageRendered = () => {
+        rendered = true;
+        if (restored) {
+          reveal();
+          return;
+        }
         if (!renderGraceTimer && !revealed) {
           renderGraceTimer = setTimeout(reveal, 1500);
         }
