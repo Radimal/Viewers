@@ -36,6 +36,22 @@ const getScrollWheelBinding = (toolNames, Enums) => {
   }
 };
 
+// Enable two-finger pinch-to-zoom on touch devices such as iPad.
+// Cornerstone3D activates the touch tool whose binding matches the current
+// number of touch points. With only mouse bindings, a two-finger gesture
+// matches nothing and the Zoom tool's built-in pinch handler never fires, so
+// pinch-to-zoom does nothing. (Single-finger touch already falls back to the
+// primary-mouse tool, i.e. Window/Level.) The Zoom tool also pans on two
+// fingers by default, so the same gesture zooms and pans.
+const enablePinchZoom = (tools, toolNames) => {
+  tools.active?.forEach(tool => {
+    if (tool.toolName === toolNames.Zoom) {
+      tool.bindings = [...(tool.bindings || []), { numTouchPoints: 2 }];
+    }
+  });
+  return tools;
+};
+
 const colours = {
   'viewport-0': 'rgb(200, 0, 0)',
   'viewport-1': 'rgb(200, 200, 0)',
@@ -151,8 +167,9 @@ function initDefaultToolGroup(
     ],
   };
 
+  enablePinchZoom(tools, toolNames);
   toolGroupService.createToolGroupAndAddTools(toolGroupId, tools);
-  
+
   // Force reconfigure the StackScroll tool if inversion is enabled
   if (toolBinding.wheelTool === toolNames.StackScroll && invertScrollWheel) {
     try {
@@ -237,6 +254,7 @@ function initSRToolGroup(extensionManager, toolGroupService) {
   };
 
   const toolGroupId = 'SRToolGroup';
+  enablePinchZoom(tools, toolNames);
   toolGroupService.createToolGroupAndAddTools(toolGroupId, tools);
   
   // Force reconfigure the StackScroll tool if inversion is enabled
@@ -368,6 +386,7 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager, m
     ],
   };
 
+  enablePinchZoom(tools, toolNames);
   toolGroupService.createToolGroupAndAddTools('mpr', tools);
   
   // Force reconfigure the StackScroll tool if inversion is enabled
@@ -405,6 +424,7 @@ function initVolume3DToolGroup(extensionManager, toolGroupService) {
     ],
   };
 
+  enablePinchZoom(tools, toolNames);
   toolGroupService.createToolGroupAndAddTools('volume3d', tools);
 }
 
