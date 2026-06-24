@@ -16,4 +16,9 @@
   /* Prevents the entire page from getting larger
      when the magnify tool is near the sides/corners of the page */
   overflow: hidden;
+
+  /* Let Cornerstone3D own all touch gestures inside the viewport (e.g.
+     two-finger pinch-to-zoom on iPad) instead of the browser hijacking
+     them for page scroll/zoom. */
+  touch-action: none;
 }

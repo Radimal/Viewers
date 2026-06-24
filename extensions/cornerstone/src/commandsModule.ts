@@ -36,6 +36,20 @@ const toggleSyncFunctions = {
   imageSlice: toggleImageSliceSync,
   voi: toggleVOISliceSync,
 };
+
+/**
+ * Build the bindings for activating a tool, always carrying the two-finger
+ * pinch-to-zoom binding on the Zoom tool. Activating a tool replaces its
+ * bindings, and Cornerstone3D matches the active touch tool by the number of
+ * fingers down, so the Zoom tool must keep an explicit two-finger binding on
+ * every (re)activation path or pinch-to-zoom silently stops working on touch
+ * devices (e.g. iPad).
+ */
+const getToolActivationBindings = (toolName: string, mouseButton: Enums.MouseBindings) => [
+  { mouseButton },
+  ...(toolName === 'Zoom' ? [{ numTouchPoints: 2 }] : []),
+];
+
 function commandsModule({
   servicesManager,
   extensionManager,
@@ -872,13 +886,9 @@ function commandsModule({
           : toolGroup.setToolPassive(activeToolName);
       }
 
-      // Set the new toolName to be active
+      // Set the new toolName to be active (keeping two-finger pinch-to-zoom).
       toolGroup.setToolActive(toolName, {
-        bindings: [
-          {
-            mouseButton: Enums.MouseBindings.Primary,
-          },
-        ],
+        bindings: getToolActivationBindings(toolName, Enums.MouseBindings.Primary),
       });
     },
     showDownloadViewportModal: () => {
@@ -1792,22 +1802,26 @@ function commandsModule({
               }
             });
             
-            // Step 3: Activate tools with specific mouse button bindings
+            // Step 3: Activate tools with specific mouse button bindings.
+            // getToolActivationBindings preserves the two-finger pinch-to-zoom
+            // binding when Zoom is one of the activated tools, so this path
+            // (auto-run on load for users with saved button preferences) does
+            // not strip pinch-to-zoom on touch devices.
             if (primaryTool && primaryTool !== 'None') {
               toolGroup.setToolActive(primaryTool, {
-                bindings: [{ mouseButton: Enums.MouseBindings.Primary }]
+                bindings: getToolActivationBindings(primaryTool, Enums.MouseBindings.Primary)
               });
             }
-            
+
             if (secondaryTool && secondaryTool !== 'None') {
               toolGroup.setToolActive(secondaryTool, {
-                bindings: [{ mouseButton: Enums.MouseBindings.Secondary }]
+                bindings: getToolActivationBindings(secondaryTool, Enums.MouseBindings.Secondary)
               });
             }
-            
+
             if (auxiliaryTool && auxiliaryTool !== 'None') {
               toolGroup.setToolActive(auxiliaryTool, {
-                bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }]
+                bindings: getToolActivationBindings(auxiliaryTool, Enums.MouseBindings.Auxiliary)
               });
             }
             
