@@ -59,6 +59,13 @@ class CineService extends PubSubService {
   public stopClip(element, stopClipOptions) {
     const res = this.serviceImplementation._stopClip(element, stopClipOptions);
 
+    // Radimal fork: startedClips is keyed by the DOM element and was only ever
+    // drained on mode exit, so every clip switch/viewport remount left the old
+    // detached element (and its enabled-element state) strongly referenced and
+    // un-GC-able — an unbounded leak across a long ultrasound session. Drop the
+    // entry here since stopClip already runs on viewport teardown/unmount.
+    this.startedClips.delete(element);
+
     this._broadcastEvent(this.EVENTS.CINE_STATE_CHANGED, { isPlaying: false });
 
     return res;

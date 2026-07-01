@@ -7,6 +7,18 @@ window.config = {
   modes: [],
   customizationService: {},
   showStudyList: true,
+  // Cornerstone image cache cap (bytes). Cornerstone's default is 3 GB, which
+  // exceeds Safari/WebKit's per-tab memory budget — heavy ultrasound viewing
+  // then trips Safari's "reloaded because it was using significant memory"
+  // hard reload (which, since view.radimal.ai and vet.radimal.ai are same-site
+  // and opener-linked, can take the report tab down too). So cap Safari/WebKit
+  // lower and let other browsers keep the roomier default for fewer re-decodes.
+  // navigator.vendor === 'Apple Computer, Inc.' reliably flags Safari + all iOS
+  // browsers (all WebKit, same memory limits); Chrome/Edge/Firefox desktop don't.
+  maxCacheSize:
+    typeof navigator !== 'undefined' && navigator.vendor === 'Apple Computer, Inc.'
+      ? 1024 * 1024 * 1024 // 1 GB for Safari/WebKit
+      : 3 * 1024 * 1024 * 1024, // 3 GB elsewhere (cornerstone default)
   // some windows systems have issues with more than 3 web workers
   maxNumberOfWebWorkers: 3,
   // below flag is for performance reasons, but it might not work for all servers
