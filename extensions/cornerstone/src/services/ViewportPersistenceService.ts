@@ -46,61 +46,31 @@ class ViewportPersistenceService extends PubSubService {
   }
 
   private _setupEventListeners(): void {
-    // Listen for viewport new image set events
-    const viewportNewImageSetHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportImageChange(element.id);
-      }
-    };
-
-    // Listen for image rendered events
+    // Restoration is NOT triggered from VIEWPORT_NEW_IMAGE_SET: that event
+    // fires mid-setStack, before OHIF applies presentations (zoom/pan) and
+    // before the autoTrimBorders autozoom runs off IMAGE_RENDERED. Restoring
+    // there applies rotation/flip early, which mirrors the pan and makes the
+    // auto-trim's user-override guard in OHIFCornerstoneViewport read it as a
+    // manual adjustment and skip the autozoom. OHIFCornerstoneViewport
+    // triggers restoration after the displaySet change instead.
+    //
+    // This listener is only a retry net for restorations attempted before
+    // image data was ready. It resolves viewports via event.detail.viewportId
+    // (the viewport div never gets an id attribute, so element.id is always
+    // empty), fires for stack and volume viewports alike, and
+    // _handleViewportReady only acts while a restoration is pending.
     const imageRenderedHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportReady(element.id);
+      const viewportId = event.detail?.viewportId;
+      if (viewportId) {
+        this._handleViewportReady(viewportId);
       }
     };
 
-    // Listen for stack new image events
-    const stackNewImageHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportImageChange(element.id);
-      }
-    };
-
-    // Listen for volume loaded events (for CT/MRI/US)
-    const volumeLoadedHandler = (event: any) => {
-      const { element } = event.detail;
-      if (element?.id) {
-        this._handleViewportReady(element.id);
-      }
-    };
-
-    // Add event listeners
-    eventTarget.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler);
     eventTarget.addEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler);
-    eventTarget.addEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler);
-    eventTarget.addEventListener(Enums.Events.VOLUME_LOADED, volumeLoadedHandler);
-    eventTarget.addEventListener(Enums.Events.VOLUME_RENDERED, volumeLoadedHandler);
 
-    // Store cleanup functions
-    this.subscriptions.push(
-      () => eventTarget.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, viewportNewImageSetHandler),
-      () => eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler),
-      () => eventTarget.removeEventListener(Enums.Events.STACK_NEW_IMAGE, stackNewImageHandler),
-      () => eventTarget.removeEventListener(Enums.Events.VOLUME_LOADED, volumeLoadedHandler),
-      () => eventTarget.removeEventListener(Enums.Events.VOLUME_RENDERED, volumeLoadedHandler)
+    this.subscriptions.push(() =>
+      eventTarget.removeEventListener(Enums.Events.IMAGE_RENDERED, imageRenderedHandler)
     );
-  }
-
-  private _handleViewportImageChange(viewportId: string): void {
-    // Store current state before image changes
-    this.storeRotationFlipState(viewportId);
-    
-    // Immediately trigger restoration for the new image
-    this.attemptViewportRestoration(viewportId);
   }
 
   private _handleViewportReady(viewportId: string): void {
@@ -255,7 +225,7 @@ class ViewportPersistenceService extends PubSubService {
     // Add to pending restorations for event-based handling
     this.pendingRestorations.set(viewportId, {
       viewportId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     // Try immediate restoration first
@@ -284,7 +254,7 @@ class ViewportPersistenceService extends PubSubService {
     if (this._restoreViewportState(viewportId)) {
       // Success - restoration completed
       this.pendingRestorations.delete(viewportId);
-      
+
       if (this.isInitialLoad && retryCount === 0) {
         // For initial load, add an additional restoration attempt
         setTimeout(() => {
@@ -333,12 +303,11 @@ class ViewportPersistenceService extends PubSubService {
 
       const storedState = this._getViewportState(hash);
       if (!storedState?.rotationFlip) {
-
         // Try to find a close match
         const allStoredKeys = Object.keys(localStorage).filter(key =>
           key.startsWith(this.STORAGE_KEY_PREFIX)
         );
-        
+
         const partialMatches = allStoredKeys.filter(key => {
           const storedHash = key.replace(this.STORAGE_KEY_PREFIX, '');
           const hashParts = hash.split('-');
@@ -349,7 +318,6 @@ class ViewportPersistenceService extends PubSubService {
         });
 
         if (partialMatches.length > 0) {
-
           // Use the most recent partial match
           let mostRecentKey = partialMatches[0];
           let mostRecentTime = 0;
@@ -392,10 +360,10 @@ class ViewportPersistenceService extends PubSubService {
         const defaultState = this._extractRotationFlipState(viewport);
         if (defaultState) {
           this._storeViewportState(hash, defaultState);
-          
+
           // Apply the default state (even though it's the same) to ensure uniformity
           this._applyViewportState(viewport, defaultState);
-          
+
           // Wait for the application to complete before broadcasting
           setTimeout(() => {
             this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_RESTORED, {
@@ -416,7 +384,7 @@ class ViewportPersistenceService extends PubSubService {
             });
           }, 200); // Same delay for uniformity
         }
-        
+
         return false;
       }
 
@@ -610,55 +578,7 @@ class ViewportPersistenceService extends PubSubService {
       // For stack viewports, we need to be more careful about timing
       // and ensure transformations apply to the entire stack, not per-image
 
-      let rotationApplied = false;
-      let flipsApplied = false;
-
-      // Method 1: Try setViewPresentation first (most reliable for stacks)
-      if (rotationFlipState.rotation !== undefined && viewport.setViewPresentation) {
-        try {
-          viewport.setViewPresentation({
-            rotation: rotationFlipState.rotation,
-          });
-          console.log(
-            '✅ Applied stack rotation via setViewPresentation:',
-            rotationFlipState.rotation
-          );
-          rotationApplied = true;
-        } catch (error) {
-          console.log('❌ Failed stack setViewPresentation rotation:', error.message);
-        }
-      }
-
-      // Method 2: Try setCamera for flips and fallback rotation
-      if (viewport.setCamera) {
-        const cameraUpdates: any = {};
-
-        if (rotationFlipState.flipHorizontal !== undefined) {
-          cameraUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
-        }
-
-        if (rotationFlipState.flipVertical !== undefined) {
-          cameraUpdates.flipVertical = rotationFlipState.flipVertical;
-        }
-
-        // Add rotation to camera if setViewPresentation failed
-        if (!rotationApplied && rotationFlipState.rotation !== undefined) {
-          cameraUpdates.rotation = rotationFlipState.rotation;
-        }
-
-        if (Object.keys(cameraUpdates).length > 0) {
-          try {
-            viewport.setCamera(cameraUpdates);
-            console.log('✅ Applied stack camera updates:', cameraUpdates);
-            flipsApplied = true;
-            if (!rotationApplied && cameraUpdates.rotation !== undefined) {
-              rotationApplied = true;
-            }
-          } catch (error) {
-            console.log('❌ Failed stack setCamera:', error.message);
-          }
-        }
-      }
+      const applied = this._applyFlipsThenRotation(viewport, rotationFlipState);
 
       // Force a full re-render to ensure consistency across all images in stack
       setTimeout(() => {
@@ -674,7 +594,7 @@ class ViewportPersistenceService extends PubSubService {
         }, 100);
       }, 50);
 
-      if (!rotationApplied && !flipsApplied) {
+      if (!applied) {
         console.log(
           '⚠️ Stack transformation application failed for viewport type:',
           viewport.constructor?.name
@@ -689,94 +609,7 @@ class ViewportPersistenceService extends PubSubService {
 
   private _applyTransformations(viewport: any, rotationFlipState: any): void {
     try {
-      let rotationApplied = false;
-      let flipsApplied = false;
-
-      // Try applying rotation via different methods based on viewport type
-      if (rotationFlipState.rotation !== undefined) {
-        // Method 1: setViewPresentation (stack viewports)
-        if (viewport.setViewPresentation) {
-          try {
-            viewport.setViewPresentation({
-              rotation: rotationFlipState.rotation,
-            });
-            console.log('✅ Applied rotation via setViewPresentation:', rotationFlipState.rotation);
-            rotationApplied = true;
-          } catch (error) {
-            console.log('❌ Failed setViewPresentation:', error.message);
-          }
-        }
-
-        // Method 2: setCamera (volume viewports)
-        if (!rotationApplied && viewport.setCamera) {
-          try {
-            viewport.setCamera({ rotation: rotationFlipState.rotation });
-            console.log('✅ Applied rotation via setCamera:', rotationFlipState.rotation);
-            rotationApplied = true;
-          } catch (error) {
-            console.log('❌ Failed setCamera rotation:', error.message);
-          }
-        }
-
-        // Method 3: setProperties (fallback)
-        if (!rotationApplied && viewport.setProperties) {
-          try {
-            viewport.setProperties({ rotation: rotationFlipState.rotation });
-            console.log('✅ Applied rotation via setProperties:', rotationFlipState.rotation);
-            rotationApplied = true;
-          } catch (error) {
-            console.log('❌ Failed setProperties rotation:', error.message);
-          }
-        }
-      }
-
-      // Apply flips via camera (most common method)
-      if (
-        viewport.setCamera &&
-        (rotationFlipState.flipHorizontal !== undefined ||
-          rotationFlipState.flipVertical !== undefined)
-      ) {
-        const cameraUpdates: any = {};
-
-        if (rotationFlipState.flipHorizontal !== undefined) {
-          cameraUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
-        }
-
-        if (rotationFlipState.flipVertical !== undefined) {
-          cameraUpdates.flipVertical = rotationFlipState.flipVertical;
-        }
-
-        try {
-          viewport.setCamera(cameraUpdates);
-          console.log('✅ Applied flips via setCamera:', cameraUpdates);
-          flipsApplied = true;
-        } catch (error) {
-          console.log('❌ Failed setCamera flips:', error.message);
-        }
-      }
-
-      // Fallback: try setViewPresentation for flips
-      if (
-        !flipsApplied &&
-        viewport.setViewPresentation &&
-        (rotationFlipState.flipHorizontal !== undefined ||
-          rotationFlipState.flipVertical !== undefined)
-      ) {
-        try {
-          const presentationUpdates: any = {};
-          if (rotationFlipState.flipHorizontal !== undefined) {
-            presentationUpdates.flipHorizontal = rotationFlipState.flipHorizontal;
-          }
-          if (rotationFlipState.flipVertical !== undefined) {
-            presentationUpdates.flipVertical = rotationFlipState.flipVertical;
-          }
-          viewport.setViewPresentation(presentationUpdates);
-          console.log('✅ Applied flips via setViewPresentation:', presentationUpdates);
-          flipsApplied = true;
-        } catch (error) {
-          console.log('❌ Failed setViewPresentation flips:', error.message);
-        }
-      }
+      const applied = this._applyFlipsThenRotation(viewport, rotationFlipState);
 
       // Final render after all transformations
       setTimeout(() => {
@@ -785,7 +618,7 @@ class ViewportPersistenceService extends PubSubService {
         }
       }, 10);
 
-      if (!rotationApplied && !flipsApplied) {
+      if (!applied) {
         console.log(
           '⚠️ No state application method succeeded for viewport type:',
           viewport.constructor?.name
@@ -794,6 +627,158 @@ class ViewportPersistenceService extends PubSubService {
     } catch (error) {
       console.error('Error applying transformations:', error);
     }
+  }
+
+  /**
+   * Applies flips BEFORE rotation. The stored rotation was read from
+   * getRotation()/getViewPresentation() on the flipped viewport, and a flip
+   * negates viewPlaneNormal, inverting the sign getRotation() reports. The
+   * value only reproduces the saved camera when re-applied in the same flip
+   * state it was measured in; rotating first lands 2×rotation (180° for a
+   * 90° rotation) away and alternates on every save/restore cycle.
+   *
+   * Values that already match the viewport are NOT re-applied:
+   * setViewPresentation unconditionally re-runs setRotation, whose
+   * pan-preservation math mixes getPan(fitToCanvasCamera) with getPan()
+   * (initialCamera-relative). After the autozoom displayArea is set with
+   * storeAsInitialCamera, those reference cameras diverge and a redundant
+   * setRotation collapses a presentation-restored manual pan.
+   */
+  private _applyFlipsThenRotation(viewport: any, rotationFlipState: any): boolean {
+    const { rotation, flipHorizontal, flipVertical } = rotationFlipState;
+
+    let currentFlipH;
+    let currentFlipV;
+    let currentRotation;
+    try {
+      const camera = viewport.getCamera?.() ?? {};
+      currentFlipH = camera.flipHorizontal;
+      currentFlipV = camera.flipVertical;
+      currentRotation = viewport.getViewPresentation?.()?.rotation ?? camera.rotation;
+    } catch (error) {
+      // Leave current state unknown — everything will be applied below.
+    }
+
+    const flipHChanged = flipHorizontal !== undefined && flipHorizontal !== currentFlipH;
+    const flipVChanged = flipVertical !== undefined && flipVertical !== currentFlipV;
+    const rotationDelta =
+      rotation !== undefined && currentRotation !== undefined
+        ? (((rotation - currentRotation) % 360) + 360) % 360
+        : undefined;
+    const rotationChanged =
+      rotation !== undefined &&
+      (rotationDelta === undefined || (rotationDelta > 0.01 && rotationDelta < 359.99));
+
+    const updates: any = {};
+    if (flipHChanged || flipVChanged) {
+      // A flip changes the frame rotation is measured in, so rotation must be
+      // re-applied whenever a flip changes, even when numerically equal.
+      if (flipHorizontal !== undefined) {
+        updates.flipHorizontal = flipHorizontal;
+      }
+      if (flipVertical !== undefined) {
+        updates.flipVertical = flipVertical;
+      }
+      if (rotation !== undefined) {
+        updates.rotation = rotation;
+      }
+    } else if (rotationChanged) {
+      updates.rotation = rotation;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      console.log('✅ Viewport already matches stored state, nothing to apply');
+      return true;
+    }
+
+    // The pan present at restore time was set by OHIF's presentation restore
+    // and is already expressed in the final (transformed) frame; cs3d's flip()
+    // would mirror it a second time. Preserve the exact screen pan across the
+    // apply. (When the autozoom later re-runs it recomputes centering from
+    // scratch, so pre-transform trim pans are corrected there.)
+    let preservedPan;
+    try {
+      preservedPan = viewport.getPan?.();
+    } catch (error) {
+      preservedPan = undefined;
+    }
+
+    const restorePan = () => {
+      if (!preservedPan || !viewport.setPan) {
+        return;
+      }
+      try {
+        viewport.setPan(preservedPan);
+      } catch (error) {
+        // Keep whatever pan the apply produced.
+      }
+    };
+
+    // Preferred: a single setViewPresentation call — cornerstone3d applies
+    // flips before rotation internally.
+    if (viewport.setViewPresentation) {
+      try {
+        viewport.setViewPresentation(updates);
+        restorePan();
+        console.log('✅ Applied state via setViewPresentation:', updates);
+        return true;
+      } catch (error) {
+        console.log('❌ Failed setViewPresentation:', error.message);
+      }
+    }
+
+    // Fallback: setCamera for flips first, then setRotation/setProperties.
+    let flipsApplied = false;
+    let rotationApplied = false;
+
+    if (
+      viewport.setCamera &&
+      (updates.flipHorizontal !== undefined || updates.flipVertical !== undefined)
+    ) {
+      const cameraUpdates: any = {};
+      if (updates.flipHorizontal !== undefined) {
+        cameraUpdates.flipHorizontal = updates.flipHorizontal;
+      }
+      if (updates.flipVertical !== undefined) {
+        cameraUpdates.flipVertical = updates.flipVertical;
+      }
+
+      try {
+        viewport.setCamera(cameraUpdates);
+        console.log('✅ Applied flips via setCamera:', cameraUpdates);
+        flipsApplied = true;
+      } catch (error) {
+        console.log('❌ Failed setCamera flips:', error.message);
+      }
+    }
+
+    if (updates.rotation !== undefined) {
+      if (viewport.setRotation) {
+        try {
+          viewport.setRotation(updates.rotation);
+          console.log('✅ Applied rotation via setRotation:', updates.rotation);
+          rotationApplied = true;
+        } catch (error) {
+          console.log('❌ Failed setRotation:', error.message);
+        }
+      }
+
+      if (!rotationApplied && viewport.setProperties) {
+        try {
+          viewport.setProperties({ rotation: updates.rotation });
+          console.log('✅ Applied rotation via setProperties:', updates.rotation);
+          rotationApplied = true;
+        } catch (error) {
+          console.log('❌ Failed setProperties rotation:', error.message);
+        }
+      }
+    }
+
+    if (flipsApplied || rotationApplied) {
+      restorePan();
+    }
+
+    return flipsApplied || rotationApplied;
   }
 
   cleanupInvalidStates(): void {

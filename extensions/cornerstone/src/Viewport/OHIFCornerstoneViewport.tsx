@@ -30,14 +30,27 @@ const STACK = 'stack';
 let cacheJumpToMeasurementEvent;
 
 /**
- * Tracks auto-trim state per displaySet.
- * After auto-trim, we snapshot the zoom/pan so we can later detect whether the user
- * has manually modified zoom/pan (in which case we should not re-apply auto-trim).
+ * The canonical "untouched" zoom/pan per displaySet: snapshotted right after a
+ * trim (autozoom) completes and refreshed after every rotate/flip command.
+ * cs3d zoom/pan numbers are only comparable within the same camera reference
+ * frame — the trim re-bases the viewport's initialCamera
+ * (storeAsInitialCamera) and a rotation then shifts the MEASURED pan even
+ * though the user touched nothing — so every comparison in this file is
+ * current-camera vs this baseline, never across transform changes.
  */
-const autoTrimStateCache = new Map<
-  string,
-  { zoom: number; panX: number; panY: number }
->();
+const baselineViewCache = new Map<string, { zoom: number; panX: number; panY: number }>();
+
+/**
+ * The user's manual zoom/pan, stored as a DELTA from that visit's untouched
+ * baseline (zoom ratio + pan offset). Autozoom always runs as the foundation
+ * on every visit — skipping it would leave the view at the mercy of stale
+ * reference cameras (resetCamera auto-re-applies the viewport's last
+ * options.displayArea, which may belong to a different image) — and the
+ * delta is re-applied on top. Delta arithmetic is same-frame at both ends:
+ * measured against the leave visit's post-trim baseline, applied onto the
+ * return visit's post-trim camera.
+ */
+const manualViewCache = new Map<string, { zoomRatio: number; panDX: number; panDY: number }>();
 
 // Todo: This should be done with expose of internal API similar to react-vtkjs-viewport
 // Then we don't need to worry about the re-renders if the props change.
@@ -518,6 +531,70 @@ const OHIFCornerstoneViewport = React.memo(
       const MAX_ATTEMPTS = 10;
       const displaySetKey = displaySets.map(ds => ds.displaySetInstanceUID).join(',');
 
+      const readView = () => {
+        const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+        if (!csViewport) {
+          return null;
+        }
+        const zoom = csViewport.getZoom?.() ?? 0;
+        const pan = csViewport.getPan?.() ?? [0, 0];
+        return { zoom, panX: pan[0] || 0, panY: pan[1] || 0 };
+      };
+
+      const differsFromBaseline = (view, baseline) => {
+        const zoomDiff = Math.abs(view.zoom - baseline.zoom);
+        const panDiff = Math.abs(view.panX - baseline.panX) + Math.abs(view.panY - baseline.panY);
+        return { differs: zoomDiff > 0.01 || panDiff > 0.5, zoomDiff, panDiff };
+      };
+
+      const snapshotBaseline = () => {
+        try {
+          const view = readView();
+          if (view) {
+            baselineViewCache.set(displaySetKey, view);
+          }
+        } catch (error) {
+          // Keep the previous baseline.
+        }
+      };
+
+      const applyManualDelta = () => {
+        const delta = manualViewCache.get(displaySetKey);
+        if (!delta) {
+          return;
+        }
+        try {
+          const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+          if (!csViewport) {
+            return;
+          }
+          if (delta.zoomRatio && Math.abs(delta.zoomRatio - 1) > 0.01 && csViewport.setZoom) {
+            csViewport.setZoom((csViewport.getZoom?.() ?? 1) * delta.zoomRatio);
+          }
+          if ((Math.abs(delta.panDX) > 0.5 || Math.abs(delta.panDY) > 0.5) && csViewport.setPan) {
+            const pan = csViewport.getPan?.() ?? [0, 0];
+            csViewport.setPan([pan[0] + delta.panDX, pan[1] + delta.panDY]);
+          }
+          csViewport.render?.();
+        } catch (error) {
+          console.warn('Failed to re-apply manual view delta:', error);
+        }
+      };
+
+      const runTrim = (): boolean => {
+        const result = commandsManager.runCommand('autoTrimBorders', { viewportId });
+        if (result === false) {
+          return false;
+        }
+        trimDone = true;
+        // Baseline first (the untouched post-trim view), then the user's
+        // manual delta on top — so the leave-time comparison measures only
+        // what the user changed relative to this visit's baseline.
+        snapshotBaseline();
+        applyManualDelta();
+        return true;
+      };
+
       const handleImageRendered = () => {
         if (trimDone || attempts >= MAX_ATTEMPTS) {
           return;
@@ -527,43 +604,26 @@ const OHIFCornerstoneViewport = React.memo(
         // Delay slightly to ensure image data is fully available in cache
         setTimeout(() => {
           try {
-            const cached = autoTrimStateCache.get(displaySetKey);
-            if (cached) {
-              const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-              if (csViewport) {
-                const camera = csViewport.getCamera();
-                const zoom = csViewport.getZoom?.() ?? camera?.parallelScale;
-                const pan = csViewport.getPan?.() ?? [0, 0];
-                const zoomDiff = Math.abs((zoom || 0) - cached.zoom);
-                const panDiff =
-                  Math.abs((pan[0] || 0) - cached.panX) +
-                  Math.abs((pan[1] || 0) - cached.panY);
-
-                if (zoomDiff > 0.01 || panDiff > 0.5) {
-                  trimDone = true;
-                  return;
-                }
-              }
-            }
-
-            const result = commandsManager.runCommand('autoTrimBorders', { viewportId });
-
-            if (result === false) {
+            if (trimDone) {
               return;
             }
 
-            trimDone = true;
-
-            const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-            if (csViewport) {
-              const zoom = csViewport.getZoom?.() ?? 0;
-              const pan = csViewport.getPan?.() ?? [0, 0];
-              autoTrimStateCache.set(displaySetKey, {
-                zoom,
-                panX: pan[0] || 0,
-                panY: pan[1] || 0,
-              });
+            // In-visit protection: if the camera has moved off the last known
+            // untouched baseline (user is panning/zooming right now, or the
+            // restore pipeline is mid-flight), do not re-trim from this path.
+            // The restore-triggered path below is the authority and ignores
+            // this latch.
+            const baseline = baselineViewCache.get(displaySetKey);
+            const view = readView();
+            if (baseline && view) {
+              const { differs } = differsFromBaseline(view, baseline);
+              if (differs) {
+                trimDone = true;
+                return;
+              }
             }
+
+            runTrim();
           } catch (error) {
             console.warn('Auto-trim borders failed:', error);
           }
@@ -572,10 +632,91 @@ const OHIFCornerstoneViewport = React.memo(
 
       element.addEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
 
+      // Deterministic autozoom: once viewport persistence has applied any
+      // stored rotation/flip, decide about the trim on top of the restored
+      // transforms — a moment when the camera is in its final state (the
+      // trimDone latch from the IMAGE_RENDERED path is intentionally ignored
+      // here, it can latch off a mid-transition camera).
+      let restoreTrimHandled = false;
+      const restorationTrimSubscription = viewportPersistenceService?.subscribe(
+        viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_RESTORED,
+        event => {
+          if (event.viewportId !== viewportId || restoreTrimHandled) {
+            return;
+          }
+          restoreTrimHandled = true;
+          try {
+            if (!runTrim()) {
+              // Image data not available yet — let the IMAGE_RENDERED path
+              // (or a later restoration broadcast) try again.
+              restoreTrimHandled = false;
+            }
+          } catch (error) {
+            console.warn('Auto-trim after restore failed:', error);
+            restoreTrimHandled = false;
+          }
+        }
+      );
+
+      // Rotate/flip commands store persistence state right after applying, so
+      // this event marks "the transforms just changed". A transform
+      // legitimately moves the MEASURED pan (the trim re-bases initialCamera),
+      // so refresh the untouched baseline to the post-transform camera —
+      // otherwise the leave-time comparison would misread the transform as a
+      // manual pan and suppress the autozoom on the next visit.
+      const transformBaselineSubscription = viewportPersistenceService?.subscribe(
+        viewportPersistenceService.constructor.EVENTS.VIEWPORT_STATE_STORED,
+        event => {
+          if (event.viewportId !== viewportId || !baselineViewCache.has(displaySetKey)) {
+            return;
+          }
+          setTimeout(snapshotBaseline, 50);
+        }
+      );
+
       return () => {
         element.removeEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+        restorationTrimSubscription?.unsubscribe();
+        transformBaselineSubscription?.unsubscribe();
+
+        // Leave-time verdict: record how far the user's view deviates from
+        // this visit's untouched baseline. The delta (zoom ratio + pan
+        // offset) is re-applied on top of the trim on the next visit; an
+        // untouched view clears it. Only recorded when a trim decision
+        // completed this visit (trimDone) — otherwise the camera and the
+        // baseline may be in different reference frames.
+        try {
+          if (!trimDone) {
+            return;
+          }
+          const baseline = baselineViewCache.get(displaySetKey);
+          const view = readView();
+          if (!baseline || !view) {
+            return;
+          }
+          const { differs } = differsFromBaseline(view, baseline);
+          if (!differs) {
+            manualViewCache.delete(displaySetKey);
+            return;
+          }
+          manualViewCache.set(displaySetKey, {
+            zoomRatio: baseline.zoom ? view.zoom / baseline.zoom : 1,
+            panDX: view.panX - baseline.panX,
+            panDY: view.panY - baseline.panY,
+          });
+        } catch (error) {
+          // Leave any previous delta in place.
+        }
       };
-    }, [viewportId, displaySets, viewportOptions, appConfig.autoTrimCollimationBorders, commandsManager]);
+    }, [
+      viewportId,
+      displaySets,
+      viewportOptions,
+      appConfig.autoTrimCollimationBorders,
+      commandsManager,
+      viewportPersistenceService,
+      cornerstoneViewportService,
+    ]);
 
     // Set up the window level action menu in the viewport action corners.
     useEffect(() => {
