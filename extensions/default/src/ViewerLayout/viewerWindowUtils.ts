@@ -48,15 +48,45 @@ export const readFamilyWindowData = (): FamilyWindowEntry[] => {
   return windows.filter(win => isFamilyWindowId(win?.id));
 };
 
-export const getVetOrigin = (): string | undefined => {
-  if (window.location.origin === 'http://localhost:3000') {
+/**
+ * Which radimal-vet origin a given viewer origin reports to. Pattern-based because the viewer is
+ * served from multiple origins per environment (e.g. view.radimal.ai and veg-view.radimal.ai in
+ * production) that all pair with the same vet app.
+ */
+export const vetOriginFor = (viewerOrigin: string): string | undefined => {
+  if (viewerOrigin === 'http://localhost:3000') {
     return 'http://localhost:8000';
-  } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
+  }
+  if (viewerOrigin.endsWith('.stage-1.radimal.ai')) {
     return 'https://radimal-vet-staging.onrender.com';
-  } else if (window.location.origin === 'https://view.radimal.ai') {
+  }
+  if (viewerOrigin.startsWith('https://') && viewerOrigin.endsWith('.radimal.ai')) {
     return 'https://vet.radimal.ai';
   }
   return undefined;
+};
+
+export const getVetOrigin = (): string | undefined => vetOriginFor(window.location.origin);
+
+/**
+ * Close every family window except this one (grab-by-name; no broadcast, no self-close). Used
+ * before a cross-origin LOAD_STUDY navigation: storage events and BroadcastChannel are
+ * per-origin, so monitor windows can't follow a VEG↔non-VEG switch and would be left showing
+ * the previous patient.
+ */
+export const closeOtherFamilyWindows = () => {
+  const windows = readFamilyWindowData();
+  windows.forEach(win => {
+    if (win.closed || win.id === window.name) {
+      return;
+    }
+    const childWindow = window.open('', win.id);
+    if (childWindow) {
+      childWindow.close();
+      win.closed = true;
+    }
+  });
+  localStorage.setItem('windowData', JSON.stringify(windows));
 };
 
 /**

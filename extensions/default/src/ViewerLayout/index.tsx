@@ -12,10 +12,12 @@ import {
   WINDOW_INSTANCE_ID,
   WINDOW_STARTED_AT,
   closeAllViewerWindows,
+  closeOtherFamilyWindows,
   getVetOrigin,
   isFamilyWindowId,
   isManagedViewerWindow,
   readFamilyWindowData,
+  vetOriginFor,
 } from './viewerWindowUtils';
 
 function ViewerLayout({
@@ -242,12 +244,19 @@ function ViewerLayout({
         event.data.type === 'LOAD_STUDY' &&
         typeof event.data.url === 'string'
       ) {
-        // radimal-vet changed cases; navigate to the new study. Additional monitor windows follow
-        // via the currentStudyId storage event once this window reloads.
+        // radimal-vet changed cases; navigate to the new study. Any sibling viewer origin that
+        // reports to our vet app is allowed — a VEG↔non-VEG case switch navigates this window
+        // cross-origin (e.g. view.radimal.ai → veg-view.radimal.ai). Same-origin, additional
+        // monitor windows follow via the currentStudyId storage event once this window reloads;
+        // cross-origin they can't (storage events are per-origin), so close them first.
         console.log('Received load study event:', event.data);
         try {
           const url = new URL(event.data.url, window.location.origin);
-          if (url.origin === window.location.origin) {
+          const targetVet = vetOriginFor(url.origin);
+          if (targetVet && targetVet === getVetOrigin()) {
+            if (url.origin !== window.location.origin) {
+              closeOtherFamilyWindows();
+            }
             window.location.href = url.toString();
           }
         } catch (error) {
