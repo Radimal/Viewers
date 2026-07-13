@@ -11,6 +11,13 @@ import { Toolbar } from '../Toolbar/Toolbar';
 import HeaderPatientInfo from './HeaderPatientInfo';
 import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
 import useStudyInfo from '../hooks/useStudyInfo';
+import {
+  closeAllViewerWindows,
+  isFamilyWindowId,
+  isManagedViewerWindow,
+  isPrimaryViewerWindow,
+  readFamilyWindowData,
+} from './viewerWindowUtils';
 import { utils } from '@ohif/core';
 import { InvalidationService } from '../../../../platform/app/src/utils/invalidationService';
 const { orthancUtils } = utils;
@@ -195,8 +202,14 @@ function ViewerHeader({
     };
 
     const handleStorageChange = event => {
-      console.log('Changing study', event);
       if (event.key === 'currentStudyId' && event.newValue) {
+        // Only additional monitor windows follow cross-window study changes. The primary is
+        // driven directly by its radimal-vet tab (LOAD_STUDY), and standalone share-link
+        // viewers must not be hijacked by another window's study change.
+        if (!isManagedViewerWindow() || isPrimaryViewerWindow()) {
+          return;
+        }
+        console.log('Changing study', event);
         const newStudyId = event.newValue;
         if (currentStudyId !== newStudyId) {
           refreshTab(newStudyId);
@@ -360,7 +373,7 @@ function ViewerHeader({
       title: t('Header:Duplicate Window'),
       icon: 'tool-monitor',
       onClick: () => {
-        let windows = JSON.parse(localStorage.getItem('windowData')) || [];
+        const windows = readFamilyWindowData();
         const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
 
         if (existingWindow) {
@@ -401,7 +414,9 @@ function ViewerHeader({
       onClick: () => {
         let windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
         windows.forEach((win, index) => {
-          if (win.id === 'viewerWindow') return;
+          if (win.id === 'viewerWindow' || !isFamilyWindowId(win.id)) {
+            return;
+          }
           setTimeout(() => {
             window.open(
               window.location.href,
@@ -415,22 +430,7 @@ function ViewerHeader({
     {
       title: t('Header:Close Windows'),
       icon: 'close-windows',
-      onClick: () => {
-        let windowDataArray = [];
-        let windows = JSON.parse(localStorage.getItem('windowData')) || [];
-        windows.forEach(win => {
-          if (win.closed) return;
-          const childWindow = window.open('', win.id);
-          if (childWindow) {
-            childWindow.close();
-            win.closed = true;
-            windowDataArray.push(win);
-          }
-        });
-        localStorage.setItem('windowData', JSON.stringify(windows));
-        localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
-        window.close();
-      },
+      onClick: closeAllViewerWindows,
     },
   ];
 
