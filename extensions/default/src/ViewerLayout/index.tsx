@@ -144,26 +144,6 @@ function ViewerLayout({
         height: window.outerHeight,
         closed: false,
       };
-      const windows = readFamilyWindowData();
-
-      const index = windows.findIndex(win => win.id === windowData.id);
-
-      if (index !== -1) {
-        const existingData = windows[index];
-        const geometryChanged =
-          existingData.x !== windowData.x ||
-          existingData.y !== windowData.y ||
-          existingData.width !== windowData.width ||
-          existingData.height !== windowData.height;
-        if (geometryChanged) {
-          windows[index] = windowData;
-          localStorage.setItem('windowData', JSON.stringify(windows));
-        }
-      } else {
-        windows.push(windowData);
-        localStorage.setItem('windowData', JSON.stringify(windows));
-      }
-
       // The window that owns us is gone — the radimal-vet tab for the primary, the window we
       // were duplicated from for a monitor window. Close rather than leaving a stale study on
       // screen: an orphaned window has no path back to radimal-vet and would silently stop
@@ -189,12 +169,37 @@ function ViewerLayout({
       // Heartbeat: the primary reports presence, geometry, current study, and fade state to the
       // radimal-vet opener on every tick — even when nothing changed — so the opener can tell
       // the viewer is open without probing for it (probing via window.open would create one).
+      // Runs before the localStorage bookkeeping so nothing can starve it.
       if (window.name === VIEWER_WINDOW_NAME && window.opener && !window.opener.closed) {
         const origin = getVetOrigin();
         if (origin) {
           const studyUid = new URLSearchParams(window.location.search).get('StudyInstanceUIDs');
           window.opener.postMessage({ ...windowData, studyUid, faded: fadeRef.current }, origin);
         }
+      }
+
+      try {
+        const windows = readFamilyWindowData();
+
+        const index = windows.findIndex(win => win.id === windowData.id);
+
+        if (index !== -1) {
+          const existingData = windows[index];
+          const geometryChanged =
+            existingData.x !== windowData.x ||
+            existingData.y !== windowData.y ||
+            existingData.width !== windowData.width ||
+            existingData.height !== windowData.height;
+          if (geometryChanged) {
+            windows[index] = windowData;
+            localStorage.setItem('windowData', JSON.stringify(windows));
+          }
+        } else {
+          windows.push(windowData);
+          localStorage.setItem('windowData', JSON.stringify(windows));
+        }
+      } catch (error) {
+        console.error('Error saving window data:', error);
       }
     };
 
