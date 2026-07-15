@@ -396,15 +396,32 @@ function _mapDataSourceStudies(studies) {
 const dateTimeSortedModalities = ['CT', 'MR'];
 
 function _compareThumbnailDisplaySets(a, b) {
-  // CT/MR series thumbnails sort oldest-to-newest by series date/time.
-  if (
-    dateTimeSortedModalities.includes(a.Modality) &&
-    dateTimeSortedModalities.includes(b.Modality)
-  ) {
-    // DICOM DA/TM strings (YYYYMMDD / HHMMSS.FFFFFF) sort correctly lexicographically.
-    // Series missing both date and time (empty key) sort before dated ones.
-    const aDateTime = (a.SeriesDate || '') + (a.SeriesTime || '');
-    const bDateTime = (b.SeriesDate || '') + (b.SeriesTime || '');
+  // Compare per study first so the comparator is a total order (transitive)
+  // even when multiple loaded studies mix modality classes (e.g. a CT study
+  // with a CR prior). Cross-study relative order does not affect display:
+  // the study browser tabs filter thumbnails per study, preserving order.
+  const aStudyUID = a.StudyInstanceUID || '';
+  const bStudyUID = b.StudyInstanceUID || '';
+  if (aStudyUID !== bStudyUID) {
+    return aStudyUID < bStudyUID ? -1 : 1;
+  }
+
+  const aIsCTMR = dateTimeSortedModalities.includes(a.Modality);
+  const bIsCTMR = dateTimeSortedModalities.includes(b.Modality);
+  if (aIsCTMR !== bIsCTMR) {
+    // Only affects mixed-modality single studies (e.g. CT with SR/SEG);
+    // those non-image display sets are split into their own list after the
+    // sort, so visible order is unchanged.
+    return aIsCTMR ? 1 : -1;
+  }
+
+  if (aIsCTMR) {
+    // CT/MR series thumbnails sort oldest-to-newest by series date/time.
+    // DICOM DA/TM strings (YYYYMMDD / HHMMSS.FFFFFF) sort correctly
+    // lexicographically. Series missing SeriesDate (empty key) sort before
+    // dated ones and fall through to the tiebreakers.
+    const aDateTime = a.SeriesDate ? a.SeriesDate + (a.SeriesTime || '') : '';
+    const bDateTime = b.SeriesDate ? b.SeriesDate + (b.SeriesTime || '') : '';
     if (aDateTime !== bDateTime) {
       return aDateTime < bDateTime ? -1 : 1;
     }
