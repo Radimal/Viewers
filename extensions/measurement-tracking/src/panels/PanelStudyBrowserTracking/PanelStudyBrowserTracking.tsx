@@ -600,9 +600,10 @@ function _compareThumbnailDisplaySets(a, b) {
   const aIsCTMR = dateTimeSortedModalities.includes(a.Modality);
   const bIsCTMR = dateTimeSortedModalities.includes(b.Modality);
   if (aIsCTMR !== bIsCTMR) {
-    // Only affects mixed-modality single studies (e.g. CT with SR/SEG);
-    // those non-image display sets are split into their own list after the
-    // sort, so visible order is unchanged.
+    // Groups non-CT/MR display sets ahead of CT/MR within a study. For
+    // SR/SEG/DOC this is invisible (they are split into their own list after
+    // the sort); other image modalities sharing a study with CT/MR (e.g.
+    // PET/CT) group rather than interleave by instance number.
     return aIsCTMR ? 1 : -1;
   }
 
