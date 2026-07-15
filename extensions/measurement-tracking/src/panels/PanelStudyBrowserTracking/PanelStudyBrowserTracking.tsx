@@ -584,6 +584,43 @@ function _mapDataSourceStudies(studies) {
   });
 }
 
+const dateTimeSortedModalities = ['CT', 'MR'];
+
+function _compareThumbnailDisplaySets(a, b) {
+  // CT/MR series thumbnails sort oldest-to-newest by series date/time.
+  if (
+    dateTimeSortedModalities.includes(a.Modality) &&
+    dateTimeSortedModalities.includes(b.Modality)
+  ) {
+    // DICOM DA/TM strings (YYYYMMDD / HHMMSS.FFFFFF) sort correctly lexicographically.
+    // Series missing both date and time (empty key) sort before dated ones.
+    const aDateTime = (a.SeriesDate || '') + (a.SeriesTime || '');
+    const bDateTime = (b.SeriesDate || '') + (b.SeriesTime || '');
+    if (aDateTime !== bDateTime) {
+      return aDateTime < bDateTime ? -1 : 1;
+    }
+    const aSeriesNum = parseInt(a.SeriesNumber) || 0;
+    const bSeriesNum = parseInt(b.SeriesNumber) || 0;
+    if (aSeriesNum !== bSeriesNum) {
+      return aSeriesNum - bSeriesNum;
+    }
+    const aInstanceNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
+    const bInstanceNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
+    if (aInstanceNum !== bInstanceNum) {
+      return aInstanceNum - bInstanceNum;
+    }
+    // Final deterministic tiebreak so the order is stable across loads.
+    const aUID = a.SeriesInstanceUID || '';
+    const bUID = b.SeriesInstanceUID || '';
+    return aUID < bUID ? -1 : aUID > bUID ? 1 : 0;
+  }
+
+  // All other modalities keep the existing InstanceNumber ordering.
+  const aNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
+  const bNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
+  return aNum - bNum;
+}
+
 function _mapDisplaySets(
   displaySets,
   displaySetLoadingState,
@@ -601,11 +638,7 @@ function _mapDisplaySets(
   displaySets
     .filter(ds => !ds.excludeFromThumbnailBrowser)
     .filter(ds => !ds.SeriesDescription?.includes('DNR '))
-    .sort((a, b) => {
-      const aNum = parseInt(a.images?.[0]?.InstanceNumber) || 0;
-      const bNum = parseInt(b.images?.[0]?.InstanceNumber) || 0;
-      return aNum - bNum;
-    })
+    .sort(_compareThumbnailDisplaySets)
     .forEach(ds => {
       const imageSrc = thumbnailImageSrcMap[ds.displaySetInstanceUID];
       const componentType = _getComponentType(ds);
