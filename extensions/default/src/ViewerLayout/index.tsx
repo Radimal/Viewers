@@ -105,7 +105,16 @@ function ViewerLayout({
   // PROTOCOL_CHANGED after only the hanging-protocol-required series have
   // loaded, so the bar may disappear before reaching 100% — the accompanying
   // text describes the metadata phase truthfully rather than promising 100%.
+  // Gated on showLoadingIndicator: it never returns to true within a mount
+  // (single setShowLoadingIndicator(false) call site at PROTOCOL_CHANGED), so
+  // once the overlay hides this effect re-runs, cleanup unsubscribes, and
+  // background series loads (remaining promises, later prior-study loads) can
+  // no longer trigger layout-wide re-renders through setSeriesProgress.
   useEffect(() => {
+    if (!showLoadingIndicator) {
+      return;
+    }
+
     const countedStudyUIDs = new Set<string>();
     const loadedSeriesUIDs = new Set<string>();
     let totalSeries = 0;
@@ -145,7 +154,7 @@ function ViewerLayout({
       seriesAddedSubscription.unsubscribe();
       instancesAddedSubscription.unsubscribe();
     };
-  }, []);
+  }, [showLoadingIndicator]);
 
   const getViewportComponentData = viewportComponent => {
     const { entry } = getComponent(viewportComponent.namespace);
