@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useResizeDetector } from 'react-resize-detector';
 import * as cs3DTools from '@cornerstonejs/tools';
-import { Enums, eventTarget, getEnabledElement } from '@cornerstonejs/core';
+import { cache, Enums, eventTarget, getEnabledElement } from '@cornerstonejs/core';
 import { MeasurementService } from '@ohif/core';
-import { AllInOneMenu, LoadingIndicatorProgress, Notification, useViewportDialog } from '@ohif/ui';
+import {
+  AllInOneMenu,
+  LoadingIndicatorTotalPercent,
+  Notification,
+  useViewportDialog,
+} from '@ohif/ui';
 import type { Types as csTypes } from '@cornerstonejs/core';
 
 import { setEnabledElement } from '../state';
@@ -22,6 +27,17 @@ import { useSynchronizersStore } from '../stores/useSynchronizersStore';
 import ActiveViewportBehavior from '../utils/ActiveViewportBehavior';
 
 const STACK = 'stack';
+
+/** The default volume loader scheme used to build volumeIds (see CornerstoneCacheService). */
+const DEFAULT_VOLUME_LOADER_SCHEME = 'cornerstoneStreamingImageVolume';
+
+/**
+ * Minimum number of images in a stack before the loading overlay switches
+ * from the indeterminate bar to a real "Loaded X of Y" percent. Small stacks
+ * (single-frame CR/DX etc.) load too fast for a percent to be useful, so
+ * they keep the current indeterminate look and fast reveal.
+ */
+const MIN_STACK_IMAGES_FOR_PROGRESS = 10;
 
 /**
  * Caches the jump to measurement operation, so that if display set is shown,
@@ -113,6 +129,14 @@ const OHIFCornerstoneViewport = React.memo(
     const [enabledVPElement, setEnabledVPElement] = useState(null);
     // Start hidden behind the loading overlay until rotation/flip restoration has run
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
+    // Frames/images loaded so far for this viewport's displaySets; null when
+    // there is no reliable progress signal (the overlay bar then stays
+    // indeterminate, exactly as before).
+    const [loadProgress, setLoadProgress] = useState<{
+      loaded: number;
+      total: number;
+      targetText: string;
+    } | null>(null);
 
     const elementRef = useRef() as React.MutableRefObject<HTMLDivElement>;
     const [appConfig] = useAppConfig();
@@ -298,6 +322,8 @@ const OHIFCornerstoneViewport = React.memo(
 
       element.style.visibility = 'hidden';
       setShowLoadingOverlay(true);
+      // New displaySets, new load: drop any progress from the previous ones.
+      setLoadProgress(null);
     }, [displaySets, viewportId, cornerstoneViewportService, viewportPersistenceService]);
 
     useEffect(() => {
@@ -411,6 +437,125 @@ const OHIFCornerstoneViewport = React.memo(
 
       loadViewportData();
     }, [viewportOptions, displaySets, dataSource]);
+
+    // Feed a real percent into the loading overlay while it is shown. This
+    // effect only OBSERVES load progress — the overlay show/hide/reveal logic
+    // is untouched — and when no signal is available loadProgress stays null,
+    // keeping the indeterminate bar. Note: this effect is declared after the
+    // loadViewportData effect above so that, on the same commit, the default
+    // viewportType (stack) has already been applied to viewportOptions.
+    useEffect(() => {
+      const isVolumeViewport =
+        Boolean(viewportOptions.viewportType) && viewportOptions.viewportType !== STACK;
+
+      if (isVolumeViewport) {
+        // VOLUME viewports (reconstructable CT/MR): the streaming volume
+        // loader reports per-frame progress on the cornerstone eventTarget.
+        // Multiple viewports (e.g. MPR) share one volumeId, so filter events
+        // to this viewport's own volumes; progress is taken from the event
+        // payload (framesProcessed/numberOfFrames) rather than counted, so a
+        // shared volume can never double count.
+        const displaySetUIDs = displaySets
+          .map(displaySet => displaySet.displaySetInstanceUID)
+          .filter(Boolean);
+        const isViewportVolume = (volumeId: unknown): boolean =>
+          typeof volumeId === 'string' && displaySetUIDs.some(uid => volumeId.includes(uid));
+
+        // Already-cached volume: neither IMAGE_VOLUME_MODIFIED nor
+        // IMAGE_VOLUME_LOADING_COMPLETED will fire, so seed a full bar
+        // instead of leaving the overlay indeterminate.
+        displaySets.forEach(displaySet => {
+          const { volumeLoaderSchema } = displaySet as { volumeLoaderSchema?: string };
+          const volumeId = `${volumeLoaderSchema ?? DEFAULT_VOLUME_LOADER_SCHEME}:${displaySet.displaySetInstanceUID}`;
+          const volume = cache.getVolume(volumeId);
+          const numberOfFrames = volume?.imageIds?.length;
+          if (volume?.loadStatus?.loaded && numberOfFrames) {
+            setLoadProgress({
+              loaded: numberOfFrames,
+              total: numberOfFrames,
+              targetText: 'frames',
+            });
+          }
+        });
+
+        const handleVolumeModified = evt => {
+          const { volumeId, numberOfFrames, framesProcessed } = evt.detail || {};
+          if (!isViewportVolume(volumeId) || !numberOfFrames) {
+            return;
+          }
+          setLoadProgress({
+            loaded: framesProcessed,
+            total: numberOfFrames,
+            targetText: 'frames',
+          });
+        };
+
+        const handleVolumeLoadingCompleted = evt => {
+          if (!isViewportVolume(evt.detail?.volumeId)) {
+            return;
+          }
+          // Pin to 100%; if no progress was ever reported stay indeterminate.
+          setLoadProgress(prev => (prev ? { ...prev, loaded: prev.total } : prev));
+        };
+
+        eventTarget.addEventListener(Enums.Events.IMAGE_VOLUME_MODIFIED, handleVolumeModified);
+        eventTarget.addEventListener(
+          Enums.Events.IMAGE_VOLUME_LOADING_COMPLETED,
+          handleVolumeLoadingCompleted
+        );
+
+        return () => {
+          eventTarget.removeEventListener(Enums.Events.IMAGE_VOLUME_MODIFIED, handleVolumeModified);
+          eventTarget.removeEventListener(
+            Enums.Events.IMAGE_VOLUME_LOADING_COMPLETED,
+            handleVolumeLoadingCompleted
+          );
+        };
+      }
+
+      // STACK viewports: count IMAGE_LOADED events for this viewport's
+      // imageIds (deduped via a Set — an image can only count once).
+      const imageIdSet = new Set<string>();
+      displaySets.forEach(displaySet => {
+        const images = displaySet.images as Array<{ imageId?: string }> | undefined;
+        const imageIds = images?.map(image => image?.imageId) ?? displaySet.imageIds ?? [];
+        imageIds.forEach(imageId => imageId && imageIdSet.add(imageId));
+      });
+
+      const total = imageIdSet.size;
+      if (total < MIN_STACK_IMAGES_FOR_PROGRESS) {
+        // Small stacks (single-frame CR/DX etc.): keep the indeterminate bar.
+        return;
+      }
+
+      // Seed with images already in the cornerstone cache — those never fire
+      // IMAGE_LOADED (e.g. revisiting a cached study), and without this the
+      // percent would stall at 0.
+      const loadedImageIds = new Set<string>();
+      imageIdSet.forEach(imageId => {
+        if (cache.isLoaded(imageId)) {
+          loadedImageIds.add(imageId);
+        }
+      });
+      if (loadedImageIds.size) {
+        setLoadProgress({ loaded: loadedImageIds.size, total, targetText: 'images' });
+      }
+
+      const handleImageLoaded = evt => {
+        const imageId = evt.detail?.image?.imageId;
+        if (!imageId || !imageIdSet.has(imageId) || loadedImageIds.has(imageId)) {
+          return;
+        }
+        loadedImageIds.add(imageId);
+        setLoadProgress({ loaded: loadedImageIds.size, total, targetText: 'images' });
+      };
+
+      eventTarget.addEventListener(Enums.Events.IMAGE_LOADED, handleImageLoaded);
+
+      return () => {
+        eventTarget.removeEventListener(Enums.Events.IMAGE_LOADED, handleImageLoaded);
+      };
+    }, [displaySets, viewportId, viewportOptions]);
 
     /**
      * There are two scenarios for jump to click
@@ -847,9 +992,20 @@ const OHIFCornerstoneViewport = React.memo(
             viewportId={viewportId}
             servicesManager={servicesManager}
           />
-          {/* Loading overlay until the image is ready with rotation/flip applied */}
+          {/* Loading overlay until the image is ready with rotation/flip applied.
+              Shows "Loaded X of Y" + percent when a progress signal is
+              available; falls back to the indeterminate bar otherwise. */}
           {showLoadingOverlay && (
-            <LoadingIndicatorProgress className="pointer-events-none h-full w-full bg-black" />
+            <LoadingIndicatorTotalPercent
+              className="pointer-events-none h-full w-full bg-black"
+              totalNumbers={loadProgress?.total ?? null}
+              percentComplete={
+                loadProgress && loadProgress.total > 0
+                  ? Math.min(100, Math.floor((loadProgress.loaded / loadProgress.total) * 100))
+                  : null
+              }
+              targetText={loadProgress?.targetText}
+            />
           )}
         </div>
         {/* top offset of 24px to account for ViewportActionCorners. */}
