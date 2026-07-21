@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import { LoadingIndicatorProgress, InvestigationalUseDialog } from '@ohif/ui';
-import { HangingProtocolService, CommandsManager } from '@ohif/core';
+import { HangingProtocolService, CommandsManager, DicomMetadataStore } from '@ohif/core';
 import { useAppConfig } from '@state';
 import ViewerHeader from './ViewerHeader';
 import SidePanelWithServices from '../Components/SidePanelWithServices';
@@ -36,6 +36,11 @@ function ViewerLayout({
 
   const { panelService, hangingProtocolService } = servicesManager.services;
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(appConfig.showLoadingIndicator);
+  // Series-metadata retrieval progress for the app-level loading overlay.
+  // undefined until the first SERIES_ADDED announces a series count (indeterminate bar).
+  const [seriesProgress, setSeriesProgress] = useState<
+    { loaded: number; total: number } | undefined
+  >();
 
   const hasPanels = useCallback(
     (side): boolean => !!panelService.getPanels(side).length,
@@ -92,6 +97,55 @@ function ViewerLayout({
       unsubscribe();
     };
   }, [hangingProtocolService]);
+
+  // Real progress for the app-level loading overlay, driven by series-metadata
+  // retrieval: SERIES_ADDED fires once per study with the study's full series
+  // list (known up-front from QIDO), and INSTANCES_ADDED fires once per series
+  // as its WADO-RS metadata completes. With lazy loading the overlay hides at
+  // PROTOCOL_CHANGED after only the hanging-protocol-required series have
+  // loaded, so the bar may disappear before reaching 100% — the accompanying
+  // text describes the metadata phase truthfully rather than promising 100%.
+  useEffect(() => {
+    const countedStudyUIDs = new Set<string>();
+    const loadedSeriesUIDs = new Set<string>();
+    let totalSeries = 0;
+
+    const updateProgress = () => {
+      if (totalSeries > 0) {
+        setSeriesProgress({ loaded: loadedSeriesUIDs.size, total: totalSeries });
+      }
+    };
+
+    const seriesAddedSubscription = DicomMetadataStore.subscribe(
+      DicomMetadataStore.EVENTS.SERIES_ADDED,
+      ({ StudyInstanceUID, seriesSummaryMetadata }) => {
+        // Dedupe by study in case SERIES_ADDED re-fires for the same study.
+        if (countedStudyUIDs.has(StudyInstanceUID)) {
+          return;
+        }
+        countedStudyUIDs.add(StudyInstanceUID);
+        totalSeries += seriesSummaryMetadata.length;
+        updateProgress();
+      }
+    );
+
+    const instancesAddedSubscription = DicomMetadataStore.subscribe(
+      DicomMetadataStore.EVENTS.INSTANCES_ADDED,
+      ({ StudyInstanceUID, SeriesInstanceUID }) => {
+        // Only count series belonging to studies included in the denominator.
+        if (!countedStudyUIDs.has(StudyInstanceUID)) {
+          return;
+        }
+        loadedSeriesUIDs.add(SeriesInstanceUID);
+        updateProgress();
+      }
+    );
+
+    return () => {
+      seriesAddedSubscription.unsubscribe();
+      instancesAddedSubscription.unsubscribe();
+    };
+  }, []);
 
   const getViewportComponentData = viewportComponent => {
     const { entry } = getComponent(viewportComponent.namespace);
@@ -378,7 +432,23 @@ function ViewerLayout({
         style={{ height: 'calc(100vh - 52px' }}
       >
         <React.Fragment>
-          {showLoadingIndicator && <LoadingIndicatorProgress className="h-full w-full bg-black" />}
+          {showLoadingIndicator && (
+            <LoadingIndicatorProgress
+              className="h-full w-full bg-black"
+              progress={
+                seriesProgress
+                  ? Math.min(99, Math.floor((seriesProgress.loaded / seriesProgress.total) * 100))
+                  : undefined
+              }
+              textBlock={
+                seriesProgress ? (
+                  <div className="text-sm text-white">
+                    Loading series metadata ({seriesProgress.loaded} of {seriesProgress.total})
+                  </div>
+                ) : undefined
+              }
+            />
+          )}
           {/* LEFT SIDEPANELS */}
           {hasLeftPanels ? (
             <SidePanelWithServices
