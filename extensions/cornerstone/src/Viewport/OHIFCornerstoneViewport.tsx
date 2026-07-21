@@ -445,6 +445,18 @@ const OHIFCornerstoneViewport = React.memo(
     // loadViewportData effect above so that, on the same commit, the default
     // viewportType (stack) has already been applied to viewportOptions.
     useEffect(() => {
+      // Only listen while the overlay is visible. Once it reveals, streaming
+      // continues in the background (potentially hundreds more
+      // IMAGE_VOLUME_MODIFIED / IMAGE_LOADED events) and every
+      // setLoadProgress would re-render the whole viewport for an overlay
+      // nobody can see. Re-running on the reveal transition lets the cleanup
+      // below detach the listeners at exactly the right moment; the overlay
+      // is only ever re-shown together with a state flip of this flag, which
+      // re-runs this effect and re-attaches/re-seeds.
+      if (!showLoadingOverlay) {
+        return;
+      }
+
       const isVolumeViewport =
         Boolean(viewportOptions.viewportType) && viewportOptions.viewportType !== STACK;
 
@@ -452,21 +464,24 @@ const OHIFCornerstoneViewport = React.memo(
         // VOLUME viewports (reconstructable CT/MR): the streaming volume
         // loader reports per-frame progress on the cornerstone eventTarget.
         // Multiple viewports (e.g. MPR) share one volumeId, so filter events
-        // to this viewport's own volumes; progress is taken from the event
+        // to this viewport's own volume; progress is taken from the event
         // payload (framesProcessed/numberOfFrames) rather than counted, so a
-        // shared volume can never double count.
-        const displaySetUIDs = displaySets
-          .map(displaySet => displaySet.displaySetInstanceUID)
-          .filter(Boolean);
+        // shared volume can never double count. Fusion viewports track only
+        // their primary (first) volume so two volumes' progress events don't
+        // overwrite each other.
+        const primaryDisplaySet = displaySets[0];
+        const primaryDisplaySetUID = primaryDisplaySet?.displaySetInstanceUID;
         const isViewportVolume = (volumeId: unknown): boolean =>
-          typeof volumeId === 'string' && displaySetUIDs.some(uid => volumeId.includes(uid));
+          Boolean(primaryDisplaySetUID) &&
+          typeof volumeId === 'string' &&
+          volumeId.includes(primaryDisplaySetUID);
 
         // Already-cached volume: neither IMAGE_VOLUME_MODIFIED nor
         // IMAGE_VOLUME_LOADING_COMPLETED will fire, so seed a full bar
         // instead of leaving the overlay indeterminate.
-        displaySets.forEach(displaySet => {
-          const { volumeLoaderSchema } = displaySet as { volumeLoaderSchema?: string };
-          const volumeId = `${volumeLoaderSchema ?? DEFAULT_VOLUME_LOADER_SCHEME}:${displaySet.displaySetInstanceUID}`;
+        if (primaryDisplaySetUID) {
+          const { volumeLoaderSchema } = primaryDisplaySet as { volumeLoaderSchema?: string };
+          const volumeId = `${volumeLoaderSchema ?? DEFAULT_VOLUME_LOADER_SCHEME}:${primaryDisplaySetUID}`;
           const volume = cache.getVolume(volumeId);
           const numberOfFrames = volume?.imageIds?.length;
           if (volume?.loadStatus?.loaded && numberOfFrames) {
@@ -476,7 +491,7 @@ const OHIFCornerstoneViewport = React.memo(
               targetText: 'frames',
             });
           }
-        });
+        }
 
         const handleVolumeModified = evt => {
           const { volumeId, numberOfFrames, framesProcessed } = evt.detail || {};
@@ -555,7 +570,7 @@ const OHIFCornerstoneViewport = React.memo(
       return () => {
         eventTarget.removeEventListener(Enums.Events.IMAGE_LOADED, handleImageLoaded);
       };
-    }, [displaySets, viewportId, viewportOptions]);
+    }, [displaySets, viewportId, viewportOptions, showLoadingOverlay]);
 
     /**
      * There are two scenarios for jump to click
