@@ -57,6 +57,7 @@ jobs:
           build-args: |
             REACT_APP_HASURA_ADMIN_SECRET_PROD=${{ secrets.HASURA_ADMIN_SECRET_PROD }}
             REACT_APP_HASURA_ADMIN_SECRET_DEV=${{ secrets.HASURA_ADMIN_SECRET_DEV }}
+            COMMIT_SHA=${{ github.sha }}
       - name: Extract dist from built image
         run: |
           docker pull "${{ env.ECR }}:${{ github.ref_name }}"

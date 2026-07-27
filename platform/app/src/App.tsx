@@ -6,6 +6,7 @@ import i18n from '@ohif/i18n';
 import { I18nextProvider } from 'react-i18next';
 import { BrowserRouter } from 'react-router-dom';
 import cacheManager from './utils/cacheManager';
+import UpdateBanner from './components/UpdateBanner';
 
 import Compose from './routes/Mode/Compose';
 import {
@@ -76,9 +77,10 @@ function App({
     };
 
     run();
-    // Auto-update polling disabled: force-reload on version change disrupted
-    // in-progress measurements. Users pick up new versions on next refresh.
-    // cacheManager.startVersionChecking();
+    // Update polling is non-disruptive: on version change it only surfaces the
+    // UpdateBanner (never force-reloads), so in-progress measurements are safe.
+    // Refresh happens only when the user clicks the banner.
+    cacheManager.startVersionChecking();
     // Make cache manager globally accessible for debugging
     if (typeof window !== 'undefined') {
       window.cacheManager = cacheManager;
@@ -184,6 +186,7 @@ function App({
 
   return (
     <CombinedProviders>
+      <UpdateBanner />
       <BrowserRouter basename={routerBasename}>
         {authRoutes}
         {appRoutes}

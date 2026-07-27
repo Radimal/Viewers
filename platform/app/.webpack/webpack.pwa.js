@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const { merge } = require('webpack-merge');
 const webpack = require('webpack');
 const webpackBase = require('./../../../.webpack/webpack.base.js');
@@ -25,6 +26,36 @@ const Dotenv = require('dotenv-webpack');
 const writePluginImportFile = require('./writePluginImportsFile.js');
 
 const copyPluginFromExtensions = writePluginImportFile(SRC_DIR, DIST_DIR);
+
+// Build identity for /version.json — the SAME sources webpack.base.js bakes
+// into the bundle via DefinePlugin (process.env.COMMIT_HASH / VERSION_NUMBER),
+// so a fetched /version.json can be compared against the running bundle to
+// detect that a newer build has been deployed (see src/utils/cacheManager.js).
+const readBuildFile = (filePath, fallback) => {
+  try {
+    const value = fs.readFileSync(filePath, 'utf8').trim();
+    return value || fallback;
+  } catch (error) {
+    return fallback;
+  }
+};
+const PKG_VERSION = require('../package.json').version || '0.0.0';
+const VERSION_NUMBER = readBuildFile(path.join(__dirname, '../../../version.txt'), PKG_VERSION);
+const COMMIT_HASH = readBuildFile(path.join(__dirname, '../../../commit.txt'), 'local');
+
+const buildVersionJson = () => {
+  const now = Date.now();
+  return JSON.stringify(
+    {
+      version: VERSION_NUMBER,
+      commit: COMMIT_HASH,
+      buildTime: new Date(now).toISOString(),
+      timestamp: now,
+    },
+    null,
+    2
+  );
+};
 
 const setHeaders = (res, path) => {
   if (path.indexOf('.gz') !== -1) {
@@ -99,8 +130,15 @@ module.exports = (env, argv) => {
             to: DIST_DIR,
             toType: 'dir',
             globOptions: {
-              ignore: ['**/config/**', '**/html-templates/**', '.DS_Store'],
+              // version.json is emitted with real build identity below, not
+              // copied from the stale static file.
+              ignore: ['**/config/**', '**/html-templates/**', '.DS_Store', '**/version.json'],
             },
+          },
+          {
+            from: `${PUBLIC_DIR}/version.json`,
+            to: `${DIST_DIR}/version.json`,
+            transform: () => buildVersionJson(),
           },
           {
             from: `${PUBLIC_DIR}/config/google.js`,
@@ -129,7 +167,9 @@ module.exports = (env, argv) => {
       new InjectManifest({
         swDest: 'sw.js',
         swSrc: path.join(SRC_DIR, 'service-worker.js'),
-        exclude: [/theme/],
+        // version.json must never be precached — it is fetched fresh to detect
+        // new deploys (src/utils/cacheManager.js).
+        exclude: [/theme/, /version\.json$/],
         maximumFileSizeToCacheInBytes: 1024 * 1024 * 50,
       }),
     ],

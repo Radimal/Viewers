@@ -69,6 +69,12 @@ ENV QUICK_BUILD=true
 # ENV GENERATE_SOURCEMAP=false
 # ENV REACT_APP_CONFIG=config/default.js
 
+# Stamp the real build identity: commit.txt feeds both the bundle's baked-in
+# COMMIT_HASH (webpack DefinePlugin) and the emitted /version.json. Without
+# this the committed commit.txt is stale and identical across deploys, so
+# update detection can never fire.
+ARG COMMIT_SHA=
+RUN if [ -n "$COMMIT_SHA" ]; then printf '%s' "$COMMIT_SHA" > commit.txt; fi
 
 RUN yarn run build
 
