@@ -14,8 +14,8 @@ import {
   closeAllViewerWindows,
   closeOtherFamilyWindows,
   getVetOrigin,
-  isFamilyWindowId,
   isManagedViewerWindow,
+  openSavedViewerWindows,
   readFamilyWindowData,
   vetOriginFor,
 } from './viewerWindowUtils';
@@ -353,24 +353,30 @@ function ViewerLayout({
     // on "first" load - delete all windowData + windowsArray from localStorage
   }, []);
 
+  // "Open Additional Windows On Start" (User Preferences): the primary opened from radimal-vet
+  // restores the saved multi-monitor layout automatically. Only the primary restores — a
+  // standalone or secondary window re-running this would fight over the same named windows.
   useEffect(() => {
-    const openSavedWindows = localStorage.getItem('openAdditionalWindowsOnStart');
-    if (!!JSON.parse(openSavedWindows) && window.name === 'viewerWindow') {
-      let windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
-      windows.forEach((win, index) => {
-        if (win.id === VIEWER_WINDOW_NAME || !isFamilyWindowId(win.id)) {
-          return;
-        }
-        setTimeout(() => {
-          window.open(
-            window.location.href,
-            win.id,
-            `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
-          );
-        }, index * 200);
+    if (window.name !== VIEWER_WINDOW_NAME) {
+      return;
+    }
+    let openOnStart = false;
+    try {
+      openOnStart = !!JSON.parse(localStorage.getItem('openAdditionalWindowsOnStart'));
+    } catch (error) {
+      openOnStart = false;
+    }
+    if (openOnStart) {
+      openSavedViewerWindows(blockedCount => {
+        servicesManager.services.uiNotificationService?.show({
+          title: 'Popup Blocked',
+          message: `The browser blocked ${blockedCount} saved window(s). Allow popups for this site, then use Monitor > Open Saved Windows.`,
+          type: 'warning',
+          duration: 8000,
+        });
       });
     }
-  }, []);
+  }, [servicesManager]);
 
   useEffect(() => {
     // Standalone viewers (share links, direct URLs) are not part of the vet-driven window

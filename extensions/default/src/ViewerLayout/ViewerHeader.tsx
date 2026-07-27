@@ -13,9 +13,9 @@ import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
 import useStudyInfo from '../hooks/useStudyInfo';
 import {
   closeAllViewerWindows,
-  isFamilyWindowId,
   isManagedViewerWindow,
   isPrimaryViewerWindow,
+  openSavedViewerWindows,
   readFamilyWindowData,
 } from './viewerWindowUtils';
 import { utils } from '@ohif/core';
@@ -412,18 +412,13 @@ function ViewerHeader({
       title: t('Header:Open Saved Windows'),
       icon: 'open-saved-windows',
       onClick: () => {
-        let windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
-        windows.forEach((win, index) => {
-          if (win.id === 'viewerWindow' || !isFamilyWindowId(win.id)) {
-            return;
-          }
-          setTimeout(() => {
-            window.open(
-              window.location.href,
-              win.id,
-              `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
-            );
-          }, index * 200);
+        openSavedViewerWindows(blockedCount => {
+          uiNotificationService.show({
+            title: 'Popup Blocked',
+            message: `The browser blocked ${blockedCount} saved window(s). Allow popups for this site to restore them.`,
+            type: 'warning',
+            duration: 8000,
+          });
         });
       },
     },

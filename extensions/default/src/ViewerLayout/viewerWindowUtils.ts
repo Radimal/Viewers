@@ -120,6 +120,55 @@ export const closeAllViewerWindows = () => {
     }
   });
   localStorage.setItem('windowData', JSON.stringify(windows));
-  localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
+  // Only overwrite the saved layout when a secondary window is part of this teardown. The
+  // opener-closed auto-close routinely fires with just the primary open; saving that snapshot
+  // would degrade windowsArray to [viewerWindow] and turn "Open Saved Windows" (and the
+  // open-on-start preference) into a permanent no-op.
+  const hasSecondaryWindow = windowDataArray.some(win => win.id !== VIEWER_WINDOW_NAME);
+  if (hasSecondaryWindow) {
+    localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
+  }
   window.close();
+};
+
+/**
+ * Reopen every saved secondary window from `windowsArray` at its saved geometry, staggered so
+ * the browser doesn't coalesce the opens. The primary entry is skipped — the caller already is
+ * (or stands in for) the primary. Used by the "Open Saved Windows" menu item and the
+ * open-on-start preference.
+ *
+ * Calls `onBlocked(count)` after the last attempt if the popup blocker refused any window —
+ * without user activation (the on-start path) Chrome blocks window.open unless the viewer
+ * origin has been granted popup permission, and silently doing nothing reads as a dead button.
+ */
+export const openSavedViewerWindows = (onBlocked?: (blockedCount: number) => void) => {
+  let windows;
+  try {
+    windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
+  } catch (error) {
+    windows = [];
+  }
+  if (!Array.isArray(windows)) {
+    windows = [];
+  }
+  const savedSecondaryWindows = windows.filter(
+    win => isFamilyWindowId(win?.id) && win.id !== VIEWER_WINDOW_NAME
+  );
+  let blockedCount = 0;
+  savedSecondaryWindows.forEach((win, index) => {
+    setTimeout(() => {
+      const opened = window.open(
+        window.location.href,
+        win.id,
+        `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
+      );
+      if (!opened) {
+        blockedCount += 1;
+      }
+      if (index === savedSecondaryWindows.length - 1 && blockedCount > 0) {
+        console.warn(`Popup blocker prevented reopening ${blockedCount} saved viewer window(s)`);
+        onBlocked?.(blockedCount);
+      }
+    }, index * 200);
+  });
 };
