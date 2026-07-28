@@ -462,14 +462,19 @@ function ViewerLayout({
             <LoadingIndicatorProgress
               className="h-full w-full bg-black"
               progress={
-                seriesProgress
+                // Until the first series completes there is no measurable fraction —
+                // keep the bar undefined so ProgressLoadingBar animates its infinite
+                // sweep instead of sitting frozen at 0% (e.g. single-series CT/MR).
+                seriesProgress && seriesProgress.loaded > 0
                   ? Math.min(99, Math.floor((seriesProgress.loaded / seriesProgress.total) * 100))
                   : undefined
               }
               textBlock={
                 seriesProgress ? (
                   <div className="text-sm text-white">
-                    Loading series metadata ({seriesProgress.loaded} of {seriesProgress.total})
+                    Loading series metadata (
+                    {Math.min(seriesProgress.loaded + 1, seriesProgress.total)} of{' '}
+                    {seriesProgress.total})
                   </div>
                 ) : undefined
               }
