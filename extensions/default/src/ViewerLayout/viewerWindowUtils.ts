@@ -69,6 +69,26 @@ export const vetOriginFor = (viewerOrigin: string): string | undefined => {
 export const getVetOrigin = (): string | undefined => vetOriginFor(window.location.origin);
 
 /**
+ * Canonical name for the next monitor window: lowest 'viewerWindow-N' not currently open.
+ * Names are positional rather than timestamped so the SAME physical window is addressable
+ * from every viewer origin — windowData/windowsArray are per-origin localStorage, and a
+ * timestamped id saved on one origin can never match a monitor that followed a cross-origin
+ * case switch from the other, which made "open saved windows" spawn extras beside it.
+ */
+export const nextMonitorWindowId = (): string => {
+  const openIds = new Set(
+    readFamilyWindowData()
+      .filter(win => !win.closed)
+      .map(win => win.id)
+  );
+  let n = 1;
+  while (openIds.has(`${VIEWER_WINDOW_NAME}-${n}`)) {
+    n += 1;
+  }
+  return `${VIEWER_WINDOW_NAME}-${n}`;
+};
+
+/**
  * Close every window in the viewer family, saving the set to `windowsArray` so "Open Saved
  * Windows" can restore it. Used by the Close Windows menu item, the CLOSE message from
  * radimal-vet, and the opener-closed auto-close.
@@ -136,9 +156,13 @@ export const openSavedViewerWindows = (onBlocked?: (blockedCount: number) => voi
   let blockedCount = 0;
   savedSecondaryWindows.forEach((win, index) => {
     setTimeout(() => {
+      // Open by canonical position, not the saved id: the saved geometry still applies, but
+      // targeting 'viewerWindow-N' reuses (and navigates) a monitor that already exists —
+      // e.g. one that followed a cross-origin case switch — instead of spawning a new window
+      // beside it because the per-origin saved id doesn't match its name.
       const opened = window.open(
         window.location.href,
-        win.id,
+        `${VIEWER_WINDOW_NAME}-${index + 1}`,
         `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
       );
       if (!opened) {

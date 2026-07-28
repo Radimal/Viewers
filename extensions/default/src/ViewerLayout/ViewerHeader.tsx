@@ -12,9 +12,11 @@ import HeaderPatientInfo from './HeaderPatientInfo';
 import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
 import useStudyInfo from '../hooks/useStudyInfo';
 import {
+  VIEWER_WINDOW_NAME,
   closeAllViewerWindows,
   isManagedViewerWindow,
   isPrimaryViewerWindow,
+  nextMonitorWindowId,
   openSavedViewerWindows,
   readFamilyWindowData,
 } from './viewerWindowUtils';
@@ -374,37 +376,34 @@ function ViewerHeader({
       icon: 'tool-monitor',
       onClick: () => {
         const windows = readFamilyWindowData();
-        const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
+        // Canonical positional id (viewerWindow-N) so every origin addresses the same
+        // physical window; prefer that entry's own saved geometry, else any closed monitor's.
+        const newId = nextMonitorWindowId();
+        const reusable =
+          windows.find(win => win.closed && win.id === newId) ||
+          windows.find(win => win.closed && win.id !== VIEWER_WINDOW_NAME);
 
-        if (existingWindow) {
-          const { width, height, x, y, id, closed } = existingWindow;
+        const newWin = reusable
+          ? window.open(
+              window.location.href,
+              newId,
+              `width=${reusable.width},height=${reusable.height},left=${reusable.x},top=${reusable.y}`
+            )
+          : window.open(window.location.href, newId);
 
-          const newWin = window.open(
-            window.location.href,
-            id,
-            `width=${width},height=${height},left=${x},top=${y}`
-          );
-
-          if (newWin) {
-            existingWindow.closed = false;
-            localStorage.setItem('windowData', JSON.stringify(windows));
-          }
-        } else {
-          const newId = `viewerWindow-${Date.now()}`;
-          const newWin = window.open(window.location.href, newId);
-          if (newWin) {
-            const newWindowData = {
-              id: newId,
-              x: window.screenX,
-              y: window.screenY,
-              width: window.outerWidth,
-              height: window.outerHeight,
-              closed: false,
-            };
-
-            windows.push(newWindowData);
-            localStorage.setItem('windowData', JSON.stringify(windows));
-          }
+        if (newWin) {
+          // Drop the consumed entry (it may carry a legacy timestamped id) and register the
+          // canonical one; the new window's own heartbeat keeps it fresh from here.
+          const remaining = windows.filter(win => win !== reusable && win.id !== newId);
+          remaining.push({
+            id: newId,
+            x: reusable?.x ?? window.screenX,
+            y: reusable?.y ?? window.screenY,
+            width: reusable?.width ?? window.outerWidth,
+            height: reusable?.height ?? window.outerHeight,
+            closed: false,
+          });
+          localStorage.setItem('windowData', JSON.stringify(remaining));
         }
       },
     },
