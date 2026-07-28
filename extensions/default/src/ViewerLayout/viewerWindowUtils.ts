@@ -69,35 +69,6 @@ export const vetOriginFor = (viewerOrigin: string): string | undefined => {
 export const getVetOrigin = (): string | undefined => vetOriginFor(window.location.origin);
 
 /**
- * Close every family window except this one (grab-by-name; no broadcast, no self-close). Used
- * before a cross-origin LOAD_STUDY navigation: storage events and BroadcastChannel are
- * per-origin, so monitor windows can't follow a VEG↔non-VEG switch and would be left showing
- * the previous patient.
- */
-export const closeOtherFamilyWindows = () => {
-  // Ask same-origin family windows to close themselves. Unlike the name-grab below this
-  // needs no user activation and doesn't depend on windowData being accurate, so it still
-  // works when a stale closed flag or a popup blocker would defeat the grab. The grab stays
-  // as a fallback for windows whose channel listener is gone (e.g. mid-load).
-  const channel = new BroadcastChannel('window_channel');
-  channel.postMessage({ type: 'CLOSE_OTHERS', senderId: window.name });
-  channel.close();
-
-  const windows = readFamilyWindowData();
-  windows.forEach(win => {
-    if (win.closed || win.id === window.name) {
-      return;
-    }
-    const childWindow = window.open('', win.id);
-    if (childWindow) {
-      childWindow.close();
-      win.closed = true;
-    }
-  });
-  localStorage.setItem('windowData', JSON.stringify(windows));
-};
-
-/**
  * Close every window in the viewer family, saving the set to `windowsArray` so "Open Saved
  * Windows" can restore it. Used by the Close Windows menu item, the CLOSE message from
  * radimal-vet, and the opener-closed auto-close.

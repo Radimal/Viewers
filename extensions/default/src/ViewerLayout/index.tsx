@@ -12,7 +12,6 @@ import {
   WINDOW_INSTANCE_ID,
   WINDOW_STARTED_AT,
   closeAllViewerWindows,
-  closeOtherFamilyWindows,
   getVetOrigin,
   isManagedViewerWindow,
   openSavedViewerWindows,
@@ -320,14 +319,19 @@ function ViewerLayout({
         // reports to our vet app is allowed — a VEG↔non-VEG case switch navigates this window
         // cross-origin (e.g. view.radimal.ai → veg-view.radimal.ai). Same-origin, additional
         // monitor windows follow via the currentStudyId storage event once this window reloads;
-        // cross-origin they can't (storage events are per-origin), so close them first.
+        // cross-origin they can't (storage events are per-origin), so hand them the target URL
+        // over the family channel while everyone still shares this origin.
         console.log('Received load study event:', event.data);
         try {
           const url = new URL(event.data.url, window.location.origin);
           const targetVet = vetOriginFor(url.origin);
           if (targetVet && targetVet === getVetOrigin()) {
             if (url.origin !== window.location.origin) {
-              closeOtherFamilyWindows();
+              channel.postMessage({
+                type: 'NAVIGATE_FAMILY',
+                url: url.toString(),
+                senderId: window.name,
+              });
             }
             window.location.href = url.toString();
           }
@@ -397,12 +401,21 @@ function ViewerLayout({
       } else if (event.data.type === 'CLOSE') {
         console.log('All children received fade event:', event.data);
         window.close();
-      } else if (event.data.type === 'CLOSE_OTHERS') {
-        // A family window (the primary, before a cross-origin case switch) asked everyone
-        // else to close: monitors can't follow a VEG<->non-VEG navigation, so staying open
-        // would strand them on the previous patient.
-        if (event.data.senderId !== window.name) {
-          window.close();
+      } else if (event.data.type === 'NAVIGATE_FAMILY') {
+        // The primary received a cross-origin case switch (VEG<->non-VEG) and is about to
+        // navigate away. Storage events are per-origin so monitors can't follow the usual
+        // way; the primary hands the whole family the target URL while everyone still
+        // shares an origin. Re-validate like LOAD_STUDY: only sibling viewer origins that
+        // report to the same vet app.
+        if (event.data.senderId !== window.name && typeof event.data.url === 'string') {
+          try {
+            const url = new URL(event.data.url);
+            if (vetOriginFor(url.origin) === getVetOrigin()) {
+              window.location.href = url.toString();
+            }
+          } catch (error) {
+            console.error('Invalid NAVIGATE_FAMILY url:', event.data.url);
+          }
         }
       } else if (event.data.type === 'PRIMARY_TAKEOVER') {
         // A newer primary viewer announced itself (e.g. opened from another radimal-vet tab).
