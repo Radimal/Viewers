@@ -149,10 +149,10 @@ function UpdateBanner(): JSX.Element | null {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-[10000] flex justify-center">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[10000] flex justify-center">
       <div
-        className={`bg-primary-main pointer-events-auto mt-2 flex items-stretch overflow-hidden rounded-full text-white shadow-lg transition-all duration-300 ease-out ${
-          entered ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'
+        className={`bg-primary pointer-events-auto mb-2 flex items-stretch overflow-hidden rounded-full text-white shadow-lg transition-all duration-300 ease-out ${
+          entered ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
         }`}
       >
         <button
