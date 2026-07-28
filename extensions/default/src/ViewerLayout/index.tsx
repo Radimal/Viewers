@@ -253,7 +253,11 @@ function ViewerLayout({
             existingData.y !== windowData.y ||
             existingData.width !== windowData.width ||
             existingData.height !== windowData.height;
-          if (geometryChanged) {
+          // beforeunload marks this entry closed on ANY unload, including in-place reloads
+          // (banner refresh, F5) where geometry never changes — heal the flag, or every
+          // close-by-name mechanism (cross-origin case switch, Close Windows) skips a window
+          // that is actually open. A window running this heartbeat is by definition open.
+          if (geometryChanged || existingData.closed) {
             windows[index] = windowData;
             localStorage.setItem('windowData', JSON.stringify(windows));
           }
@@ -393,6 +397,13 @@ function ViewerLayout({
       } else if (event.data.type === 'CLOSE') {
         console.log('All children received fade event:', event.data);
         window.close();
+      } else if (event.data.type === 'CLOSE_OTHERS') {
+        // A family window (the primary, before a cross-origin case switch) asked everyone
+        // else to close: monitors can't follow a VEG<->non-VEG navigation, so staying open
+        // would strand them on the previous patient.
+        if (event.data.senderId !== window.name) {
+          window.close();
+        }
       } else if (event.data.type === 'PRIMARY_TAKEOVER') {
         // A newer primary viewer announced itself (e.g. opened from another radimal-vet tab).
         // Two primaries fight over currentStudyId, so the older one yields.

@@ -75,6 +75,14 @@ export const getVetOrigin = (): string | undefined => vetOriginFor(window.locati
  * the previous patient.
  */
 export const closeOtherFamilyWindows = () => {
+  // Ask same-origin family windows to close themselves. Unlike the name-grab below this
+  // needs no user activation and doesn't depend on windowData being accurate, so it still
+  // works when a stale closed flag or a popup blocker would defeat the grab. The grab stays
+  // as a fallback for windows whose channel listener is gone (e.g. mid-load).
+  const channel = new BroadcastChannel('window_channel');
+  channel.postMessage({ type: 'CLOSE_OTHERS', senderId: window.name });
+  channel.close();
+
   const windows = readFamilyWindowData();
   windows.forEach(win => {
     if (win.closed || win.id === window.name) {
