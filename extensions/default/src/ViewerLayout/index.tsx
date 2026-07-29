@@ -14,6 +14,7 @@ import {
   closeAllViewerWindows,
   getVetOrigin,
   isManagedViewerWindow,
+  navigateFamilyWindowsByName,
   openSavedViewerWindows,
   readFamilyWindowData,
   vetOriginFor,
@@ -332,6 +333,12 @@ function ViewerLayout({
                 url: url.toString(),
                 senderId: window.name,
               });
+              // The broadcast only reaches windows whose listener is already attached. A monitor
+              // that is still loading misses it, and cross-origin that is unrecoverable: once
+              // this window leaves the origin, neither localStorage nor the channel can reach it
+              // again, so it would show the previous patient indefinitely. Name-targeting does
+              // not depend on the window running our code.
+              navigateFamilyWindowsByName(url.toString());
             }
             window.location.href = url.toString();
           }

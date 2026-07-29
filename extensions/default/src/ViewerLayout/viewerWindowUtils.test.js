@@ -1,8 +1,11 @@
 import {
   VIEWER_WINDOW_NAME,
   closeAllViewerWindows,
+  navigateFamilyWindowsByName,
   openSavedViewerWindows,
+  publishFamilyStudy,
   readFamilyWindowData,
+  readFreshFamilyStudy,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
 
@@ -98,9 +101,11 @@ describe('viewerWindowUtils', () => {
       jest.runAllTimers();
 
       expect(openSpy).toHaveBeenCalledTimes(1);
+      // Restored by canonical position rather than the saved id: per-origin ids never match a
+      // monitor that followed a cross-origin case switch (816eddd5).
       expect(openSpy).toHaveBeenCalledWith(
         window.location.href,
-        secondaryEntry.id,
+        `${VIEWER_WINDOW_NAME}-1`,
         `width=${secondaryEntry.width},height=${secondaryEntry.height},left=${secondaryEntry.x},top=${secondaryEntry.y}`
       );
     });
@@ -138,6 +143,88 @@ describe('viewerWindowUtils', () => {
 
       expect(onBlocked).toHaveBeenCalledTimes(1);
       expect(onBlocked).toHaveBeenCalledWith(2);
+    });
+  });
+
+  describe('family study publication', () => {
+    it('round-trips a freshly published study', () => {
+      publishFamilyStudy('1.2.3');
+
+      expect(localStorage.getItem('currentStudyId')).toBe('1.2.3');
+      expect(readFreshFamilyStudy()).toBe('1.2.3');
+    });
+
+    it('ignores a study published longer ago than the freshness window', () => {
+      publishFamilyStudy('1.2.3');
+      localStorage.setItem('currentStudyIdAt', String(Date.now() - 120000));
+
+      expect(readFreshFamilyStudy(60000)).toBeNull();
+      // Still readable by builds that only know the untimestamped key.
+      expect(localStorage.getItem('currentStudyId')).toBe('1.2.3');
+    });
+
+    it('ignores a study written by an older build with no timestamp', () => {
+      localStorage.setItem('currentStudyId', '1.2.3');
+
+      expect(readFreshFamilyStudy()).toBeNull();
+    });
+
+    it('returns null when nothing has been published', () => {
+      expect(readFreshFamilyStudy()).toBeNull();
+    });
+  });
+
+  describe('navigateFamilyWindowsByName', () => {
+    const target = 'https://veg-view.radimal.ai/viewer/?StudyInstanceUIDs=1.2.3';
+
+    it('navigates open family windows by name so mid-load windows still follow', () => {
+      localStorage.setItem('windowData', JSON.stringify([primaryEntry, secondaryEntry]));
+      window.name = VIEWER_WINDOW_NAME;
+
+      navigateFamilyWindowsByName(target);
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(openSpy).toHaveBeenCalledWith(target, secondaryEntry.id);
+    });
+
+    it('never navigates the calling window', () => {
+      localStorage.setItem('windowData', JSON.stringify([primaryEntry, secondaryEntry]));
+      window.name = secondaryEntry.id;
+
+      navigateFamilyWindowsByName(target);
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(openSpy).toHaveBeenCalledWith(target, VIEWER_WINDOW_NAME);
+    });
+
+    it('skips windows already recorded as closed', () => {
+      localStorage.setItem(
+        'windowData',
+        JSON.stringify([primaryEntry, { ...secondaryEntry, closed: true }])
+      );
+      window.name = VIEWER_WINDOW_NAME;
+
+      navigateFamilyWindowsByName(target);
+
+      expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps going when one window cannot be reached', () => {
+      localStorage.setItem(
+        'windowData',
+        JSON.stringify([
+          primaryEntry,
+          secondaryEntry,
+          { ...secondaryEntry, id: 'viewerWindow-2' },
+        ])
+      );
+      window.name = VIEWER_WINDOW_NAME;
+      openSpy.mockImplementationOnce(() => {
+        throw new Error('blocked');
+      });
+
+      expect(() => navigateFamilyWindowsByName(target)).not.toThrow();
+      expect(openSpy).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -76,6 +76,67 @@ export const readFamilyWindowData = (): FamilyWindowEntry[] => {
   return windows.filter(win => isFamilyWindowId(win?.id));
 };
 
+const FAMILY_STUDY_KEY = 'currentStudyId';
+const FAMILY_STUDY_AT_KEY = 'currentStudyIdAt';
+
+/**
+ * Publish the study the family should be showing. Written only by the primary.
+ *
+ * The timestamp lives in a separate key on purpose: builds that read only `currentStudyId` keep
+ * working through a rollout, which matters because monitor windows are long-lived and are not
+ * all reloaded at once.
+ */
+export const publishFamilyStudy = (studyInstanceUid: string) => {
+  localStorage.setItem(FAMILY_STUDY_KEY, studyInstanceUid);
+  localStorage.setItem(FAMILY_STUDY_AT_KEY, String(Date.now()));
+};
+
+/**
+ * The family's intended study, but only if it was published recently.
+ *
+ * For the mount-time reconcile, which exists because a window that is still loading has no
+ * `storage` listener and no channel listener, so it misses a case switch entirely. Freshness is
+ * what makes reading this at mount safe: localStorage outlives the session and each viewer origin
+ * keeps its own copy, so a window arriving on an origin the family left long ago would otherwise
+ * chase a dead study. A live `storage` event needs no such check — it is current by definition.
+ */
+export const readFreshFamilyStudy = (maxAgeMs = 60_000): string | null => {
+  const studyInstanceUid = localStorage.getItem(FAMILY_STUDY_KEY);
+  if (!studyInstanceUid) {
+    return null;
+  }
+  const publishedAt = Number(localStorage.getItem(FAMILY_STUDY_AT_KEY));
+  if (!publishedAt || Date.now() - publishedAt > maxAgeMs) {
+    return null;
+  }
+  return studyInstanceUid;
+};
+
+/**
+ * Navigate every other open family window to `url` by window name.
+ *
+ * Complements the NAVIGATE_FAMILY broadcast rather than replacing it: a window still loading has
+ * no channel listener yet and misses the message, and for a cross-origin switch that stranding is
+ * permanent — both localStorage and BroadcastChannel are origin-partitioned, so once the primary
+ * leaves the origin nothing can ever reach that window again. Targeting by name works whether or
+ * not the window is running our code, because family windows are opened by the primary and stay
+ * reachable by name from it.
+ *
+ * A window that already handled the broadcast gets navigated a second time to the same URL. That
+ * costs a reload, and is the deliberate trade against leaving a monitor on the previous patient.
+ */
+export const navigateFamilyWindowsByName = (url: string) => {
+  readFamilyWindowData()
+    .filter(win => !win.closed && win.id !== window.name)
+    .forEach(win => {
+      try {
+        window.open(url, win.id);
+      } catch (error) {
+        console.warn(`Could not navigate family window ${win.id}`, error);
+      }
+    });
+};
+
 /**
  * Which radimal-vet origin a given viewer origin reports to. Pattern-based because the viewer is
  * served from multiple origins per environment (e.g. view.radimal.ai and veg-view.radimal.ai in

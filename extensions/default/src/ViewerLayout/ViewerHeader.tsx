@@ -18,7 +18,9 @@ import {
   isPrimaryViewerWindow,
   nextMonitorWindowId,
   openSavedViewerWindows,
+  publishFamilyStudy,
   readFamilyWindowData,
+  readFreshFamilyStudy,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
 import { utils } from '@ohif/core';
@@ -207,12 +209,14 @@ function ViewerHeader({
       window.location.href = currentUrl.toString();
     };
 
+    // Only additional monitor windows follow cross-window study changes. The primary is driven
+    // directly by its radimal-vet tab (LOAD_STUDY), and standalone share-link viewers must not be
+    // hijacked by another window's study change.
+    const followsFamilyStudy = isManagedViewerWindow() && !isPrimaryViewerWindow();
+
     const handleStorageChange = event => {
       if (event.key === 'currentStudyId' && event.newValue) {
-        // Only additional monitor windows follow cross-window study changes. The primary is
-        // driven directly by its radimal-vet tab (LOAD_STUDY), and standalone share-link
-        // viewers must not be hijacked by another window's study change.
-        if (!isManagedViewerWindow() || isPrimaryViewerWindow()) {
+        if (!followsFamilyStudy) {
           return;
         }
         console.log('Changing study', event);
@@ -224,11 +228,22 @@ function ViewerHeader({
     };
 
     if (
+      isPrimaryViewerWindow() &&
       currentStudyId &&
-      localStorage.getItem('currentStudyId') !== currentStudyId &&
-      window.name == 'viewerWindow'
+      localStorage.getItem('currentStudyId') !== currentStudyId
     ) {
-      localStorage.setItem('currentStudyId', currentStudyId);
+      publishFamilyStudy(currentStudyId);
+    }
+
+    // Reconcile on mount as well as on the event. Listeners only exist once this component has
+    // mounted, so a monitor that was still loading when the family switched case never hears
+    // about it and sits on the previous patient until the NEXT switch.
+    if (followsFamilyStudy && currentStudyId) {
+      const intendedStudyId = readFreshFamilyStudy();
+      if (intendedStudyId && intendedStudyId !== currentStudyId) {
+        console.log('Catching up to family study', intendedStudyId);
+        refreshTab(intendedStudyId);
+      }
     }
 
     window.addEventListener('storage', handleStorageChange);
