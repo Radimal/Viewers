@@ -19,6 +19,7 @@ import {
   nextMonitorWindowId,
   openSavedViewerWindows,
   readFamilyWindowData,
+  stripCaseScopedParams,
 } from './viewerWindowUtils';
 import { utils } from '@ohif/core';
 import { InvalidationService } from '../../../../platform/app/src/utils/invalidationService';
@@ -200,6 +201,9 @@ function ViewerHeader({
     const refreshTab = newStudyId => {
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('StudyInstanceUIDs', newStudyId);
+      // This URL described the PREVIOUS case; only StudyInstanceUIDs is being updated, so every
+      // other case-scoped param would now point at the wrong study.
+      stripCaseScopedParams(currentUrl);
       window.location.href = currentUrl.toString();
     };
 

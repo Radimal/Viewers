@@ -3,6 +3,7 @@ import {
   closeAllViewerWindows,
   openSavedViewerWindows,
   readFamilyWindowData,
+  stripCaseScopedParams,
 } from './viewerWindowUtils';
 
 const primaryEntry = {
@@ -137,6 +138,42 @@ describe('viewerWindowUtils', () => {
 
       expect(onBlocked).toHaveBeenCalledTimes(1);
       expect(onBlocked).toHaveBeenCalledWith(2);
+    });
+  });
+
+  describe('stripCaseScopedParams', () => {
+    it('drops the previous case Orthanc study id so the download button cannot reuse it', () => {
+      const url = new URL(
+        'https://view.radimal.ai/viewer/?StudyInstanceUIDs=1.2.3.new&studyId=c171e359-c01c9ba5-4d07ebf3-0b05d028-e82ca438&patientId=old-patient'
+      );
+
+      stripCaseScopedParams(url);
+
+      expect(url.searchParams.get('studyId')).toBeNull();
+      expect(url.searchParams.get('patientId')).toBeNull();
+      expect(url.searchParams.get('StudyInstanceUIDs')).toBe('1.2.3.new');
+    });
+
+    it('keeps distinct_id, which identifies the user rather than the case', () => {
+      const url = new URL(
+        'https://view.radimal.ai/viewer/?StudyInstanceUIDs=1.2.3&distinct_id=radimal_vet&studyId=abc'
+      );
+
+      stripCaseScopedParams(url);
+
+      expect(url.searchParams.get('distinct_id')).toBe('radimal_vet');
+      expect(url.searchParams.get('studyId')).toBeNull();
+    });
+
+    it('drops initial series/SOP params, which reference the previous study series', () => {
+      const url = new URL(
+        'https://view.radimal.ai/viewer/?StudyInstanceUIDs=1.2.3&initialseriesinstanceuid=1.2.3.4&initialsopinstanceuid=1.2.3.4.5'
+      );
+
+      stripCaseScopedParams(url);
+
+      expect(url.searchParams.get('initialseriesinstanceuid')).toBeNull();
+      expect(url.searchParams.get('initialsopinstanceuid')).toBeNull();
     });
   });
 });

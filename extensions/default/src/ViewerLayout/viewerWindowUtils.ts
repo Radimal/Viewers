@@ -20,6 +20,34 @@ export const isManagedViewerWindow = () => window.name.startsWith(VIEWER_WINDOW_
 export const isFamilyWindowId = (id: unknown): boolean =>
   typeof id === 'string' && id.startsWith(VIEWER_WINDOW_NAME);
 
+/**
+ * Params that describe ONE specific case. A monitor window following a same-origin study change
+ * reuses its own URL and swaps StudyInstanceUIDs, so these have to go: carrying the previous
+ * case's Orthanc study id onto a new study makes the download button hand over the PREVIOUS
+ * patient's images and report success, because `studyId` is trusted ahead of loaded metadata
+ * (ViewerHeader handleDownloadStudy). The initial series/SOP params belong to the old study's
+ * series and can never resolve against the new one.
+ *
+ * `distinct_id` is deliberately absent — it identifies the user, not the case, and the same vet
+ * drives the whole window family.
+ */
+export const CASE_SCOPED_PARAMS = [
+  'studyId',
+  'patientId',
+  'PatientID',
+  'initialseriesinstanceuid',
+  'initialsopinstanceuid',
+];
+
+/**
+ * Drop every case-scoped param from `url`, mutating and returning it. Use whenever a URL for one
+ * study is reused as the basis for another.
+ */
+export const stripCaseScopedParams = (url: URL): URL => {
+  CASE_SCOPED_PARAMS.forEach(param => url.searchParams.delete(param));
+  return url;
+};
+
 type FamilyWindowEntry = {
   id: string;
   x: number;
