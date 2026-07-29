@@ -148,10 +148,14 @@ function UpdateBanner(): JSX.Element | null {
     return null;
   }
 
+  // bg-primary-main rather than bg-primary: --primary is declared at :root by BOTH
+  // ui/src/tailwind.css (grey, 0 0% 73%) and ui-next/src/tailwind.css (blue), so which value wins
+  // is decided by stylesheet order rather than by intent — and grey is what currently wins.
+  // primary.main comes from the Tailwind config, so it cannot drift with CSS order.
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[10000] flex justify-center">
       <div
-        className={`bg-primary pointer-events-auto mb-2 flex items-stretch overflow-hidden rounded-full text-white shadow-lg transition-all duration-300 ease-out ${
+        className={`bg-primary-main pointer-events-auto mb-2 flex items-stretch overflow-hidden rounded-full text-white shadow-lg transition-all duration-300 ease-out ${
           entered ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
         }`}
       >
