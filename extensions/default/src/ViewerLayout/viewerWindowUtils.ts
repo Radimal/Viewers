@@ -92,21 +92,28 @@ export const publishFamilyStudy = (studyInstanceUid: string) => {
 };
 
 /**
- * The family's intended study, but only if it was published recently.
+ * The family's intended study, but only if it was published after this document began loading.
  *
  * For the mount-time reconcile, which exists because a window that is still loading has no
- * `storage` listener and no channel listener, so it misses a case switch entirely. Freshness is
- * what makes reading this at mount safe: localStorage outlives the session and each viewer origin
- * keeps its own copy, so a window arriving on an origin the family left long ago would otherwise
- * chase a dead study. A live `storage` event needs no such check — it is current by definition.
+ * `storage` listener and no channel listener, so it misses a case switch entirely. Some check is
+ * essential: localStorage outlives the session and each viewer origin keeps its own copy, so a
+ * window would otherwise chase whatever study that origin was last showing.
+ *
+ * Publication time versus load time is the exact question — "did the family move on while I was
+ * loading?" — where wall-clock freshness is only a proxy for it, and a misleading one. A regular ->
+ * VEG -> regular switch inside a short window leaves the first origin's entry recent but obsolete,
+ * and a monitor returning there would follow it back to the previous patient. Anything published
+ * before this document started is by definition already reflected in the URL we were handed.
+ *
+ * A live `storage` event needs no check at all — it is current by definition.
  */
-export const readFreshFamilyStudy = (maxAgeMs = 60_000): string | null => {
+export const readFamilyStudyPublishedSinceLoad = (): string | null => {
   const studyInstanceUid = localStorage.getItem(FAMILY_STUDY_KEY);
   if (!studyInstanceUid) {
     return null;
   }
   const publishedAt = Number(localStorage.getItem(FAMILY_STUDY_AT_KEY));
-  if (!publishedAt || Date.now() - publishedAt > maxAgeMs) {
+  if (!publishedAt || publishedAt < WINDOW_STARTED_AT) {
     return null;
   }
   return studyInstanceUid;

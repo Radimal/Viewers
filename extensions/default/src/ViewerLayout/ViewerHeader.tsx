@@ -20,7 +20,7 @@ import {
   openSavedViewerWindows,
   publishFamilyStudy,
   readFamilyWindowData,
-  readFreshFamilyStudy,
+  readFamilyStudyPublishedSinceLoad,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
 import { utils } from '@ohif/core';
@@ -239,7 +239,7 @@ function ViewerHeader({
     // mounted, so a monitor that was still loading when the family switched case never hears
     // about it and sits on the previous patient until the NEXT switch.
     if (followsFamilyStudy && currentStudyId) {
-      const intendedStudyId = readFreshFamilyStudy();
+      const intendedStudyId = readFamilyStudyPublishedSinceLoad();
       if (intendedStudyId && intendedStudyId !== currentStudyId) {
         console.log('Catching up to family study', intendedStudyId);
         refreshTab(intendedStudyId);

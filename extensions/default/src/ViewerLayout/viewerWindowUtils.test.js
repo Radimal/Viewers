@@ -1,11 +1,12 @@
 import {
   VIEWER_WINDOW_NAME,
+  WINDOW_STARTED_AT,
   closeAllViewerWindows,
   navigateFamilyWindowsByName,
   openSavedViewerWindows,
   publishFamilyStudy,
   readFamilyWindowData,
-  readFreshFamilyStudy,
+  readFamilyStudyPublishedSinceLoad,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
 
@@ -147,18 +148,21 @@ describe('viewerWindowUtils', () => {
   });
 
   describe('family study publication', () => {
-    it('round-trips a freshly published study', () => {
+    it('reports a study published after this document started loading', () => {
       publishFamilyStudy('1.2.3');
 
       expect(localStorage.getItem('currentStudyId')).toBe('1.2.3');
-      expect(readFreshFamilyStudy()).toBe('1.2.3');
+      expect(readFamilyStudyPublishedSinceLoad()).toBe('1.2.3');
     });
 
-    it('ignores a study published longer ago than the freshness window', () => {
+    it('ignores a study published before this document started loading', () => {
+      // The regular -> VEG -> regular case: this origin's entry is recent in wall-clock terms but
+      // predates our navigation, so the URL we were handed already supersedes it. Following it
+      // would send a monitor back to the previous patient.
       publishFamilyStudy('1.2.3');
-      localStorage.setItem('currentStudyIdAt', String(Date.now() - 120000));
+      localStorage.setItem('currentStudyIdAt', String(WINDOW_STARTED_AT - 1));
 
-      expect(readFreshFamilyStudy(60000)).toBeNull();
+      expect(readFamilyStudyPublishedSinceLoad()).toBeNull();
       // Still readable by builds that only know the untimestamped key.
       expect(localStorage.getItem('currentStudyId')).toBe('1.2.3');
     });
@@ -166,11 +170,11 @@ describe('viewerWindowUtils', () => {
     it('ignores a study written by an older build with no timestamp', () => {
       localStorage.setItem('currentStudyId', '1.2.3');
 
-      expect(readFreshFamilyStudy()).toBeNull();
+      expect(readFamilyStudyPublishedSinceLoad()).toBeNull();
     });
 
     it('returns null when nothing has been published', () => {
-      expect(readFreshFamilyStudy()).toBeNull();
+      expect(readFamilyStudyPublishedSinceLoad()).toBeNull();
     });
   });
 
