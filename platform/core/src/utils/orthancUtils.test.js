@@ -23,6 +23,38 @@ const PATIENT_ID = 'uey53zeb';
 const STUDY_UID = '1.2.410.200067.100.1.202607281547410895.29800';
 const OTHER_ID = 'aaaaaaaa-bbbbbbbb-cccccccc-dddddddd-eeeeeeee';
 
+describe('reporterOriginFor', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { reporterOriginFor } = require('./orthancUtils');
+
+  it('routes every staging viewer origin to the staging reporter', () => {
+    // veg-view.stage-1 fell through the old exact-match ladders to PRODUCTION, so VEG staging
+    // downloads asked the prod reporter about studies only staging knows — and always failed.
+    expect(reporterOriginFor('https://veg-view.stage-1.radimal.ai')).toBe(
+      'https://reporter-staging.onrender.com'
+    );
+    expect(reporterOriginFor('https://viewer.stage-1.radimal.ai')).toBe(
+      'https://reporter-staging.onrender.com'
+    );
+    expect(reporterOriginFor('https://view.stage-1.radimal.ai')).toBe(
+      'https://reporter-staging.onrender.com'
+    );
+  });
+
+  it('routes production origins, VEG included, to the production reporter', () => {
+    expect(reporterOriginFor('https://view.radimal.ai')).toBe(
+      'https://radimal-reporter.onrender.com'
+    );
+    expect(reporterOriginFor('https://veg-view.radimal.ai')).toBe(
+      'https://radimal-reporter.onrender.com'
+    );
+  });
+
+  it('routes local development to the local reporter', () => {
+    expect(reporterOriginFor('http://localhost:3000')).toBe('http://localhost:5007');
+  });
+});
+
 describe('isValidOrthancStudyId', () => {
   it('accepts five dash-separated 8-char lowercase hex groups', () => {
     expect(isValidOrthancStudyId('c171e359-c01c9ba5-4d07ebf3-0b05d028-e82ca438')).toBe(true);

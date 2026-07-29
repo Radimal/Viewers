@@ -20,10 +20,7 @@ function isDuplicateStudyError(error: any): boolean {
 let shownDuplicateStudyNotification = false;
 
 function getReporterOrigin(): string {
-  const origin = window.location.origin;
-  if (origin === 'http://localhost:3000') return 'http://localhost:5007';
-  if (origin === 'https://view.stage-1.radimal.ai') return 'https://reporter-staging.onrender.com';
-  return 'https://radimal-reporter.onrender.com';
+  return orthancUtils.reporterOriginFor(window.location.origin);
 }
 
 // When Orthanc reports a duplicate StudyInstanceUID, the WADO-RS metadata

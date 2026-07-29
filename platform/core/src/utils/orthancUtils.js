@@ -37,6 +37,24 @@ export async function generateOrthancStudyUUID(patientId, studyInstanceUID) {
   return formattedUUID;
 }
 
+/**
+ * Which radimal-reporter a given viewer origin reports to. Pattern-based like vetOriginFor, and
+ * for the same reason: the viewer is served from multiple origins per environment (view.radimal.ai
+ * and veg-view.radimal.ai in production, viewer/veg-view.stage-1.radimal.ai in staging). The
+ * exact-string ladders this replaces defaulted every unrecognized origin to production, so the VEG
+ * staging viewer asked the production reporter about studies only staging knows — downloads there
+ * had never worked.
+ */
+export function reporterOriginFor(origin) {
+  if (origin === 'http://localhost:3000') {
+    return 'http://localhost:5007';
+  }
+  if (origin.endsWith('.stage-1.radimal.ai')) {
+    return 'https://reporter-staging.onrender.com';
+  }
+  return 'https://radimal-reporter.onrender.com';
+}
+
 /** Five dash-separated 8-char lowercase hex groups, as Orthanc renders the SHA-1 above. */
 export const ORTHANC_STUDY_ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{8}){4}$/;
 

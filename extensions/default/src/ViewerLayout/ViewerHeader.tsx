@@ -41,16 +41,7 @@ function ViewerHeader({
   const { uiNotificationService } = servicesManager.services;
 
   const handleDownloadStudy = async () => {
-    let reporterOrigin;
-    if (window.location.origin === 'http://localhost:3000') {
-      reporterOrigin = 'http://localhost:5007';
-    } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
-      reporterOrigin = 'https://reporter-staging.onrender.com';
-    } else if (window.location.origin === 'https://view.radimal.ai') {
-      reporterOrigin = 'https://radimal-reporter.onrender.com';
-    } else {
-      reporterOrigin = 'https://radimal-reporter.onrender.com';
-    }
+    const reporterOrigin = orthancUtils.reporterOriginFor(window.location.origin);
 
     // resolveDownloadStudyId validates `?studyId=` against the id derived from `?patientId=` +
     // `?StudyInstanceUIDs=` and refuses if they contradict each other. studyInfo from loaded

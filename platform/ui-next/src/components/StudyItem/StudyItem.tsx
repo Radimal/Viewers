@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import classnames from 'classnames';
 import { ThumbnailList } from '../ThumbnailList';
 import { Icons } from '../Icons';
+import { reporterOriginFor } from '../../lib/reporterOrigin';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../Accordion';
 
@@ -49,25 +50,19 @@ const StudyItem = ({
                     onClick={async e => {
                       e.stopPropagation();
                       e.preventDefault();
-                      console.log('🔥 RadimalPdf icon clicked!', { studyInstanceUid, hasRadimalCase, isRadimalCaseChecked, timestamp: new Date().toISOString() });
+                      console.log('🔥 RadimalPdf icon clicked!', {
+                        studyInstanceUid,
+                        hasRadimalCase,
+                        isRadimalCaseChecked,
+                        timestamp: new Date().toISOString(),
+                      });
 
                       if (!hasRadimalCase) {
                         console.log('No Radimal case available for this study');
                         return;
                       }
 
-                      const origin = window.location.origin;
-                      let apiEndpoint;
-
-                      if (origin === 'http://localhost:3000') {
-                        apiEndpoint = 'http://localhost:5007';
-                      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-                        apiEndpoint = 'https://reporter-staging.onrender.com';
-                      } else if (origin === 'https://view.radimal.ai') {
-                        apiEndpoint = 'https://radimal-reporter.onrender.com';
-                      } else {
-                        apiEndpoint = 'https://radimal-reporter.onrender.com';
-                      }
+                      const apiEndpoint = reporterOriginFor(window.location.origin);
 
                       try {
                         const response = await fetch(`${apiEndpoint}/case/${studyInstanceUid}`);

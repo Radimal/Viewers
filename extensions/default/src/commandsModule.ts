@@ -1,4 +1,4 @@
-import { Types } from '@ohif/core';
+import { Types, utils } from '@ohif/core';
 
 import { ContextMenuController, defaultContextMenu } from './CustomizableContextMenu';
 import DicomTagBrowser from './DicomTagBrowser/DicomTagBrowser';
@@ -573,18 +573,7 @@ const commandsModule = ({
 
       const studyInstanceUID = displaySet.StudyInstanceUID;
 
-      const origin = window.location.origin;
-      let apiEndpoint;
-      
-      if (origin === 'http://localhost:3000') {
-        apiEndpoint = 'http://localhost:5007';
-      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-        apiEndpoint = 'https://reporter-staging.onrender.com';
-      } else if (origin === 'https://view.radimal.ai') {
-        apiEndpoint = 'https://radimal-reporter.onrender.com';
-      } else {
-        apiEndpoint = 'https://radimal-reporter.onrender.com';
-      }
+      const apiEndpoint = utils.orthancUtils.reporterOriginFor(window.location.origin);
 
       const apiUrl = `${apiEndpoint}/case/${studyInstanceUID}`;
 
@@ -627,26 +616,11 @@ const commandsModule = ({
       if (s3_url) {
         try {
           const key = s3_url.split('s3.amazonaws.com/')[1];
-          const origin = window.location.origin;
-          let flaskApiEndpoint;
-          
-          if (origin === 'http://localhost:3000') {
-            flaskApiEndpoint = 'http://localhost:5007';
-          } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-            flaskApiEndpoint = 'https://reporter-staging.onrender.com';
-          } else if (origin === 'https://view.radimal.ai') {
-            flaskApiEndpoint = 'https://radimal-reporter.onrender.com';
-          } else {
-            flaskApiEndpoint = 'https://radimal-reporter.onrender.com';
-          }
-          
-          
-          const flaskResponse = await fetch(
-            `${flaskApiEndpoint}/consultation/pdf?key=${key}`,
-            {
-              method: 'GET',
-            }
-          );
+          const flaskApiEndpoint = utils.orthancUtils.reporterOriginFor(window.location.origin);
+
+          const flaskResponse = await fetch(`${flaskApiEndpoint}/consultation/pdf?key=${key}`, {
+            method: 'GET',
+          });
 
           if (!flaskResponse.ok) {
             throw new Error(`Flask API error! status: ${flaskResponse.status}`);
@@ -659,12 +633,12 @@ const commandsModule = ({
             presignedUrl = presignedUrl.slice(1, -1);
           }
           presignedUrl = presignedUrl.trim();
-          
+
           // Encode the presigned URL to prevent browser from breaking it into separate parameters
           const encodedPresignedUrl = encodeURIComponent(presignedUrl);
-          
+
           const consultationUrl = `${platformUrl}/consultation/?url=${encodedPresignedUrl}`;
-          
+
           window.open(consultationUrl, '_blank');
         } catch (error) {
           console.error('Error getting presigned URL:', error);
@@ -693,46 +667,57 @@ const commandsModule = ({
     toggleOverlays: () => {
       console.log('[HOTKEYS] toggleOverlays command executed');
       const overlays = document.getElementsByClassName('viewport-overlay');
-      console.log(`[HOTKEYS] Found ${overlays.length} overlay elements with class 'viewport-overlay'`, overlays);
-      
+      console.log(
+        `[HOTKEYS] Found ${overlays.length} overlay elements with class 'viewport-overlay'`,
+        overlays
+      );
+
       if (overlays.length === 0) {
         const alternativeSelectors = [
           'ohif-overlay',
-          'cornerstone-overlay', 
+          'cornerstone-overlay',
           '.viewport-overlay-top-left',
           '.viewport-overlay-top-right',
           '.viewport-overlay-bottom-left',
           '.viewport-overlay-bottom-right',
-          '[class*="overlay"]'
+          '[class*="overlay"]',
         ];
-        
+
         console.log('[HOTKEYS] No viewport-overlay elements found, checking alternatives:');
         alternativeSelectors.forEach(selector => {
           const elements = document.querySelectorAll(selector);
           if (elements.length > 0) {
-            console.log(`[HOTKEYS] Found ${elements.length} elements with selector '${selector}':`, elements);
+            console.log(
+              `[HOTKEYS] Found ${elements.length} elements with selector '${selector}':`,
+              elements
+            );
           }
         });
-        
+
         const viewportElements = document.querySelectorAll('.cornerstone-viewport-element');
         viewportElements.forEach((viewport, index) => {
           console.log(`[HOTKEYS] Viewport ${index} children:`, viewport.children);
-          const overlayChildren = Array.from(viewport.children).filter(child => 
-            child.className.includes('overlay') || child.className.includes('text')
+          const overlayChildren = Array.from(viewport.children).filter(
+            child => child.className.includes('overlay') || child.className.includes('text')
           );
           console.log(`[HOTKEYS] Viewport ${index} overlay-like children:`, overlayChildren);
         });
       }
-      
+
       for (let i = 0; i < overlays.length; i++) {
         const overlay = overlays.item(i);
         const wasHidden = overlay.classList.contains('hidden');
         overlay.classList.toggle('hidden');
-        console.log(`[HOTKEYS] Overlay ${i} toggled: ${wasHidden ? 'hidden -> visible' : 'visible -> hidden'}`, overlay);
+        console.log(
+          `[HOTKEYS] Overlay ${i} toggled: ${wasHidden ? 'hidden -> visible' : 'visible -> hidden'}`,
+          overlay
+        );
       }
-      
+
       if (overlays.length === 0) {
-        console.warn('[HOTKEYS] No overlay elements found to toggle. The overlay system may have changed.');
+        console.warn(
+          '[HOTKEYS] No overlay elements found to toggle. The overlay system may have changed.'
+        );
       }
     },
 
@@ -794,14 +779,14 @@ const commandsModule = ({
       const currentStudyInstanceUID = activeDisplaySet.StudyInstanceUID;
       console.log('[SERIES NAVIGATION] Current study UID:', currentStudyInstanceUID);
 
-      const currentStudyDisplaySets = allDisplaySets.filter(displaySet => 
-        displaySet.StudyInstanceUID === currentStudyInstanceUID
+      const currentStudyDisplaySets = allDisplaySets.filter(
+        displaySet => displaySet.StudyInstanceUID === currentStudyInstanceUID
       );
 
       console.log('[SERIES NAVIGATION] Navigation bounded to study:', {
         totalDisplaySets: allDisplaySets.length,
         studyDisplaySets: currentStudyDisplaySets.length,
-        currentStudyUID: currentStudyInstanceUID
+        currentStudyUID: currentStudyInstanceUID,
       });
 
       const activeDisplaySetIndex = currentStudyDisplaySets.findIndex(displaySet =>
@@ -830,14 +815,15 @@ const commandsModule = ({
           requestedIndex: displaySetIndexToShow,
           direction: direction > 0 ? 'next' : 'previous',
           totalSeriesInStudy: currentDisplaySets.length,
-          currentIndex: activeDisplaySetIndex
+          currentIndex: activeDisplaySetIndex,
         });
-        
+
         uiNotificationService.show({
           title: 'Series Navigation',
-          message: direction > 0 
-            ? 'Reached last series in current study' 
-            : 'Reached first series in current study',
+          message:
+            direction > 0
+              ? 'Reached last series in current study'
+              : 'Reached first series in current study',
           type: 'info',
           duration: 2000,
         });

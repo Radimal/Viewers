@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { StudyItem } from '../StudyItem';
 import { StudyBrowserSort } from '../StudyBrowserSort';
 import { StudyBrowserViewOptions } from '../StudyBrowserViewOptions';
+import { reporterOriginFor } from '../../lib/reporterOrigin';
 
 const getTrackedSeries = displaySets => {
   let trackedSeries = 0;
@@ -38,41 +39,33 @@ const StudyBrowser = ({
 
   const checkStudyForCases = async (studyInstanceUid: string) => {
     try {
-      const origin = window.location.origin;
-      let apiEndpoint;
-      
-      if (origin === 'http://localhost:3000') {
-        apiEndpoint = 'http://localhost:5007';
-      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-        apiEndpoint = 'https://reporter-staging.onrender.com';
-      } else if (origin === 'https://view.radimal.ai') {
-        apiEndpoint = 'https://radimal-reporter.onrender.com';
-      } else {
-        apiEndpoint = 'https://radimal-reporter.onrender.com';
-      }
-      
+      const apiEndpoint = reporterOriginFor(window.location.origin);
+
       const apiUrl = `${apiEndpoint}/case/${studyInstanceUid}`;
-      console.log(`StudyBrowser: Making API call to: ${apiUrl} (origin: ${origin}, endpoint: ${apiEndpoint})`);
-      
+      console.log(
+        `StudyBrowser: Making API call to: ${apiUrl} (origin: ${origin}, endpoint: ${apiEndpoint})`
+      );
+
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
-      
+
       console.log(`StudyBrowser: API response status: ${response.status} for ${studyInstanceUid}`);
-      
+
       if (!response.ok) {
         console.log(`StudyBrowser: API call failed for ${studyInstanceUid}, returning false`);
         return false;
       }
-      
+
       const caseData = await response.json();
       console.log(`StudyBrowser: API response data for ${studyInstanceUid}:`, caseData);
-      
-      const hasCase = caseData?.cases?.length > 0 && 
-                     caseData.cases[0]?.consultations?.length > 0 &&
-                     caseData.cases[0]?.consultations[0]?.s3_url;
-      
+
+      const hasCase =
+        caseData?.cases?.length > 0 &&
+        caseData.cases[0]?.consultations?.length > 0 &&
+        caseData.cases[0]?.consultations[0]?.s3_url;
+
       console.log(`StudyBrowser: Checked case for study ${studyInstanceUid}: ${hasCase}`);
       return hasCase;
     } catch (error) {
@@ -86,31 +79,30 @@ const StudyBrowser = ({
     const checkAllStudies = async () => {
       const tabData = tabs.find(tab => tab.name === activeTabName);
       if (!tabData?.studies) return;
-      
+
       // Filter out studies we've already checked
-      const studiesToCheck = tabData.studies.filter(study => 
-        !checkedStudies.has(study.studyInstanceUid)
+      const studiesToCheck = tabData.studies.filter(
+        study => !checkedStudies.has(study.studyInstanceUid)
       );
-      
+
       if (studiesToCheck.length === 0) {
         return;
       }
-      
-      
+
       // Then check each study and update the map
       for (const study of studiesToCheck) {
         try {
           const hasCase = await checkStudyForCases(study.studyInstanceUid);
-          
+
           setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
-          
+
           setCheckedStudies(prev => new Set(prev.add(study.studyInstanceUid)));
         } catch (error) {
           setCheckedStudies(prev => new Set(prev.add(study.studyInstanceUid)));
         }
       }
     };
-    
+
     checkAllStudies();
   }, [tabs, activeTabName]);
 
@@ -157,7 +149,12 @@ const StudyBrowser = ({
         const isExpanded = expandedStudyInstanceUIDs.includes(studyInstanceUid);
         const hasRadimalCase = studyCaseStatusMap.get(studyInstanceUid) ?? false;
         const isChecked = checkedStudies.has(studyInstanceUid);
-        console.log(`StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`, hasRadimalCase, 'isChecked:', isChecked);
+        console.log(
+          `StudyBrowser: Rendering study ${studyInstanceUid} hasRadimalCase:`,
+          hasRadimalCase,
+          'isChecked:',
+          isChecked
+        );
         return (
           <React.Fragment key={studyInstanceUid}>
             <StudyItem
