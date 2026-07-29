@@ -218,10 +218,23 @@ function ViewerHeader({
     const followsFamilyStudy = isManagedViewerWindow() && !isPrimaryViewerWindow();
 
     const handleStorageChange = event => {
-      if (event.key === 'currentStudyId' && event.newValue) {
-        if (!followsFamilyStudy) {
-          return;
+      if (!followsFamilyStudy || !event.newValue) {
+        return;
+      }
+      // The primary wrote a departure note: it is leaving this origin for a sibling one
+      // (VEG <-> non-VEG). The storage event is this monitor's most reliable signal — unlike the
+      // NAVIGATE_FAMILY broadcast it needs no channel listener race, and unlike window.open by
+      // name it cannot spawn a window. Re-read through the validating reader rather than trusting
+      // event.newValue.
+      if (event.key === 'familyDepartureTarget') {
+        const departure = readFamilyDepartureSinceLoad();
+        if (departure && departure.url !== window.location.href) {
+          console.log('Following family to sibling origin', departure.url);
+          window.location.href = departure.url;
         }
+        return;
+      }
+      if (event.key === 'currentStudyId') {
         console.log('Changing study', event);
         const newStudyId = event.newValue;
         if (currentStudyId !== newStudyId) {

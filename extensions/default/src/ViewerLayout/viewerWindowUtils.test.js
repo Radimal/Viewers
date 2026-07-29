@@ -1,4 +1,5 @@
 import {
+  DOCUMENT_STARTED_AT,
   VIEWER_WINDOW_NAME,
   WINDOW_STARTED_AT,
   closeAllViewerWindows,
@@ -161,7 +162,7 @@ describe('viewerWindowUtils', () => {
       // predates our navigation, so the URL we were handed already supersedes it. Following it
       // would send a monitor back to the previous patient.
       publishFamilyStudy('1.2.3');
-      localStorage.setItem('currentStudyIdAt', String(WINDOW_STARTED_AT - 1));
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT - 1));
 
       expect(readFamilyStudyPublishedSinceLoad()).toBeNull();
       // Still readable by builds that only know the untimestamped key.
@@ -189,7 +190,7 @@ describe('viewerWindowUtils', () => {
 
       const departure = readFamilyDepartureSinceLoad(HERE);
       expect(departure?.url).toBe(target);
-      expect(departure.at).toBeGreaterThanOrEqual(WINDOW_STARTED_AT);
+      expect(departure.at).toBeGreaterThanOrEqual(DOCUMENT_STARTED_AT);
     });
 
     it('ignores a departure published before this document started loading', () => {
@@ -197,10 +198,22 @@ describe('viewerWindowUtils', () => {
       // already reflects it (or supersedes it), so following it would go backward.
       localStorage.setItem(
         'familyDepartureTarget',
-        JSON.stringify({ url: target, at: WINDOW_STARTED_AT - 1 })
+        JSON.stringify({ url: target, at: DOCUMENT_STARTED_AT - 1 })
       );
 
       expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
+    });
+
+    it('honors a departure written after navigation start but before scripts ran', () => {
+      // The observed field failure: refresh a monitor, switch the case before the new document's
+      // JS evaluates. The note postdates the navigation (so the URL cannot reflect it) but
+      // predates module evaluation — a module-eval gate silently discarded exactly these.
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: target, at: WINDOW_STARTED_AT - 1 })
+      );
+
+      expect(readFamilyDepartureSinceLoad(HERE)?.url).toBe(target);
     });
 
     it("refuses a target that does not report to this window's own vet app", () => {

@@ -8,6 +8,20 @@ export const VIEWER_WINDOW_NAME = 'viewerWindow';
 export const WINDOW_INSTANCE_ID = Math.random().toString(36).slice(2);
 export const WINDOW_STARTED_AT = Date.now();
 
+/**
+ * When this document's NAVIGATION began — the moment its URL was fixed — as opposed to
+ * WINDOW_STARTED_AT, which is when this module evaluated, seconds later on a slow load.
+ *
+ * The family-signal gates must use this one. A signal published in the gap between the two (the
+ * observed case: refresh a monitor, and the case switches before the new document's scripts run)
+ * genuinely happened after this document's URL was decided, so it is NOT reflected in that URL and
+ * must be honored; gating on module-eval time silently discarded exactly those.
+ */
+export const DOCUMENT_STARTED_AT: number =
+  typeof performance !== 'undefined' && performance.timeOrigin
+    ? performance.timeOrigin
+    : WINDOW_STARTED_AT;
+
 export const isPrimaryViewerWindow = () => window.name === VIEWER_WINDOW_NAME;
 
 /**
@@ -103,7 +117,8 @@ export const publishFamilyStudy = (studyInstanceUid: string) => {
  * loading?" — where wall-clock freshness is only a proxy for it, and a misleading one. A regular ->
  * VEG -> regular switch inside a short window leaves the first origin's entry recent but obsolete,
  * and a monitor returning there would follow it back to the previous patient. Anything published
- * before this document started is by definition already reflected in the URL we were handed.
+ * before this document's navigation began is by definition already reflected in the URL we were
+ * handed; anything after it happened while we were blind.
  *
  * A live `storage` event needs no check at all — it is current by definition.
  */
@@ -113,7 +128,7 @@ export const readFamilyStudyPublishedSinceLoad = (): string | null => {
     return null;
   }
   const publishedAt = Number(localStorage.getItem(FAMILY_STUDY_AT_KEY));
-  if (!publishedAt || publishedAt < WINDOW_STARTED_AT) {
+  if (!publishedAt || publishedAt < DOCUMENT_STARTED_AT) {
     return null;
   }
   return studyInstanceUid;
@@ -153,7 +168,7 @@ export const readFamilyDepartureSinceLoad = (
   } catch (error) {
     return null;
   }
-  if (!departure?.url || !departure.at || departure.at < WINDOW_STARTED_AT) {
+  if (!departure?.url || !departure.at || departure.at < DOCUMENT_STARTED_AT) {
     return null;
   }
   try {
