@@ -52,10 +52,9 @@ function ViewerHeader({
       reporterOrigin = 'https://radimal-reporter.onrender.com';
     }
 
-    // Resolve which copy to download, in order of decreasing certainty:
-    //   1. `?studyId=` — Orthanc study UUID from the vet app (unambiguous).
-    //   2. `?patientId=` + `?StudyInstanceUIDs=` — compute UUID client-side.
-    //   3. studyInfo from loaded metadata — only works when metadata loaded.
+    // resolveDownloadStudyId validates `?studyId=` against the id derived from `?patientId=` +
+    // `?StudyInstanceUIDs=` and refuses if they contradict each other. studyInfo from loaded
+    // metadata remains the last resort, for URLs carrying neither.
     const params = new URLSearchParams(window.location.search);
     const studyId = params.get('studyId');
     const distinctId = params.get('distinct_id');
@@ -70,14 +69,25 @@ function ViewerHeader({
         duration: 3000,
       });
 
-      if (studyId) {
-        await orthancUtils.downloadOrthancStudy(studyId, reporterOrigin, distinctId);
-      } else if (patientIdParam && studyInstanceUIDParam) {
-        await orthancUtils.downloadStudyByDICOMIds(
-          patientIdParam,
-          studyInstanceUIDParam,
-          reporterOrigin
-        );
+      const resolved = await orthancUtils.resolveDownloadStudyId({
+        studyId,
+        patientId: patientIdParam,
+        studyInstanceUID: studyInstanceUIDParam,
+      });
+
+      if (resolved.error) {
+        console.error('Refusing to download:', resolved.detail);
+        uiNotificationService.show({
+          title: 'Download Error',
+          message: resolved.error,
+          type: 'error',
+          duration: 8000,
+        });
+        return;
+      }
+
+      if (resolved.studyId) {
+        await orthancUtils.downloadOrthancStudy(resolved.studyId, reporterOrigin, distinctId);
       } else if (studyInfo?.PatientID && studyInfo?.StudyInstanceUID) {
         await orthancUtils.downloadStudyByDICOMIds(
           studyInfo.PatientID,

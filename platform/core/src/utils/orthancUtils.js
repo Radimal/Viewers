@@ -37,6 +37,76 @@ export async function generateOrthancStudyUUID(patientId, studyInstanceUID) {
   return formattedUUID;
 }
 
+/** Five dash-separated 8-char lowercase hex groups, as Orthanc renders the SHA-1 above. */
+export const ORTHANC_STUDY_ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{8}){4}$/;
+
+export function isValidOrthancStudyId(studyId) {
+  return typeof studyId === 'string' && ORTHANC_STUDY_ID_PATTERN.test(studyId);
+}
+
+/**
+ * Orthanc's id is derivable from the study itself, so a `?studyId=` handed to us in a URL can be
+ * checked rather than trusted. Returns null when we cannot derive one — crypto.subtle needs a
+ * secure context, and an unavailable digest must not block a download.
+ */
+async function deriveStudyId(patientId, studyInstanceUID) {
+  if (!patientId || !studyInstanceUID) {
+    return null;
+  }
+  try {
+    return await generateOrthancStudyUUID(patientId, studyInstanceUID);
+  } catch (error) {
+    console.warn('Could not derive Orthanc study id for verification:', error);
+    return null;
+  }
+}
+
+/**
+ * Decide which Orthanc study id to download, refusing rather than guessing.
+ *
+ * The `studyId` param is unvalidated input: a truncated one (only the first of its five segments)
+ * reached production, matched no case, and crashed the download endpoint. Because Orthanc derives
+ * the id as SHA-1(PatientID|StudyInstanceUID), the URL's own patientId and StudyInstanceUIDs let us
+ * recompute it and compare — the id is effectively self-certifying.
+ *
+ * - well-formed and matching, or nothing to compare against -> use it
+ * - well-formed but contradicting the derived id -> refuse. One of the two is wrong and we cannot
+ *   tell which, and guessing means possibly handing over another patient's study.
+ * - malformed but derivable -> use the derived id, since that is provably the study named by the
+ *   rest of the URL, and note the bad link.
+ * - malformed and not derivable -> refuse with something the user can act on.
+ */
+export async function resolveDownloadStudyId({ studyId, patientId, studyInstanceUID }) {
+  const derived = await deriveStudyId(patientId, studyInstanceUID);
+
+  if (isValidOrthancStudyId(studyId)) {
+    if (derived && derived !== studyId) {
+      return {
+        error:
+          'This viewer link points at a different study than the one on screen. ' +
+          'Reopen the case from Radimal to get a fresh link.',
+        detail: `studyId ${studyId} does not match derived ${derived}`,
+      };
+    }
+    return { studyId };
+  }
+
+  if (studyId) {
+    if (derived) {
+      console.warn(`Ignoring malformed studyId "${studyId}"; using derived ${derived}`);
+      return { studyId: derived, recoveredFrom: studyId };
+    }
+    return {
+      error:
+        'This viewer link is incomplete, so the study to download cannot be identified. ' +
+        'Reopen the case from Radimal to get a fresh link.',
+      detail: `malformed studyId ${studyId} and nothing to derive from`,
+    };
+  }
+
+  return derived ? { studyId: derived } : {};
+}
+
 /**
  * Downloads a study from the Orthanc server using the study UUID
  *

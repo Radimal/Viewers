@@ -42,45 +42,50 @@ function handleDuplicateStudyError(uiNotificationService: any): void {
   const patientIdParam = params.get('patientId') || params.get('PatientID');
   const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
 
-  let downloadPromise: Promise<void> | null = null;
-  if (studyId) {
-    downloadPromise = orthancUtils.downloadOrthancStudy(studyId, getReporterOrigin(), distinctId);
-  } else if (patientIdParam && studyInstanceUIDParam) {
-    downloadPromise = orthancUtils.downloadStudyByDICOMIds(
-      patientIdParam,
-      studyInstanceUIDParam,
-      getReporterOrigin()
-    );
-  }
+  // Same validation as the download button, and it matters more here: this fires on page load, so
+  // an unvalidated `?studyId=` would be acted on without anyone clicking anything.
+  orthancUtils
+    .resolveDownloadStudyId({
+      studyId,
+      patientId: patientIdParam,
+      studyInstanceUID: studyInstanceUIDParam,
+    })
+    .then((resolved: { studyId?: string; error?: string; detail?: string }) => {
+      if (resolved.error || !resolved.studyId) {
+        if (resolved.detail) {
+          console.error('Refusing auto-download:', resolved.detail);
+        }
+        uiNotificationService.show({
+          title: 'Study Load Error',
+          message: `Multiple patients share this study ID. ${
+            resolved.error || 'As an alternative, you can use the download button in the top right.'
+          }`,
+          type: 'error',
+          autoClose: false,
+        });
+        return;
+      }
 
-  if (!downloadPromise) {
-    uiNotificationService.show({
-      title: 'Study Load Error',
-      message:
-        'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
-      type: 'error',
-      autoClose: false,
+      uiNotificationService.show({
+        title: 'Study Load Error',
+        message:
+          'Multiple patients share this study ID. Downloading the correct copy automatically — check your browser for the file.',
+        type: 'warning',
+        autoClose: false,
+      });
+
+      return orthancUtils
+        .downloadOrthancStudy(resolved.studyId, getReporterOrigin(), distinctId)
+        .catch((downloadError: any) => {
+          console.error('Auto-download for duplicate study failed:', downloadError);
+          uiNotificationService.show({
+            title: 'Download Failed',
+            message: `Automatic download failed: ${downloadError?.message || 'Unknown error'}. Please use the download button in the top right.`,
+            type: 'error',
+            autoClose: false,
+          });
+        });
     });
-    return;
-  }
-
-  uiNotificationService.show({
-    title: 'Study Load Error',
-    message:
-      'Multiple patients share this study ID. Downloading the correct copy automatically — check your browser for the file.',
-    type: 'warning',
-    autoClose: false,
-  });
-
-  downloadPromise.catch((downloadError: any) => {
-    console.error('Auto-download for duplicate study failed:', downloadError);
-    uiNotificationService.show({
-      title: 'Download Failed',
-      message: `Automatic download failed: ${downloadError?.message || 'Unknown error'}. Please use the download button in the top right.`,
-      type: 'error',
-      autoClose: false,
-    });
-  });
 }
 
 /**
