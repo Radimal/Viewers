@@ -2,10 +2,11 @@ import {
   VIEWER_WINDOW_NAME,
   WINDOW_STARTED_AT,
   closeAllViewerWindows,
-  navigateFamilyWindowsByName,
   openSavedViewerWindows,
+  publishFamilyDeparture,
   publishFamilyStudy,
   readFamilyWindowData,
+  readFamilyDepartureSinceLoad,
   readFamilyStudyPublishedSinceLoad,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
@@ -178,57 +179,50 @@ describe('viewerWindowUtils', () => {
     });
   });
 
-  describe('navigateFamilyWindowsByName', () => {
+  describe('family departure', () => {
+    // Sibling production origins: both report to vet.radimal.ai.
+    const HERE = 'https://view.radimal.ai';
     const target = 'https://veg-view.radimal.ai/viewer/?StudyInstanceUIDs=1.2.3';
 
-    it('navigates open family windows by name so mid-load windows still follow', () => {
-      localStorage.setItem('windowData', JSON.stringify([primaryEntry, secondaryEntry]));
-      window.name = VIEWER_WINDOW_NAME;
+    it('round-trips a departure published after this document started loading', () => {
+      publishFamilyDeparture(target);
 
-      navigateFamilyWindowsByName(target);
-
-      expect(openSpy).toHaveBeenCalledTimes(1);
-      expect(openSpy).toHaveBeenCalledWith(target, secondaryEntry.id);
+      const departure = readFamilyDepartureSinceLoad(HERE);
+      expect(departure?.url).toBe(target);
+      expect(departure.at).toBeGreaterThanOrEqual(WINDOW_STARTED_AT);
     });
 
-    it('never navigates the calling window', () => {
-      localStorage.setItem('windowData', JSON.stringify([primaryEntry, secondaryEntry]));
-      window.name = secondaryEntry.id;
-
-      navigateFamilyWindowsByName(target);
-
-      expect(openSpy).toHaveBeenCalledTimes(1);
-      expect(openSpy).toHaveBeenCalledWith(target, VIEWER_WINDOW_NAME);
-    });
-
-    it('skips windows already recorded as closed', () => {
+    it('ignores a departure published before this document started loading', () => {
+      // An old note from a switch that predates this window: the URL this window was handed
+      // already reflects it (or supersedes it), so following it would go backward.
       localStorage.setItem(
-        'windowData',
-        JSON.stringify([primaryEntry, { ...secondaryEntry, closed: true }])
+        'familyDepartureTarget',
+        JSON.stringify({ url: target, at: WINDOW_STARTED_AT - 1 })
       );
-      window.name = VIEWER_WINDOW_NAME;
 
-      navigateFamilyWindowsByName(target);
-
-      expect(openSpy).not.toHaveBeenCalled();
+      expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
     });
 
-    it('keeps going when one window cannot be reached', () => {
-      localStorage.setItem(
-        'windowData',
-        JSON.stringify([
-          primaryEntry,
-          secondaryEntry,
-          { ...secondaryEntry, id: 'viewerWindow-2' },
-        ])
-      );
-      window.name = VIEWER_WINDOW_NAME;
-      openSpy.mockImplementationOnce(() => {
-        throw new Error('blocked');
-      });
+    it("refuses a target that does not report to this window's own vet app", () => {
+      publishFamilyDeparture('https://evil.example.com/viewer/?StudyInstanceUIDs=1.2.3');
+      expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
 
-      expect(() => navigateFamilyWindowsByName(target)).not.toThrow();
-      expect(openSpy).toHaveBeenCalledTimes(2);
+      // A real viewer origin, but paired with a different vet than this window's.
+      publishFamilyDeparture(target);
+      expect(readFamilyDepartureSinceLoad('http://localhost:3000')).toBeNull();
+    });
+
+    it('returns null for malformed or absent notes', () => {
+      expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
+
+      localStorage.setItem('familyDepartureTarget', 'not-json');
+      expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
+
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: 'not a url', at: Date.now() })
+      );
+      expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
     });
   });
 

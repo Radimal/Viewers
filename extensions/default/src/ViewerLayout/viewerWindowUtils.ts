@@ -119,30 +119,57 @@ export const readFamilyStudyPublishedSinceLoad = (): string | null => {
   return studyInstanceUid;
 };
 
+const FAMILY_DEPARTURE_KEY = 'familyDepartureTarget';
+
 /**
- * Navigate every other open family window to `url` by window name.
+ * Record, on the origin the family is LEAVING, where it went. Written by the primary immediately
+ * before a cross-origin case switch.
  *
- * Complements the NAVIGATE_FAMILY broadcast rather than replacing it: a window still loading has
- * no channel listener yet and misses the message, and for a cross-origin switch that stranding is
- * permanent — both localStorage and BroadcastChannel are origin-partitioned, so once the primary
- * leaves the origin nothing can ever reach that window again. Targeting by name works whether or
- * not the window is running our code, because family windows are opened by the primary and stay
- * reachable by name from it.
+ * This exists for monitor windows that are mid-load when the switch happens: they have no channel
+ * listener yet, so they miss NAVIGATE_FAMILY, and once the family is gone nothing on this origin
+ * will ever update again — localStorage and BroadcastChannel are both origin-partitioned. The
+ * departure note is what such a window finds when it finishes loading.
  *
- * A window that already handled the broadcast gets navigated a second time to the same URL. That
- * costs a reload, and is the deliberate trade against leaving a monitor on the previous patient.
+ * This replaced navigating family windows by name (window.open(url, name)): when the name lookup
+ * failed — a monitor opened by an earlier primary, restored by the browser, or in another tab
+ * group — window.open CREATED a new window under that name instead, so a case switch could spawn
+ * an extra viewer tab while the real monitor stayed on the previous patient.
  */
-export const navigateFamilyWindowsByName = (url: string) => {
-  readFamilyWindowData()
-    .filter(win => !win.closed && win.id !== window.name)
-    .forEach(win => {
-      try {
-        window.open(url, win.id);
-      } catch (error) {
-        console.warn(`Could not navigate family window ${win.id}`, error);
-      }
-    });
+export const publishFamilyDeparture = (url: string) => {
+  localStorage.setItem(FAMILY_DEPARTURE_KEY, JSON.stringify({ url, at: Date.now() }));
 };
+
+/**
+ * Where the family went, if it left this origin after this document began loading — else null.
+ * Same load-time gate as readFamilyStudyPublishedSinceLoad, and the target must report to this
+ * window's own vet app, mirroring the LOAD_STUDY / NAVIGATE_FAMILY validation.
+ */
+export const readFamilyDepartureSinceLoad = (
+  currentOrigin: string = window.location.origin
+): { url: string; at: number } | null => {
+  let departure;
+  try {
+    departure = JSON.parse(localStorage.getItem(FAMILY_DEPARTURE_KEY));
+  } catch (error) {
+    return null;
+  }
+  if (!departure?.url || !departure.at || departure.at < WINDOW_STARTED_AT) {
+    return null;
+  }
+  try {
+    const targetVet = vetOriginFor(new URL(departure.url).origin);
+    if (!targetVet || targetVet !== vetOriginFor(currentOrigin)) {
+      return null;
+    }
+  } catch (error) {
+    return null;
+  }
+  return departure;
+};
+
+/** When the family study on this origin was last published; 0 if never. */
+export const familyStudyPublishedAt = (): number =>
+  Number(localStorage.getItem(FAMILY_STUDY_AT_KEY)) || 0;
 
 /**
  * Which radimal-vet origin a given viewer origin reports to. Pattern-based because the viewer is

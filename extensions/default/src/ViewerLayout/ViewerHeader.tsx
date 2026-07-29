@@ -14,13 +14,15 @@ import useStudyInfo from '../hooks/useStudyInfo';
 import {
   VIEWER_WINDOW_NAME,
   closeAllViewerWindows,
+  familyStudyPublishedAt,
   isManagedViewerWindow,
   isPrimaryViewerWindow,
   nextMonitorWindowId,
   openSavedViewerWindows,
   publishFamilyStudy,
-  readFamilyWindowData,
+  readFamilyDepartureSinceLoad,
   readFamilyStudyPublishedSinceLoad,
+  readFamilyWindowData,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
 import { utils } from '@ohif/core';
@@ -238,10 +240,21 @@ function ViewerHeader({
 
     // Reconcile on mount as well as on the event. Listeners only exist once this component has
     // mounted, so a monitor that was still loading when the family switched case never hears
-    // about it and sits on the previous patient until the NEXT switch.
+    // about it and sits on the previous patient until the NEXT switch. Two signals, newest wins:
+    // a same-origin publication, or a departure note left by a primary that switched to a sibling
+    // origin (VEG <-> non-VEG) while we were loading — after which nothing on this origin will
+    // ever update again, so the note is the only way to learn the family moved.
     if (followsFamilyStudy && currentStudyId) {
+      const departure = readFamilyDepartureSinceLoad();
       const intendedStudyId = readFamilyStudyPublishedSinceLoad();
-      if (intendedStudyId && intendedStudyId !== currentStudyId) {
+      if (
+        departure &&
+        departure.at > familyStudyPublishedAt() &&
+        departure.url !== window.location.href
+      ) {
+        console.log('Following family to sibling origin', departure.url);
+        window.location.href = departure.url;
+      } else if (intendedStudyId && intendedStudyId !== currentStudyId) {
         console.log('Catching up to family study', intendedStudyId);
         refreshTab(intendedStudyId);
       }
