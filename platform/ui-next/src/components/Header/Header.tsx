@@ -108,16 +108,20 @@ function Header({
         <div className="absolute right-0 top-1/2 flex -translate-y-1/2 select-none items-center">
           {PatientInfo}
           <div className="border-primary-dark mx-1.5 h-[25px] border-r"></div>
-          <div className="flex-shrink-0 mr-2">
+          <div className="mr-2 flex-shrink-0">
             <Button
               variant="ghost"
               size="icon"
               className="text-primary-active hover:bg-primary-dark mt-2 h-full w-full"
               onClick={handleDownload}
               disabled={isDownloading || !onDownloadStudy}
-              title={isDownloading ? "Downloading..." : "Download Study"}
+              title={isDownloading ? 'Downloading...' : 'Download Study'}
             >
-              {isDownloading ? <Icons.LoadingSpinner className="animate-spin" /> : <Icons.Download />}
+              {isDownloading ? (
+                <Icons.LoadingSpinner className="animate-spin" />
+              ) : (
+                <Icons.Download />
+              )}
             </Button>
           </div>
           <div className="flex-shrink-0">
@@ -154,7 +158,11 @@ function Header({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="ml-2 flex-shrink-0">
+          {/* Hidden entirely when there is nothing in it, rather than offering a button that opens
+              an empty menu. The caller decides which windows may manage the window family. */}
+          <div
+            className={classNames('ml-2 flex-shrink-0', !(monitorOptions || []).length && 'hidden')}
+          >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -166,31 +174,25 @@ function Header({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {(monitorOptions || [])
-                  .filter(option =>
-                    option.title === 'Close Windows' && window.name !== 'viewerWindow'
-                      ? false
-                      : true
-                  )
-                  .map((option, index) => {
-                    const IconComponent = option.icon
-                      ? Icons[option.icon as keyof typeof Icons]
-                      : null;
-                    return (
-                      <DropdownMenuItem
-                        key={index}
-                        onSelect={option.onClick}
-                        className="flex items-center gap-2 py-2"
-                      >
-                        {IconComponent && (
-                          <span className="flex h-4 w-4 items-center justify-center">
-                            <IconComponent className="h-full w-full" />
-                          </span>
-                        )}
-                        <span className="flex-1">{option.title}</span>
-                      </DropdownMenuItem>
-                    );
-                  })}
+                {(monitorOptions || []).map((option, index) => {
+                  const IconComponent = option.icon
+                    ? Icons[option.icon as keyof typeof Icons]
+                    : null;
+                  return (
+                    <DropdownMenuItem
+                      key={index}
+                      onSelect={option.onClick}
+                      className="flex items-center gap-2 py-2"
+                    >
+                      {IconComponent && (
+                        <span className="flex h-4 w-4 items-center justify-center">
+                          <IconComponent className="h-full w-full" />
+                        </span>
+                      )}
+                      <span className="flex-1">{option.title}</span>
+                    </DropdownMenuItem>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>{' '}

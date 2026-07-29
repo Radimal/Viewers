@@ -283,7 +283,6 @@ function ViewerHeader({
   const commitHash = process.env.COMMIT_HASH;
   const buildTime = process.env.BUILD_TIME;
 
-
   useEffect(() => {
     if (!servicesManager?._commandsManager) {
       return;
@@ -294,17 +293,20 @@ function ViewerHeader({
         const saved = localStorage.getItem('defaultToolBindings');
         if (saved) {
           const savedBindings = JSON.parse(saved);
-          const primaryTool = savedBindings.find(b => b.id === 'leftMouseButton')?.commandOptions?.toolName;
-          const secondaryTool = savedBindings.find(b => b.id === 'rightMouseButton')?.commandOptions?.toolName;
-          const auxiliaryTool = savedBindings.find(b => b.id === 'middleMouseButton')?.commandOptions?.toolName;
-          
+          const primaryTool = savedBindings.find(b => b.id === 'leftMouseButton')?.commandOptions
+            ?.toolName;
+          const secondaryTool = savedBindings.find(b => b.id === 'rightMouseButton')?.commandOptions
+            ?.toolName;
+          const auxiliaryTool = savedBindings.find(b => b.id === 'middleMouseButton')
+            ?.commandOptions?.toolName;
+
           if (primaryTool || secondaryTool || auxiliaryTool) {
             servicesManager._commandsManager.runCommand(
               'applyMouseButtonBindings',
               {
                 primaryTool: primaryTool || 'WindowLevel',
-                secondaryTool: secondaryTool || 'Pan', 
-                auxiliaryTool: auxiliaryTool || 'Zoom'
+                secondaryTool: secondaryTool || 'Pan',
+                auxiliaryTool: auxiliaryTool || 'Zoom',
               },
               'CORNERSTONE'
             );
@@ -447,6 +449,17 @@ function ViewerHeader({
     },
   ];
 
+  // Managing the window family is the primary window's job alone.
+  //
+  // Offering Duplicate Window to a standalone share-link viewer was actively unsafe: the child is
+  // named viewerWindow-N, which makes it a *managed* family window, so it starts following the vet
+  // family's currentStudyId and can land on a different patient's case. It also registers in
+  // windowData under an id the real family is already using.
+  //
+  // Monitor windows gain nothing from these either — Duplicate Window and Open Saved Windows
+  // target their own canonical name and would just force-reload them.
+  const familyWindowOptions = isPrimaryViewerWindow() ? monitorOptions : [];
+
   if (appConfig.oidc) {
     menuOptions.push({
       title: t('Header:Logout'),
@@ -460,7 +473,7 @@ function ViewerHeader({
   return (
     <Header
       menuOptions={menuOptions}
-      monitorOptions={monitorOptions}
+      monitorOptions={familyWindowOptions}
       isReturnEnabled={!!appConfig.showStudyList}
       onClickReturnButton={onClickReturnButton}
       WhiteLabeling={appConfig.whiteLabeling}
