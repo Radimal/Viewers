@@ -1939,6 +1939,56 @@ function commandsModule({
         return count >= sampled * MIN_CONTENT_PIXEL_FRACTION;
       };
 
+      // Every "trim complete" exit must leave the camera re-based to a
+      // deterministic reference frame (setDisplayArea + storeAsInitialCamera),
+      // even when there are no borders to trim. runTrim in
+      // OHIFCornerstoneViewport snapshots the post-command camera as the
+      // untouched baseline and re-applies the user's manual zoom/pan delta on
+      // top of it; an exit that keeps the camera as-is lets a
+      // presentation-restored user zoom be read as that baseline, so the
+      // delta is applied on top of an already-restored view and compounds on
+      // every revisit. The reset also clears a stale options.displayArea left
+      // by a previous image's trim, which resetCamera re-applies on setStack.
+      const applyDisplayArea = displayArea => {
+        // setDisplayArea resets the camera to the unrotated, unflipped fit
+        // before applying the content zoom, so capture any persisted
+        // rotation/flip and re-apply afterwards. This makes the trim safe to
+        // run in any order relative to viewport persistence restoration.
+        const { flipHorizontal, flipVertical } = viewport.getCamera();
+        const rotation = viewport.getViewPresentation?.()?.rotation ?? 0;
+
+        viewport.setDisplayArea(displayArea);
+
+        if (rotation || flipHorizontal || flipVertical) {
+          // Re-apply without letting the transforms displace the freshly
+          // centered view: setDisplayArea(storeAsInitialCamera) re-bases
+          // initialCamera, after which cs3d's setRotation pan math (which mixes
+          // getPan(fitToCanvasCamera) with initialCamera-relative getPan) shifts
+          // the camera by d − Rot(d), and flip() mirrors the focal point off the
+          // content center. Pin the trim's pan across the re-apply — measured
+          // pan 0 anchors the focal point to the content center in any frame.
+          const trimPan = viewport.getPan?.();
+          // Single call: flips are applied before rotation, matching the flipped
+          // frame the rotation value was measured in.
+          viewport.setViewPresentation({ rotation, flipHorizontal, flipVertical });
+          if (trimPan && viewport.setPan) {
+            viewport.setPan(trimPan);
+          }
+        }
+
+        viewport.render();
+        return true;
+      };
+
+      const fullImageDisplayArea = {
+        storeAsInitialCamera: true,
+        imageArea: [1, 1] as [number, number],
+        imageCanvasPoint: {
+          imagePoint: [0.5, 0.5] as [number, number],
+          canvasPoint: [0.5, 0.5] as [number, number],
+        },
+      };
+
       let top = 0;
       for (let r = 0; r < rows; r++) {
         if (isContentRow(r)) {
@@ -1946,7 +1996,7 @@ function commandsModule({
           break;
         }
         if (r === rows - 1) {
-          return true;
+          return applyDisplayArea(fullImageDisplayArea);
         }
       }
 
@@ -1985,7 +2035,7 @@ function commandsModule({
         leftBorder < MIN_BORDER_FRACTION &&
         rightBorder < MIN_BORDER_FRACTION
       ) {
-        return true;
+        return applyDisplayArea(fullImageDisplayArea);
       }
 
       const padRows = Math.round(rows * 0.01);
@@ -2000,43 +2050,14 @@ function commandsModule({
       const centerX = (left + right) / 2 / columns;
       const centerY = (top + bottom) / 2 / rows;
 
-      const displayArea = {
+      return applyDisplayArea({
         storeAsInitialCamera: true,
         imageArea: [contentWidth, contentHeight] as [number, number],
         imageCanvasPoint: {
           imagePoint: [centerX, centerY] as [number, number],
           canvasPoint: [0.5, 0.5] as [number, number],
         },
-      };
-
-      // setDisplayArea resets the camera to the unrotated, unflipped fit
-      // before applying the content zoom, so capture any persisted
-      // rotation/flip and re-apply afterwards. This makes the trim safe to
-      // run in any order relative to viewport persistence restoration.
-      const { flipHorizontal, flipVertical } = viewport.getCamera();
-      const rotation = viewport.getViewPresentation?.()?.rotation ?? 0;
-
-      viewport.setDisplayArea(displayArea);
-
-      if (rotation || flipHorizontal || flipVertical) {
-        // Re-apply without letting the transforms displace the freshly
-        // centered view: setDisplayArea(storeAsInitialCamera) re-bases
-        // initialCamera, after which cs3d's setRotation pan math (which mixes
-        // getPan(fitToCanvasCamera) with initialCamera-relative getPan) shifts
-        // the camera by d − Rot(d), and flip() mirrors the focal point off the
-        // content center. Pin the trim's pan across the re-apply — measured
-        // pan 0 anchors the focal point to the content center in any frame.
-        const trimPan = viewport.getPan?.();
-        // Single call: flips are applied before rotation, matching the flipped
-        // frame the rotation value was measured in.
-        viewport.setViewPresentation({ rotation, flipHorizontal, flipVertical });
-        if (trimPan && viewport.setPan) {
-          viewport.setPan(trimPan);
-        }
-      }
-
-      viewport.render();
-      return true;
+      });
     },
   };
 
