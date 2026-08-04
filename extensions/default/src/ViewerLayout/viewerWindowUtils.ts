@@ -106,6 +106,24 @@ export const publishFamilyStudy = (studyInstanceUid: string) => {
 };
 
 /**
+ * The primary's arrival announcement: the family is on THIS origin, showing this study.
+ *
+ * Publishing must be unconditional, even when the stored study id already matches. The mount
+ * reconcile's newest-wins tiebreak rests on "a family that left and came back republishes on
+ * return" — publishing only on a changed id skips exactly the round trip (A -> sibling origin
+ * -> A), leaving the pre-departure timestamp in place, so a monitor that was mid-load through
+ * the round trip saw the departure note outrank the publication and followed it to the
+ * abandoned origin, permanently showing the wrong patient.
+ *
+ * Clearing the departure note closes the same hole from the other side: a note means "the
+ * family left and has not come back", which the primary's presence refutes.
+ */
+export const publishFamilyArrival = (studyInstanceUid: string) => {
+  publishFamilyStudy(studyInstanceUid);
+  localStorage.removeItem(FAMILY_DEPARTURE_KEY);
+};
+
+/**
  * The family's intended study, but only if it was published after this document began loading.
  *
  * For the mount-time reconcile, which exists because a window that is still loading has no
@@ -185,6 +203,38 @@ export const readFamilyDepartureSinceLoad = (
 /** When the family study on this origin was last published; 0 if never. */
 export const familyStudyPublishedAt = (): number =>
   Number(localStorage.getItem(FAMILY_STUDY_AT_KEY)) || 0;
+
+export type FamilyReconcileAction =
+  | { action: 'follow-departure'; url: string }
+  | { action: 'catch-up'; studyInstanceUid: string }
+  | { action: 'stay' };
+
+/**
+ * A monitor's mount-time reconcile decision. Listeners only exist once ViewerLayout has mounted,
+ * so a window that was still loading when the family switched case heard nothing; this answers
+ * "did the family move on while I was loading?" from the two persisted signals, newest wins:
+ * a same-origin study publication, or a departure note left by a primary that switched to a
+ * sibling origin (VEG <-> non-VEG) — after which nothing on this origin will ever update again,
+ * so the note is the only way to learn the family moved.
+ *
+ * A departure note older than the publication is a round trip the family already completed
+ * (the returning primary republishes on arrival — publishFamilyArrival); following it would
+ * chase the family to an origin it has abandoned.
+ */
+export const reconcileFamilyOnMount = (
+  currentStudyId: string,
+  currentHref: string = window.location.href
+): FamilyReconcileAction => {
+  const departure = readFamilyDepartureSinceLoad(new URL(currentHref).origin);
+  if (departure && departure.at > familyStudyPublishedAt() && departure.url !== currentHref) {
+    return { action: 'follow-departure', url: departure.url };
+  }
+  const intendedStudyId = readFamilyStudyPublishedSinceLoad();
+  if (intendedStudyId && intendedStudyId !== currentStudyId) {
+    return { action: 'catch-up', studyInstanceUid: intendedStudyId };
+  }
+  return { action: 'stay' };
+};
 
 /**
  * Which radimal-vet origin a given viewer origin reports to. Pattern-based because the viewer is

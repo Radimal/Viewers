@@ -4,11 +4,13 @@ import {
   WINDOW_STARTED_AT,
   closeAllViewerWindows,
   openSavedViewerWindows,
+  publishFamilyArrival,
   publishFamilyDeparture,
   publishFamilyStudy,
   readFamilyWindowData,
   readFamilyDepartureSinceLoad,
   readFamilyStudyPublishedSinceLoad,
+  reconcileFamilyOnMount,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
 
@@ -236,6 +238,114 @@ describe('viewerWindowUtils', () => {
         JSON.stringify({ url: 'not a url', at: Date.now() })
       );
       expect(readFamilyDepartureSinceLoad(HERE)).toBeNull();
+    });
+  });
+
+  describe('family arrival', () => {
+    const target = 'https://veg-view.radimal.ai/viewer/?StudyInstanceUIDs=9.8.7';
+
+    it('republishes even when the stored study id already matches', () => {
+      // The round-trip case: the primary returns to an origin still storing the same study id.
+      // The timestamp must advance anyway, or the newest-wins tiebreak keeps preferring a
+      // departure note written during the trip.
+      publishFamilyStudy('1.2.3');
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT - 1000));
+
+      publishFamilyArrival('1.2.3');
+
+      expect(Number(localStorage.getItem('currentStudyIdAt'))).toBeGreaterThanOrEqual(
+        DOCUMENT_STARTED_AT
+      );
+    });
+
+    it('clears the departure note the outbound switch left behind', () => {
+      publishFamilyDeparture(target);
+
+      publishFamilyArrival('1.2.3');
+
+      expect(localStorage.getItem('familyDepartureTarget')).toBeNull();
+    });
+  });
+
+  describe('reconcileFamilyOnMount', () => {
+    // A monitor showing study 1.2.3 on the regular production origin.
+    const monitorHref = 'https://view.radimal.ai/viewer/?StudyInstanceUIDs=1.2.3';
+    const vegTarget = 'https://veg-view.radimal.ai/viewer/?StudyInstanceUIDs=9.8.7';
+
+    it('follows a departure note newer than the publication', () => {
+      localStorage.setItem('currentStudyId', '1.2.3');
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT + 5));
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: vegTarget, at: DOCUMENT_STARTED_AT + 10 })
+      );
+
+      expect(reconcileFamilyOnMount('1.2.3', monitorHref)).toEqual({
+        action: 'follow-departure',
+        url: vegTarget,
+      });
+    });
+
+    it('prefers a newer publication over an older departure note', () => {
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: vegTarget, at: DOCUMENT_STARTED_AT + 5 })
+      );
+      localStorage.setItem('currentStudyId', '4.5.6');
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT + 10));
+
+      expect(reconcileFamilyOnMount('1.2.3', monitorHref)).toEqual({
+        action: 'catch-up',
+        studyInstanceUid: '4.5.6',
+      });
+    });
+
+    it('stays put after an A -> VEG -> A round trip once the primary re-arrives', () => {
+      // The field regression: monitor refreshed showing study A; while it loads the family
+      // departs to a VEG case and comes back to A. The stale note must not outrank the
+      // returning primary's arrival, or the monitor navigates to the abandoned VEG origin
+      // and shows the wrong patient with nothing left to correct it.
+      localStorage.setItem('currentStudyId', '1.2.3');
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT - 1000));
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: vegTarget, at: DOCUMENT_STARTED_AT + 5 })
+      );
+
+      publishFamilyArrival('1.2.3');
+
+      expect(reconcileFamilyOnMount('1.2.3', monitorHref)).toEqual({ action: 'stay' });
+    });
+
+    it('stays put when nothing happened while this document was loading', () => {
+      // Pre-navigation state only: both signals are already reflected in the monitor's URL.
+      localStorage.setItem('currentStudyId', '1.2.3');
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT - 1000));
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: vegTarget, at: DOCUMENT_STARTED_AT - 500 })
+      );
+
+      expect(reconcileFamilyOnMount('1.2.3', monitorHref)).toEqual({ action: 'stay' });
+    });
+
+    it('ignores a departure note pointing at this window own URL', () => {
+      localStorage.setItem(
+        'familyDepartureTarget',
+        JSON.stringify({ url: monitorHref, at: DOCUMENT_STARTED_AT + 10 })
+      );
+
+      expect(reconcileFamilyOnMount('1.2.3', monitorHref)).toEqual({ action: 'stay' });
+    });
+
+    it('catches up to a fresh same-origin publication', () => {
+      localStorage.setItem('currentStudyId', '4.5.6');
+      localStorage.setItem('currentStudyIdAt', String(DOCUMENT_STARTED_AT + 5));
+
+      expect(reconcileFamilyOnMount('1.2.3', monitorHref)).toEqual({
+        action: 'catch-up',
+        studyInstanceUid: '4.5.6',
+      });
     });
   });
 

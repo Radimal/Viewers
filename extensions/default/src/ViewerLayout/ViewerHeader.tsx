@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
@@ -14,14 +14,13 @@ import useStudyInfo from '../hooks/useStudyInfo';
 import {
   VIEWER_WINDOW_NAME,
   closeAllViewerWindows,
-  familyStudyPublishedAt,
   isManagedViewerWindow,
   isPrimaryViewerWindow,
   nextMonitorWindowId,
   openSavedViewerWindows,
-  publishFamilyStudy,
+  publishFamilyArrival,
   readFamilyDepartureSinceLoad,
-  readFamilyStudyPublishedSinceLoad,
+  reconcileFamilyOnMount,
   readFamilyWindowData,
   stripCaseScopedParams,
 } from './viewerWindowUtils';
@@ -243,33 +242,20 @@ function ViewerHeader({
       }
     };
 
-    if (
-      isPrimaryViewerWindow() &&
-      currentStudyId &&
-      localStorage.getItem('currentStudyId') !== currentStudyId
-    ) {
-      publishFamilyStudy(currentStudyId);
+    if (isPrimaryViewerWindow() && currentStudyId) {
+      publishFamilyArrival(currentStudyId);
     }
 
-    // Reconcile on mount as well as on the event. Listeners only exist once this component has
-    // mounted, so a monitor that was still loading when the family switched case never hears
-    // about it and sits on the previous patient until the NEXT switch. Two signals, newest wins:
-    // a same-origin publication, or a departure note left by a primary that switched to a sibling
-    // origin (VEG <-> non-VEG) while we were loading — after which nothing on this origin will
-    // ever update again, so the note is the only way to learn the family moved.
+    // Reconcile on mount as well as on the event: a monitor that was still loading when the
+    // family switched case had no listeners yet, so this is where it catches up.
     if (followsFamilyStudy && currentStudyId) {
-      const departure = readFamilyDepartureSinceLoad();
-      const intendedStudyId = readFamilyStudyPublishedSinceLoad();
-      if (
-        departure &&
-        departure.at > familyStudyPublishedAt() &&
-        departure.url !== window.location.href
-      ) {
-        console.log('Following family to sibling origin', departure.url);
-        window.location.href = departure.url;
-      } else if (intendedStudyId && intendedStudyId !== currentStudyId) {
-        console.log('Catching up to family study', intendedStudyId);
-        refreshTab(intendedStudyId);
+      const decision = reconcileFamilyOnMount(currentStudyId);
+      if (decision.action === 'follow-departure') {
+        console.log('Following family to sibling origin', decision.url);
+        window.location.href = decision.url;
+      } else if (decision.action === 'catch-up') {
+        console.log('Catching up to family study', decision.studyInstanceUid);
+        refreshTab(decision.studyInstanceUid);
       }
     }
 
