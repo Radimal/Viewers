@@ -47,4 +47,16 @@ describe('UpdateBanner', () => {
     dispatchUpdateAvailable('0123456789abcdef0123456789abcdef01234567');
     expect(screen.getByText(BANNER_TEXT)).toBeTruthy();
   });
+
+  it('uses the static bg-primary-main blue, not the stylesheet-order-dependent bg-primary', () => {
+    // --primary is declared at :root by both ui and ui-next tailwind.css with different values,
+    // so `bg-primary` renders whichever stylesheet lands later in the bundle (currently grey).
+    // A refactor back to it already shipped grey once; pin the static class instead.
+    renderBanner();
+    dispatchUpdateAvailable(NEW_COMMIT);
+
+    const pill = screen.getByText(BANNER_TEXT).closest('.bg-primary-main');
+    expect(pill).toBeTruthy();
+    expect(pill.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+  });
 });
