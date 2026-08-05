@@ -253,8 +253,11 @@ module.exports = (env, argv) => {
   if (isProdBuild) {
     mergedConfig.plugins.push(
       new rspack.CssExtractRspackPlugin({
-        filename: '[name].bundle.css',
-        chunkFilename: '[id].css',
+        // Content-hashed so CSS can be served from a shared S3/CloudFront
+        // bucket with immutable caching (unhashed names would go stale
+        // across builds).
+        filename: '[name].[contenthash].css',
+        chunkFilename: '[id].[contenthash].css',
       })
     );
   }
