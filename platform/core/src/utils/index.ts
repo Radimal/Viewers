@@ -45,6 +45,11 @@ import { createStudyBrowserTabs } from './createStudyBrowserTabs';
 import { sopClassDictionary } from './sopClassDictionary';
 import * as orthancUtils from './orthancUtils';
 import * as radimalEndpoints from './radimalEndpoints';
+import {
+  applyWheelPreferences,
+  getScrollWheelTool,
+  getScrollWheelInversion,
+} from './wheelPreferences';
 import * as MeasurementFilters from './measurementFilters';
 import getClosestOrientationFromIOP from './getClosestOrientationFromIOP';
 import calculateScanAxisNormal from './calculateScanAxisNormal';
@@ -112,6 +117,9 @@ const utils = {
   createStudyBrowserTabs,
   orthancUtils,
   radimalEndpoints,
+  applyWheelPreferences,
+  getScrollWheelTool,
+  getScrollWheelInversion,
   MeasurementFilters,
   getClosestOrientationFromIOP,
   calculateScanAxisNormal,
@@ -163,6 +171,9 @@ export {
   createStudyBrowserTabs,
   orthancUtils,
   radimalEndpoints,
+  applyWheelPreferences,
+  getScrollWheelTool,
+  getScrollWheelInversion,
   MeasurementFilters,
   getClosestOrientationFromIOP,
   buildButtonCommands,
