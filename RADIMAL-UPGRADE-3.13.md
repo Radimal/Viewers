@@ -105,12 +105,18 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
 ## Port status
 
 - [x] Phase 0 — vanilla 3.13.3 baseline building, deployed, verified on stage-1
-- [ ] Phase 1 — branding, PostHog, cache manager, reporter helper utils,
-      nginx tweaks, https→http endpoint fix, centralized origins
+- [x] Phase 1 — branding, PostHog, cache manager, reporter helper utils,
+      https→http endpoint fix, origins centralized in
+      `platform/core/src/utils/radimalEndpoints.js` (Phase 3 consumers must
+      import from it). The fork's nginx gzip tweaks were upstreamed into 3.13
+      — nothing to port. Dev-recipe nginx configs deliberately skipped.
 - [ ] Phase 2 — adopt upstream equivalents (MultiMonitorService, presentation
       stores, StudyBrowserSort, Smart Scrollbar), port only the delta
 - [ ] Phase 3 — invasive features on new APIs (reporter buttons, DNR/related
       studies, hotkeys/HotkeyField, autozoom/overlays, toolbar buttons)
-- [ ] Phase 4 — OpenJPEG multi-tile patch + combineFrameInstance (test stock
-      3.13 first; may be obsolete)
+- [ ] Phase 4 — OpenJPEG multi-tile patch + combineFrameInstance. Confirmed
+      still needed: the fork's combineFrameInstance regression test (untracked
+      `platform/core/src/utils/combineFrameInstance.test.js`) fails against
+      3.13.3 — upstream still mutates the shared instance object. OpenJPEG
+      multi-tile remains to be tested on stock 3.13.
 - [ ] Phase 5 — full verification + prod cutover
