@@ -201,7 +201,15 @@ export class LegacyViewportBackend implements IViewportBackend {
     return {
       viewportType: viewportInfo.getViewportType(),
       viewReference: isVolume3DViewportType(csViewport) ? null : vp.getViewReference(),
-      viewPresentation: vp.getViewPresentation({ pan: true, zoom: true }),
+      // rotation/flip included so user rotate/flip survives display-set
+      // swaps, layout changes and resize (setViewPresentation consumes them).
+      viewPresentation: vp.getViewPresentation({
+        pan: true,
+        zoom: true,
+        rotation: true,
+        flipHorizontal: true,
+        flipVertical: true,
+      }),
       viewportId,
     };
   }

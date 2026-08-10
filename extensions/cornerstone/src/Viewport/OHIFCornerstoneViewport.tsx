@@ -14,6 +14,7 @@ import type { Types } from '@ohif/core';
 
 import OHIFViewportActionCorners from '../components/OHIFViewportActionCorners';
 import { getViewportPresentations } from '../utils/presentations/getViewportPresentations';
+import { loadRotationFlip, saveRotationFlip } from '../utils/presentations/rotationFlipStorage';
 import { useSynchronizersStore } from '../stores/useSynchronizersStore';
 import ActiveViewportBehavior from '../utils/ActiveViewportBehavior';
 import { WITH_NAVIGATION } from '../services/ViewportService/CornerstoneViewportService';
@@ -194,6 +195,34 @@ const OHIFCornerstoneViewport = React.memo(
       [viewportId, onElementEnabled, toolGroupService]
     );
 
+    // Kept current for the unmount cleanup below, which is registered once
+    // with an empty deps array and would otherwise close over the initial
+    // displaySets.
+    const displaySetsRef = useRef(displaySets);
+    displaySetsRef.current = displaySets;
+
+    const persistRotationFlip = useCallback(
+      currentDisplaySets => {
+        const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+        if (!csViewport) {
+          return;
+        }
+        try {
+          saveRotationFlip(
+            currentDisplaySets,
+            csViewport.getViewPresentation({
+              rotation: true,
+              flipHorizontal: true,
+              flipVertical: true,
+            })
+          );
+        } catch (e) {
+          // The viewport may already be torn down during unmount races.
+        }
+      },
+      [cornerstoneViewportService, viewportId]
+    );
+
     // disable the element upon unmounting
     useEffect(() => {
       cornerstoneViewportService.enableViewport(viewportId, elementRef.current);
@@ -209,6 +238,7 @@ const OHIFCornerstoneViewport = React.memo(
           return;
         }
 
+        persistRotationFlip(displaySetsRef.current);
         cornerstoneViewportService.storePresentation({ viewportId });
 
         // This should be done after the store presentation since synchronizers
@@ -282,6 +312,21 @@ const OHIFCornerstoneViewport = React.memo(
 
         const presentations = getViewportPresentations(viewportId, viewportOptions);
 
+        // No in-session state for this viewport+series yet (fresh load or
+        // reload): seed rotation/flip from the per-series localStorage
+        // mirror. setPositionPresentation applies viewPresentation and
+        // skips the null viewReference.
+        if (!presentations.positionPresentation) {
+          const rotationFlip = loadRotationFlip(displaySets);
+          if (rotationFlip) {
+            presentations.positionPresentation = {
+              viewportType: viewportOptions.viewportType,
+              viewReference: null,
+              viewPresentation: rotationFlip,
+            };
+          }
+        }
+
         // Note: This is a hack to get the grid to re-render the OHIFCornerstoneViewport component
         // Used for segmentation hydration right now, since the logic to decide whether
         // a viewport needs to render a segmentation lives inside the CornerstoneViewportService
@@ -302,6 +347,15 @@ const OHIFCornerstoneViewport = React.memo(
       };
 
       loadViewportData();
+
+      // On a display-set swap this cleanup still sees the outgoing
+      // displaySets and a live viewport, capturing the series' final
+      // rotation/flip. (On unmount the element is already disabled by the
+      // earlier effect's cleanup; persistRotationFlip no-ops and the
+      // unmount path above has already saved.)
+      return () => {
+        persistRotationFlip(displaySets);
+      };
     }, [viewportOptions, displaySets, dataSource]);
 
     const Notification = customizationService.getCustomization('ui.notificationComponent');
