@@ -110,8 +110,12 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
       `platform/core/src/utils/radimalEndpoints.js` (Phase 3 consumers must
       import from it). The fork's nginx gzip tweaks were upstreamed into 3.13
       — nothing to port. Dev-recipe nginx configs deliberately skipped.
-- [ ] Phase 2 — adopt upstream equivalents, port only the delta. Evaluation
-      done (2026-08); verdicts:
+- [x] Phase 2 — adopt upstream equivalents, port only the delta. Implemented
+      2026-08 (rotation/flip presentations + cross-reload store, study browser
+      sort/tabs/DNR/single-click, wheel preferences on new hosts; SmartScrollbar
+      adopted as upstream default). The multi-window re-port (fork model kept,
+      per decision) rides with Phase 3, which rebuilds the same
+      ViewerLayout/ViewerHeader files. Evaluation verdicts:
       - Viewport persistence: retire ~85% of ViewportPersistenceService — it
         only ever persisted rotation/flip; upstream presentation stores cover
         pan/zoom/VOI. Delta: widen the `getViewPresentation` selector in
