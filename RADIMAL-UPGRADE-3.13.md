@@ -56,9 +56,11 @@ deploys, and serves studies correctly.
 - **3.13 uses pnpm + Node 24 + Rspack** (fork was yarn + Node 20 + webpack).
   Upstream's Dockerfile handles all of it; fork webpack customizations must be
   re-expressed against rspack config when re-porting.
-- **3.13's `init-service-worker.js` unregisters service workers** (upstream
-  disabled SW). Returning users' 3.10 service workers get cleanly removed on
-  first 3.13 load. The fork's cache-manager behavior is absent until re-ported.
+- **Both upstream and the fork unregister-then-reregister service workers**
+  in `init-service-worker.js`, so cutovers between versions self-heal on first
+  load. The fork's delta (re-ported in Phase 1) is auto-activation of waiting
+  workers plus a reload, NetworkFirst caching for js/css, and hourly update
+  checks — vanilla leaves new workers waiting and uses StaleWhileRevalidate.
 - **IAM does not enforce the prod/staging split** — the CI credentials can
   write every bucket. The per-branch workflow bucket list is the only
   guardrail; review any workflow edit on release branches accordingly.
