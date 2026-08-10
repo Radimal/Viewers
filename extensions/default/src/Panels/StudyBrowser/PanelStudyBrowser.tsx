@@ -119,6 +119,14 @@ function PanelStudyBrowser({
       // current study qido
       const qidoForStudyUID = await dataSource.query.studies.search({
         studyInstanceUid: StudyInstanceUID,
+        // Radimal: institution + birth date feed the patient-scoped tabs in
+        // createStudyBrowserTabs (patientName/birthDate are in the default
+        // includefield; institution is Radimal-added in qido.js).
+        includefield: [
+          '00080080', // Institution Name
+          '00100030', // Patient's Birth Date
+          '00100010', // Patient's Name
+        ],
       });
 
       let qidoStudiesForPatient = qidoForStudyUID;
@@ -126,7 +134,12 @@ function PanelStudyBrowser({
       // try to fetch the prior studies based on the patientID if the
       // server can respond.
       try {
-        qidoStudiesForPatient = await getStudiesForPatientByMRN(qidoForStudyUID);
+        // Radimal: an empty MRN response must not wipe the current study
+        // out of the list.
+        const priorStudies = await getStudiesForPatientByMRN(qidoForStudyUID);
+        if (Array.isArray(priorStudies) && priorStudies.length > 0) {
+          qidoStudiesForPatient = priorStudies;
+        }
       } catch (error) {
         console.warn(error);
       }
@@ -136,9 +149,13 @@ function PanelStudyBrowser({
         return {
           studyInstanceUid: qidoStudy.StudyInstanceUID,
           date: formatDate(qidoStudy.StudyDate) || '',
+          time: qidoStudy.StudyTime,
           description: qidoStudy.StudyDescription,
           modalities: qidoStudy.ModalitiesInStudy,
           numInstances: Number(qidoStudy.NumInstances),
+          patientName: qidoStudy.PatientName,
+          patientBirthDate: qidoStudy.PatientBirthDate,
+          institutionName: qidoStudy.InstitutionName,
         };
       });
 
@@ -424,7 +441,8 @@ function PanelStudyBrowser({
           setActiveTabName(clickedTabName);
         }}
         onClickUntrack={onClickUntrack}
-        onClickThumbnail={() => {}}
+        // Radimal: single click opens the series, same as double click.
+        onClickThumbnail={onDoubleClickThumbnailHandler}
         onDoubleClickThumbnail={onDoubleClickThumbnailHandler}
         activeDisplaySetInstanceUIDs={activeDisplaySetInstanceUIDs}
         showSettings={actionIcons.find(icon => icon.id === 'settings')?.value}
@@ -462,6 +480,8 @@ function _mapDataSourceStudies(studies) {
       ModalitiesInStudy: study.modalities,
       PatientID: study.mrn,
       PatientName: study.patientName,
+      PatientBirthDate: study.patientBirthDate,
+      InstitutionName: study.institutionName,
       StudyInstanceUID: study.studyInstanceUid,
       StudyTime: study.time,
     };
@@ -473,6 +493,8 @@ function _mapDisplaySets(displaySets, displaySetLoadingState, thumbnailImageSrcM
   const thumbnailNoImageDisplaySets = [];
   displaySets
     .filter(ds => !ds.excludeFromThumbnailBrowser)
+    // Radimal: series marked "DNR " (do not read) stay out of the browser.
+    .filter(ds => !ds.SeriesDescription?.includes('DNR '))
     .forEach(ds => {
       const { thumbnailSrc, displaySetInstanceUID } = ds;
       const componentType = _getComponentType(ds);

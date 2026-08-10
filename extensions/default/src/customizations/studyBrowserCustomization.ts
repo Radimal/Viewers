@@ -19,6 +19,15 @@ export default {
     },
   ],
   'studyBrowser.sortFunctions': [
+    // Radimal: first entry is the default selection in StudyBrowserSort.
+    {
+      label: i18n.t('StudyBrowser:Instance Number'),
+      sortFunction: (a, b) => {
+        const instanceA = parseInt(a?.images?.[0]?.InstanceNumber) || 0;
+        const instanceB = parseInt(b?.images?.[0]?.InstanceNumber) || 0;
+        return instanceA - instanceB;
+      },
+    },
     {
       label: i18n.t('StudyBrowser:Series Number'),
       sortFunction: (a, b) => {

@@ -4,7 +4,8 @@ const defaultActionIcons = [
   {
     id: 'settings',
     iconName: 'Settings',
-    value: false,
+    // Radimal: sort + tab controls always visible (no gear toggle).
+    value: true,
   },
 ] as actionIcon[];
 

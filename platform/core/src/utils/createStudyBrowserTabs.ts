@@ -69,13 +69,46 @@ export function createStudyBrowserTabs(
     allStudies.push(tabStudy);
   });
 
+  // Radimal: the Recent/All tabs are scoped to the primary study's patient,
+  // not everything QIDO returned. Match on normalized patientName when both
+  // sides have one; fall back to institution + birth date otherwise.
+  const normalize = val => {
+    if (val === undefined || val === null || val === '') {
+      return '';
+    }
+    if (typeof val === 'object' && val.Alphabetic) {
+      return String(val.Alphabetic).trim().toLowerCase();
+    }
+    return String(val).trim().toLowerCase();
+  };
+
+  const patientStudies = allStudies.filter(study => {
+    if (primaryStudyInstanceUIDs.includes(study.studyInstanceUid)) {
+      return true;
+    }
+
+    return primaryStudies.some(p => {
+      const studyName = normalize(study.patientName);
+      const primaryName = normalize(p.patientName);
+
+      if (studyName && primaryName) {
+        return studyName === primaryName;
+      }
+
+      return (
+        normalize(study.institutionName) === normalize(p.institutionName) &&
+        normalize(study.patientBirthDate) === normalize(p.patientBirthDate)
+      );
+    });
+  });
+
   const primaryStudiesTimestamps = primaryStudies
     .filter(study => study.date)
     .map(study => new Date(study.date).getTime());
 
   const recentStudies =
     primaryStudiesTimestamps.length > 0
-      ? allStudies.filter(study => {
+      ? patientStudies.filter(study => {
           const oldestPrimaryTimeStamp = Math.min(...primaryStudiesTimestamps);
 
           if (!study.date) {
@@ -86,29 +119,36 @@ export function createStudyBrowserTabs(
         })
       : [];
 
-  // Newest first
-  const _byDate = (a, b) => {
-    const dateA = Date.parse(a);
-    const dateB = Date.parse(b);
+  // Radimal: newest first by date, then by DICOM StudyTime (HHmmss[.SSS]) so
+  // same-day studies order correctly.
+  const _byDateTime = (studyA, studyB) => {
+    const dateA = Date.parse(studyA.date) || 0;
+    const dateB = Date.parse(studyB.date) || 0;
 
-    return dateB - dateA;
+    if (dateA !== dateB) {
+      return dateB - dateA;
+    }
+
+    const timeA = studyA.time || '';
+    const timeB = studyB.time || '';
+    return timeB.localeCompare(timeA);
   };
 
   const tabs = [
     {
       name: 'primary',
       label: i18n.t('StudyBrowser:Primary'),
-      studies: primaryStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: primaryStudies.sort(_byDateTime),
     },
     {
       name: 'recent',
       label: i18n.t('StudyBrowser:Recent'),
-      studies: recentStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: recentStudies.sort(_byDateTime),
     },
     {
       name: 'all',
       label: i18n.t('StudyBrowser:All'),
-      studies: allStudies.sort((studyA, studyB) => _byDate(studyA.date, studyB.date)),
+      studies: patientStudies.sort(_byDateTime),
     },
   ];
 

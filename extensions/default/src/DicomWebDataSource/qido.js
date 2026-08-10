@@ -57,6 +57,7 @@ function processResults(qidoStudies) {
       description: getString(qidoStudy['00081030']) || '',
       modalities: getString(getModalities(qidoStudy['00080060'], qidoStudy['00080061'])) || '',
       referringPhysicianName: utils.formatPN(getName(qidoStudy['00080090'])) || '', // Referring Physician's Name
+      institutionName: getString(qidoStudy['00080080']) || '', // Radimal: patient-scoped study browser tabs
     })
   );
 
@@ -155,6 +156,7 @@ function mapParams(params, options = {}) {
     '00080060', // Modality
     '00080090', // Referring Physician's Name
     '00100030', // Patient's Birth Date
+    '00080080', // Institution Name (Radimal: patient-scoped study browser tabs)
     // Add more fields here if you want them in the result
   ].join(',');
 
