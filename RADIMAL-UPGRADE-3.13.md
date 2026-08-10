@@ -110,8 +110,34 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
       `platform/core/src/utils/radimalEndpoints.js` (Phase 3 consumers must
       import from it). The fork's nginx gzip tweaks were upstreamed into 3.13
       — nothing to port. Dev-recipe nginx configs deliberately skipped.
-- [ ] Phase 2 — adopt upstream equivalents (MultiMonitorService, presentation
-      stores, StudyBrowserSort, Smart Scrollbar), port only the delta
+- [ ] Phase 2 — adopt upstream equivalents, port only the delta. Evaluation
+      done (2026-08); verdicts:
+      - Viewport persistence: retire ~85% of ViewportPersistenceService — it
+        only ever persisted rotation/flip; upstream presentation stores cover
+        pan/zoom/VOI. Delta: widen the `getViewPresentation` selector in
+        `LegacyViewportBackend.ts` to include rotation/flip (one line), plus
+        optional cross-reload persistence decision.
+      - Multi-monitor: fork and upstream MultiMonitorService share zero
+        lineage (upstream added theirs after our fork point) and embody
+        different products (ad-hoc "Duplicate Window" clones vs config-declared
+        screens). Vet-app heartbeat/FADE/CLOSE postMessage bridge stays custom
+        regardless — upstream has no postMessage at all. Use
+        `radimalEndpoints.VET_APP_ALLOWED_ORIGINS` when re-porting.
+      - StudyBrowserSort: Instance Number sort, DNR filter, and reporter PDF
+        menu items become pure `customizationService` entries (no ui-next
+        patches); date+StudyTime ordering, patient-scoped tabs, always-visible
+        sort UI, single-click open remain as small patches concentrated in
+        `createStudyBrowserTabs.ts` + `PanelStudyBrowser.tsx`. The 3.10
+        tracking-panel duplicate patches disappear (3.13 delegates to
+        PanelStudyBrowser). birthDate mapping is now upstream in qido.js.
+      - "Smart Scrollbar" was mislabeled in the original plan: it is an
+        upstream 3.13 feature, not fork code — adopt as-is (on by default,
+        `viewportScrollbar.variant`). The fork's real scroll delta = wheel-tool
+        preference (StackScroll/Zoom), wheel inversion, zoomSpeed — re-port to
+        `viewportToolsCustomization` + userPreferences customization (old
+        hosts `modes/longitudinal/initToolGroups.js` and @ohif/ui
+        UserPreferences no longer exist). frameViewSynchronizer fix and iPad
+        two-finger-zoom bindings retire (upstream merged equivalents).
 - [ ] Phase 3 — invasive features on new APIs (reporter buttons, DNR/related
       studies, hotkeys/HotkeyField, autozoom/overlays, toolbar buttons)
 - [ ] Phase 4 — OpenJPEG multi-tile patch + combineFrameInstance. Confirmed
