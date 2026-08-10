@@ -28,12 +28,16 @@ import {
   ViewportDialogProvider,
   UserAuthenticationProvider,
 } from '@ohif/ui-next';
+import { PostHogProvider } from 'posthog-js/react';
 // Viewer Project
 // TODO: Should this influence study list?
 import { AppConfigProvider } from '@state';
 import createRoutes from './routes';
 import appInit from './appInit.js';
 import OpenIdConnectRoutes from './utils/OpenIdConnectRoutes';
+import { initPostHog, posthog } from './utils/posthog';
+import { startPostHogEventBridge, stopPostHogEventBridge } from './utils/posthogEventBridge';
+import cacheManager from './utils/cacheManager';
 import './App.css';
 
 let commandsManager: CommandsManager,
@@ -70,12 +74,27 @@ function App({
 }) {
   const [init, setInit] = useState(null);
   useEffect(() => {
+    initPostHog(config?.posthog);
     const run = async () => {
       appInit(config, defaultExtensions, defaultModes).then(setInit).catch(console.error);
     };
 
     run();
+    // Auto-update polling disabled: force-reload on version change disrupted
+    // in-progress measurements. Users pick up new versions on next refresh.
+    // cacheManager.startVersionChecking();
+    // Make cache manager globally accessible for debugging
+    if (typeof window !== 'undefined') {
+      window.cacheManager = cacheManager;
+    }
   }, []);
+
+  useEffect(() => {
+    if (init?.servicesManager) {
+      startPostHogEventBridge(init.servicesManager);
+    }
+    return () => stopPostHogEventBridge();
+  }, [init]);
 
   if (!init) {
     return null;
@@ -113,6 +132,7 @@ function App({
 
   const providers = [
     [AppConfigProvider, { value: appConfigState }],
+    [PostHogProvider, { client: posthog }],
     [UserAuthenticationProvider, { service: userAuthenticationService }],
     [I18nextProvider, { i18n }],
     [ThemeWrapperNext],
