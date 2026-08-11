@@ -20,12 +20,22 @@ export default {
   ],
   'studyBrowser.sortFunctions': [
     // Radimal: first entry is the default selection in StudyBrowserSort.
+    // Ties fall through to SeriesNumber then SeriesInstanceUID so the order
+    // is stable across reloads (vet series routinely share InstanceNumber 1).
     {
       label: i18n.t('StudyBrowser:Instance Number'),
       sortFunction: (a, b) => {
         const instanceA = parseInt(a?.images?.[0]?.InstanceNumber) || 0;
         const instanceB = parseInt(b?.images?.[0]?.InstanceNumber) || 0;
-        return instanceA - instanceB;
+        if (instanceA !== instanceB) {
+          return instanceA - instanceB;
+        }
+        const seriesNumberA = parseInt(a?.SeriesNumber) || 0;
+        const seriesNumberB = parseInt(b?.SeriesNumber) || 0;
+        if (seriesNumberA !== seriesNumberB) {
+          return seriesNumberA - seriesNumberB;
+        }
+        return String(a?.SeriesInstanceUID ?? '').localeCompare(String(b?.SeriesInstanceUID ?? ''));
       },
     },
     {

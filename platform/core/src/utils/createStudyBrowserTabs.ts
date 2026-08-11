@@ -131,7 +131,13 @@ export function createStudyBrowserTabs(
 
     const timeA = studyA.time || '';
     const timeB = studyB.time || '';
-    return timeB.localeCompare(timeA);
+    if (timeA !== timeB) {
+      return timeB.localeCompare(timeA);
+    }
+
+    // Deterministic last resort so full ties can't shuffle with async
+    // study-arrival order across reloads.
+    return String(studyA.studyInstanceUid ?? '').localeCompare(String(studyB.studyInstanceUid ?? ''));
   };
 
   const tabs = [
