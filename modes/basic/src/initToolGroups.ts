@@ -1,5 +1,3 @@
-import { utils } from '@ohif/core';
-
 const colours = {
   'viewport-0': 'rgb(200, 0, 0)',
   'viewport-1': 'rgb(200, 200, 0)',
@@ -95,9 +93,6 @@ function initDefaultToolGroup(extensionManager, toolGroupService, commandsManage
 
   const updatedTools = commandsManager.run('initializeSegmentLabelTool', { tools });
 
-  // Radimal: user wheel preferences (scrollWheelTool / invertScrollWheel).
-  utils.applyWheelPreferences(updatedTools.active, Enums.MouseBindings.Wheel);
-
   toolGroupService.createToolGroupAndAddTools(toolGroupId, updatedTools);
 }
 
@@ -165,8 +160,6 @@ function initSRToolGroup(extensionManager, toolGroupService) {
     ],
     // disabled
   };
-
-  utils.applyWheelPreferences(tools.active, Enums.MouseBindings.Wheel);
 
   const toolGroupId = 'SRToolGroup';
   toolGroupService.createToolGroupAndAddTools(toolGroupId, tools);
@@ -280,8 +273,6 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager) {
       { toolName: toolNames.ReferenceLines },
     ],
   };
-
-  utils.applyWheelPreferences(tools.active, Enums.MouseBindings.Wheel);
 
   toolGroupService.createToolGroupAndAddTools('mpr', tools);
 }

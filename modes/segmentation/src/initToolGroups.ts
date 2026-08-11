@@ -1,5 +1,4 @@
 import { MIN_SEGMENTATION_DRAWING_RADIUS, MAX_SEGMENTATION_DRAWING_RADIUS } from './constants';
-import { utils } from '@ohif/core';
 
 const colours = {
   'viewport-0': 'rgb(200, 0, 0)',
@@ -186,9 +185,6 @@ function initDefaultToolGroup(extensionManager, toolGroupService, commandsManage
     '@ohif/extension-cornerstone.utilityModule.tools'
   );
   const tools = createTools({ commandsManager, utilityModule });
-  // Radimal: user wheel preferences (scrollWheelTool / invertScrollWheel).
-  utils.applyWheelPreferences(tools.active, utilityModule.exports.Enums.MouseBindings.Wheel);
-
   toolGroupService.createToolGroupAndAddTools(toolGroupId, tools);
 }
 
@@ -244,8 +240,6 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager) {
     },
     { toolName: utilityModule.exports.toolNames.ReferenceLines }
   );
-  utils.applyWheelPreferences(tools.active, utilityModule.exports.Enums.MouseBindings.Wheel);
-
   toolGroupService.createToolGroupAndAddTools('mpr', tools);
 }
 

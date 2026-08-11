@@ -1,5 +1,4 @@
 import { toolGroupIds } from '@ohif/extension-tmtv';
-import { utils } from '@ohif/core';
 
 import { MIN_SEGMENTATION_DRAWING_RADIUS, MAX_SEGMENTATION_DRAWING_RADIUS } from './constants';
 
@@ -144,9 +143,6 @@ function _initToolGroups(toolNames, Enums, toolGroupService, commandsManager) {
     ],
   };
 
-  // Radimal: user wheel preferences (scrollWheelTool / invertScrollWheel).
-  utils.applyWheelPreferences(tools.active, Enums.MouseBindings.Wheel);
-
   toolGroupService.createToolGroupAndAddTools(toolGroupIds.CT, tools);
   toolGroupService.createToolGroupAndAddTools(toolGroupIds.PT, {
     active: tools.active,
@@ -185,8 +181,6 @@ function _initToolGroups(toolNames, Enums, toolGroupService, commandsManager) {
       },
     ],
   };
-
-  utils.applyWheelPreferences(mipTools.active, Enums.MouseBindings.Wheel);
 
   toolGroupService.createToolGroupAndAddTools(toolGroupIds.MIP, mipTools);
 }
