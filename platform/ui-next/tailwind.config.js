@@ -100,10 +100,11 @@ module.exports = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
+      // Radimal theme: black in place of OHIF navy
       bkg: {
-        low: '#050615',
-        med: '#090C29',
-        full: '#041C4A',
+        low: '#000000',
+        med: '#000000',
+        full: '#000000',
       },
       info: {
         primary: '#FFFFFF',
