@@ -19,7 +19,7 @@
     /* Radimal theme: black panels in place of OHIF navy */
     --popover: 0 0% 0%;
     --popover-foreground: 0 0% 98%;
-    --primary: 214 98% 60%;
+    --primary: 211 84% 56%; /* Radimal #338DED */
     --primary-foreground: 0 0% 98%;
     --secondary: 214 65% 36%;
     --secondary-foreground: 200 50% 84%;
@@ -31,7 +31,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14.9%;
     --input: 236 52% 30%;
-    --ring: 214 98% 60%;
+    --ring: 211 84% 56%; /* Radimal #338DED */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -63,7 +63,7 @@
     /* Radimal theme */
     --popover: 0 0% 0%;
     --popover-foreground: 0 0% 98%;
-    --primary: 214 98% 60%;
+    --primary: 211 84% 56%; /* Radimal #338DED */
     --primary-foreground: 0 0% 98%;
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
@@ -75,7 +75,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14.9%;
     --input: 236 52% 30%;
-    --ring: 214 98% 60%;
+    --ring: 211 84% 56%; /* Radimal #338DED */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
