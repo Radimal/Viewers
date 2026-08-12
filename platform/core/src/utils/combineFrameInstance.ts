@@ -18,6 +18,17 @@ import { vec3 } from 'gl-matrix';
  * cs3d's spatial-sync close-match iteration. OHIF master fixed this in
  * PR #5264 / #4792 / #5811; this is a minimal port of that fix.
  */
+
+// Combining is deterministic for a given (instance, frame), but MetadataProvider
+// calls this for every metaData.get() — roughly ten module queries per frame while
+// a multiframe loop buffers, each one rebuilding the merged object from scratch.
+// Cache the combined result per instance and frame. Keying the WeakMap on the
+// shared store instance keeps it untouched (no cache properties written onto it,
+// unlike upstream's _parentInstance approach) and lets every cached frame be
+// collected together with the instance. A re-naturalized instance is a new object
+// identity and naturally gets a fresh cache.
+const combinedFramesByInstance = new WeakMap<object, Map<number, unknown>>();
+
 const combineFrameInstance = (frame, instance) => {
   const {
     PerFrameFunctionalGroupsSequence,
@@ -28,6 +39,17 @@ const combineFrameInstance = (frame, instance) => {
 
   if (PerFrameFunctionalGroupsSequence || NumberOfFrames > 1) {
     const frameNumber = Number.parseInt(frame || 1);
+
+    let frameCache = combinedFramesByInstance.get(instance);
+    if (!frameCache) {
+      frameCache = new Map();
+      combinedFramesByInstance.set(instance, frameCache);
+    }
+    const cached = frameCache.get(frameNumber);
+    if (cached) {
+      return cached;
+    }
+
     const shared = SharedFunctionalGroupsSequence
       ? Object.values(SharedFunctionalGroupsSequence[0])
           .filter(Boolean)
@@ -101,12 +123,14 @@ const combineFrameInstance = (frame, instance) => {
     // PerFrameFunctionalGroupsSequence (now sitting on `newInstance` after the
     // loop above) wins. For NM datasets that have no per-frame IPP, fall back
     // to the value computed from DetectorInformationSequence. Default last.
-    return {
+    const combined = {
       ...newInstance,
       ImagePositionPatient:
         newInstance.ImagePositionPatient ??
         ImagePositionPatientFromDetectorInfo ?? [0, 0, frameNumber],
     };
+    frameCache.set(frameNumber, combined);
+    return combined;
   } else {
     return instance;
   }
