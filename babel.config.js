@@ -7,7 +7,10 @@ module.exports = {
   plugins: [
     ['@babel/plugin-proposal-class-properties', { loose: true }],
     '@babel/plugin-transform-typescript',
-    ['@babel/plugin-proposal-private-property-in-object', { loose: true }],
+    // The -proposal- package resolves to a throwing placeholder under yarn's
+    // hoisting (preset-env pins 7.21.0-placeholder-for-preset-env.2); the
+    // -transform- package is the same plugin under its post-stage-4 name.
+    ['@babel/plugin-transform-private-property-in-object', { loose: true }],
     ['@babel/plugin-proposal-private-methods', { loose: true }],
     '@babel/plugin-transform-class-static-block',
   ],
