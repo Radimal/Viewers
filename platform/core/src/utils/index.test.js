@@ -40,6 +40,7 @@ describe('Top level exports', () => {
       'isDicomUid',
       'resolveObjectPath',
       'hierarchicalListUtils',
+      'orthancUtils',
       'progressTrackingUtils',
       'uuidv4',
       'addAccessors',
