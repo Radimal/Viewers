@@ -65,7 +65,6 @@ RUN yarn install --frozen-lockfile --verbose
 RUN node scripts/apply-openjpeg-patch.js && node scripts/apply-openjpeg-patch.js --check
 
 ENV PATH=/usr/src/app/node_modules/.bin:$PATH
-ENV QUICK_BUILD=true
 # ENV GENERATE_SOURCEMAP=false
 # ENV REACT_APP_CONFIG=config/default.js
 
