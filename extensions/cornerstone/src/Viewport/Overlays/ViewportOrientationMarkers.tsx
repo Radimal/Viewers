@@ -15,7 +15,8 @@ function ViewportOrientationMarkers({
   imageSliceData,
   viewportId,
   servicesManager,
-  orientationMarkers = ['top', 'left'],
+  // Radimal: all four markers (upstream default is ['top', 'left'])
+  orientationMarkers = ['top', 'bottom', 'left', 'right'],
 }: withAppTypes) {
   const [cameraModifiedTime, setCameraModifiedTime] = useState(0);
   const { isViewportBackgroundLight: isLight } = useViewportRendering(viewportId);
