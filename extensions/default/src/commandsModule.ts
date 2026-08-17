@@ -878,6 +878,7 @@ const commandsModule = ({
     showContextMenu: actions.showContextMenu,
     closeContextMenu: actions.closeContextMenu,
     clearMeasurements: actions.clearMeasurements,
+    toggleOverlays: actions.toggleOverlays,
     displayNotification: actions.displayNotification,
     setHangingProtocol: actions.setHangingProtocol,
     toggleHangingProtocol: actions.toggleHangingProtocol,
