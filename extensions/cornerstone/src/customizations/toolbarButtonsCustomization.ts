@@ -209,6 +209,24 @@ const toolbarButtons: Button[] = [
       ],
     },
   },
+  // Radimal: counter-clockwise rotate alongside upstream's rotate-right
+  {
+    id: 'rotate-left',
+    uiType: 'ohif.toolButton',
+    props: {
+      icon: 'tool-rotate-left',
+      label: i18n.t('Buttons:Rotate Left'),
+      tooltip: i18n.t('Buttons:Rotate -90'),
+      commands: 'rotateViewportCCW',
+      evaluate: [
+        'evaluate.action',
+        {
+          name: 'evaluate.viewport.supported',
+          unsupportedViewportTypes: ['video'],
+        },
+      ],
+    },
+  },
   {
     id: 'flipHorizontal',
     uiType: 'ohif.toolButton',
@@ -716,6 +734,7 @@ const toolbarButtons: Button[] = [
  * append/replace entries without rebuilding.
  */
 export const toolbarSections = {
+  // Radimal: CalibrationLine + ImageSliceSync promoted to the primary row
   [TOOLBAR_SECTIONS.primary]: [
     'MeasurementTools',
     'Zoom',
@@ -725,6 +744,8 @@ export const toolbarSections = {
     'Capture',
     'Layout',
     'Crosshairs',
+    'CalibrationLine',
+    'ImageSliceSync',
     'MoreTools',
   ],
 
@@ -760,11 +781,12 @@ export const toolbarSections = {
     'LivewireContour',
   ],
 
+  // Radimal: rotate-left added; CalibrationLine/ImageSliceSync moved to primary
   MoreTools: [
     'Reset',
     'rotate-right',
+    'rotate-left',
     'flipHorizontal',
-    'ImageSliceSync',
     'ReferenceLines',
     'ImageOverlayViewer',
     'StackScroll',
@@ -774,7 +796,6 @@ export const toolbarSections = {
     'Angle',
     'CobbAngle',
     'Magnify',
-    'CalibrationLine',
     'TagBrowser',
     'AdvancedMagnify',
     'UltrasoundDirectionalTool',

@@ -2522,6 +2522,61 @@ export const ToolRotateRight = (props: IconProps) => (
   </svg>
 );
 
+// Radimal: mirrored ToolRotateRight
+export const ToolRotateLeft = (props: IconProps) => (
+  <svg
+    width="28px"
+    height="28px"
+    viewBox="0 0 28 28"
+    version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
+    <g
+      id="tool-rotate-left"
+      stroke="none"
+      strokeWidth="1"
+      fill="none"
+      fillRule="evenodd"
+      transform="translate(28, 0) scale(-1, 1)"
+    >
+      <rect
+        id="Rectangle"
+        x="0"
+        y="0"
+        width="28"
+        height="28"
+      ></rect>
+      <rect
+        id="Rectangle"
+        fill="currentColor"
+        x="9.55555556"
+        y="13"
+        width="14.4444444"
+        height="11.1111111"
+        rx="2"
+      ></rect>
+      <g
+        id="Group-11"
+        transform="translate(4, 3)"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      >
+        <path
+          d="M8.88888889,3.33333333 L4.44444444,3.33333333 C1.98984556,3.33333333 0,5.32317889 0,7.77777778 L0,12.2222222"
+          id="Path"
+        ></path>
+        <polyline
+          id="Path"
+          points="5.55555556 0 8.88888889 3.33333333 5.55555556 6.66666667"
+        ></polyline>
+      </g>
+    </g>
+  </svg>
+);
+
 export const ToolSegBrush = (props: IconProps) => (
   <svg
     width="24px"
