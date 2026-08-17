@@ -6,6 +6,7 @@ const log = {
   debug: console.debug,
   time: key => {
     log.timingKeys[key] = true;
+    log.timeStartedAt[key] = performance.now();
     console.time(key);
   },
   timeEnd: key => {
@@ -23,6 +24,10 @@ const log = {
     // See TimingEnum for details
     scriptToView: true,
   },
+  // console.time/timeEnd only print to the console — they never expose the
+  // duration to code. Record when each timer started so consumers (e.g.
+  // first_image_rendered analytics) can compute elapsed ms themselves.
+  timeStartedAt: {},
 };
 
 export default log;

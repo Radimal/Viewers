@@ -1,7 +1,12 @@
 import { log, Enums } from '@ohif/core';
-import { EVENTS } from '@cornerstonejs/core';
+import { EVENTS, getEnabledElement, metaData } from '@cornerstonejs/core';
 
 const IMAGE_TIMING_KEYS = [];
+
+// False only until the first capture after a full page load. A study opened
+// via in-app navigation (no reload) keeps this module instance alive, which
+// is what distinguishes switch_type 'in_app' from 'reload'.
+let hasCapturedFirstImageThisPageLoad = false;
 
 const imageTiming = {
   viewportsWaiting: 0,
@@ -41,6 +46,7 @@ function imageRenderedListener(evt) {
     return;
   }
   const { TimingEnum } = Enums;
+  captureFirstImageRendered(evt);
   log.timeEnd(TimingEnum.DISPLAY_SETS_TO_FIRST_IMAGE);
   log.timeEnd(TimingEnum.STUDY_TO_FIRST_IMAGE);
   log.timeEnd(TimingEnum.SCRIPT_TO_VIEW);
@@ -49,4 +55,37 @@ function imageRenderedListener(evt) {
   if (!imageTiming.viewportsWaiting) {
     log.timeEnd(TimingEnum.DISPLAY_SETS_TO_ALL_IMAGES);
   }
+}
+
+/**
+ * Reports STUDY_TO_FIRST_IMAGE to PostHog as `first_image_rendered` — the
+ * clinician-perceived study-open → first-image-on-screen time. Fires once per
+ * study load: only while the STUDY_TO_FIRST_IMAGE timer is still running, i.e.
+ * before the log.timeEnd() call below this one stops it for later viewports.
+ * No patient data in the properties.
+ */
+function captureFirstImageRendered(evt) {
+  try {
+    const { TimingEnum } = Enums;
+    const startedAt = log.timeStartedAt?.[TimingEnum.STUDY_TO_FIRST_IMAGE];
+    if (!log.timingKeys[TimingEnum.STUDY_TO_FIRST_IMAGE] || startedAt === undefined) {
+      return;
+    }
+    const switch_type = hasCapturedFirstImageThisPageLoad ? 'in_app' : 'reload';
+    hasCapturedFirstImageThisPageLoad = true;
+    (window as any).__capturePostHogEvent?.('first_image_rendered', {
+      ms: Math.round(performance.now() - startedAt),
+      modality: getRenderedModality(evt),
+      cluster: window.location.host,
+      switch_type,
+    });
+  } catch {
+    // Never let analytics break rendering.
+  }
+}
+
+function getRenderedModality(evt): string | undefined {
+  const viewport = getEnabledElement(evt.detail.element)?.viewport;
+  const imageId = (viewport as any)?.getCurrentImageId?.();
+  return imageId ? metaData.get('generalSeriesModule', imageId)?.modality : undefined;
 }
