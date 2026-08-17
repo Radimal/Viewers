@@ -188,6 +188,12 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
         the fork's 'hotkey-definitions' localStorage key. Known caveat: the
         sortingCriteria customization also drives series-METADATA fetch order
         (objects lack .images there → degrades to SeriesNumber/UID; decide).
+      - Decisions (2026-08-17): always-visible PDF icon on study rows
+        (accepting the StudyItem.tsx patch + case-status cache service in
+        wave 2); keep 3.13 patient-position intra-stack ordering (verify on
+        a CT/MR before Phase 5); descope 'Set NxM as Default'; adopt
+        measurementTrackingMode: 'simplified' (add to app config at deploy —
+        NOT the shared terraform template while prod is on 3.10).
       - Descope candidates: 'Set NxM as Default' layout preference (3.13
         LayoutSelector rewritten with no extension point); NotificationProvider
         autoClose (no caller on branch yet); ErrorBoundary prod toast (try
@@ -197,4 +203,9 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
       `platform/core/src/utils/combineFrameInstance.test.js`) fails against
       3.13.3 — upstream still mutates the shared instance object. OpenJPEG
       multi-tile remains to be tested on stock 3.13.
-- [ ] Phase 5 — full verification + prod cutover
+- [ ] Phase 5 — full verification + prod cutover. Includes reconciling the
+      parallel 3.10 work stream started 2026-08 (viewer speed updates:
+      first_image_rendered metric, combineFrameInstance memoization,
+      orthancUtils export manifest, and whatever else lands on v3.10.0.7x
+      branches after the fork-delta inventory was taken) — diff
+      v3.10.0.73.radimal..<final 3.10 tip> and re-port the delta.
