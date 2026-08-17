@@ -6,6 +6,22 @@ import SignoutCallbackComponent from '../routes/SignoutCallbackComponent';
 import LegacyClient from './legacyOIDCClient';
 import NextClient from './nextOIDCClient';
 import { sanitizeSameOriginRedirect } from './sanitizeRedirect';
+import { identifyPostHogUser } from './posthog';
+
+// Radimal: tie PostHog sessions to the authenticated user. Safe to call on
+// every login event — identifyPostHogUser no-ops when PostHog is not loaded
+// or the id came from the URL hand-off.
+function identifyUserForAnalytics(user) {
+  const profile = user?.profile;
+  if (!profile) {
+    return;
+  }
+  const distinctId = profile.sub || profile.email;
+  if (!distinctId) {
+    return;
+  }
+  identifyPostHogUser(distinctId, { email: profile.email, name: profile.name });
+}
 
 function _isAbsoluteUrl(url) {
   return url.includes('http://') || url.includes('https://');
@@ -154,6 +170,9 @@ function OpenIdConnectRoutes({ oidc, routerBasename, userAuthenticationService }
   useEffect(() => {
     const userLoadedHandler = user => {
       userAuthenticationService.setUser(user);
+      // Covers silent renew and restored sessions, which never hit the
+      // redirect callback below (the fork only identified on redirect).
+      identifyUserForAnalytics(user);
     };
 
     userManager.events.addUserLoaded(userLoadedHandler);
@@ -218,6 +237,7 @@ function OpenIdConnectRoutes({ oidc, routerBasename, userAuthenticationService }
               );
 
               userAuthenticationService.setUser(user);
+              identifyUserForAnalytics(user);
 
               navigate({
                 pathname,

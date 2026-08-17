@@ -717,15 +717,30 @@ const commandsModule = ({
     }: UpdateViewportDisplaySetParams) => {
       const nonImageModalities = ['SR', 'SEG', 'SM', 'RTSTRUCT', 'RTPLAN', 'RTDOSE'];
 
-      const currentDisplaySets = [...displaySetService.activeDisplaySets];
+      const allDisplaySets = [...displaySetService.activeDisplaySets];
 
       const { activeViewportId, viewports, isHangingProtocolLayout } =
         viewportGridService.getState();
 
       const { displaySetInstanceUIDs } = viewports.get(activeViewportId);
 
-      const activeDisplaySetIndex = currentDisplaySets.findIndex(displaySet =>
+      // Radimal: navigation is bounded to the current study — the browser
+      // may hold the whole patient's history, but next/previous series must
+      // not silently jump into a prior study.
+      const activeDisplaySet = allDisplaySets.find(displaySet =>
         displaySetInstanceUIDs.includes(displaySet.displaySetInstanceUID)
+      );
+      if (!activeDisplaySet) {
+        return;
+      }
+
+      const currentStudyInstanceUID = activeDisplaySet.StudyInstanceUID;
+      const currentDisplaySets = allDisplaySets.filter(
+        displaySet => displaySet.StudyInstanceUID === currentStudyInstanceUID
+      );
+
+      const activeDisplaySetIndex = currentDisplaySets.findIndex(
+        displaySet => displaySet.displaySetInstanceUID === activeDisplaySet.displaySetInstanceUID
       );
 
       let displaySetIndexToShow: number;
@@ -745,6 +760,15 @@ const commandsModule = ({
       }
 
       if (displaySetIndexToShow < 0 || displaySetIndexToShow >= currentDisplaySets.length) {
+        uiNotificationService.show({
+          title: 'Series Navigation',
+          message:
+            direction > 0
+              ? 'Reached last series in current study'
+              : 'Reached first series in current study',
+          type: 'info',
+          duration: 2000,
+        });
         return;
       }
 
