@@ -317,7 +317,11 @@ export default async function init({
    */
   const imageLoadFailedHandler = ({ detail }) => {
     const handler = errorHandler.getHTTPErrorHandler();
-    handler(detail.error);
+    // No handler is configured unless appConfig.httpErrorHandler is set;
+    // calling undefined turned every failed image load into a TypeError.
+    if (typeof handler === 'function') {
+      handler(detail.error);
+    }
   };
 
   eventTarget.addEventListener(EVENTS.IMAGE_LOAD_FAILED, imageLoadFailedHandler);

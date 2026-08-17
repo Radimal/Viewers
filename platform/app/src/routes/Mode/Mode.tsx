@@ -379,15 +379,21 @@ export default function ModeRoute({
     };
 
     let unsubscriptions;
-    setupRouteInit().then(unsubs => {
-      unsubscriptions = unsubs;
+    setupRouteInit()
+      .then(unsubs => {
+        unsubscriptions = unsubs;
 
-      mode?.onSetupRouteComplete?.({
-        servicesManager,
-        extensionManager,
-        commandsManager,
+        mode?.onSetupRouteComplete?.({
+          servicesManager,
+          extensionManager,
+          commandsManager,
+        });
+      })
+      .catch(error => {
+        // A failed route init (e.g. metadata retrieve rejection) must not
+        // become an unhandled rejection with no console trace.
+        console.error('setupRouteInit failed:', error);
       });
-    });
 
     return () => {
       // The mode.onModeExit must be done first to allow it to store
