@@ -46,6 +46,7 @@ function PanelStudyBrowser({
   const [displaySets, setDisplaySets] = useState([]);
   const [displaySetsLoadingState, setDisplaySetsLoadingState] = useState({});
   const [thumbnailImageSrcMap, setThumbnailImageSrcMap] = useState({});
+  const [thumbnailErrorMap, setThumbnailErrorMap] = useState({});
   const [jumpToDisplaySet, setJumpToDisplaySet] = useState(null);
 
   const [viewPresets, setViewPresets] = useState(
@@ -211,12 +212,21 @@ function PanelStudyBrowser({
       }
       // When the image arrives, render it and store the result in the thumbnailImgSrcMap
       let { thumbnailSrc } = displaySet;
-      if (!thumbnailSrc && displaySet.getThumbnailSrc) {
-        thumbnailSrc = await displaySet.getThumbnailSrc({ getImageSrc });
-      }
-      if (!thumbnailSrc && imageId) {
-        const thumbnailSrc = await getImageSrc(imageId);
-        displaySet.thumbnailSrc = thumbnailSrc;
+      try {
+        if (!thumbnailSrc && displaySet.getThumbnailSrc) {
+          thumbnailSrc = await displaySet.getThumbnailSrc({ getImageSrc });
+        }
+        if (!thumbnailSrc && imageId) {
+          thumbnailSrc = await getImageSrc(imageId);
+          displaySet.thumbnailSrc = thumbnailSrc;
+        }
+        setThumbnailErrorMap(previous => clearThumbnailError(previous, dSet.displaySetInstanceUID));
+      } catch (error) {
+        setThumbnailErrorMap(previous => ({
+          ...previous,
+          [dSet.displaySetInstanceUID]: formatThumbnailError(error),
+        }));
+        return;
       }
       newImageSrcEntry[dSet.displaySetInstanceUID] = thumbnailSrc;
 
@@ -238,7 +248,8 @@ function PanelStudyBrowser({
       currentDisplaySets,
       displaySetsLoadingState,
       thumbnailImageSrcMap,
-      viewports
+      viewports,
+      thumbnailErrorMap
     );
 
     if (!customMapDisplaySets) {
@@ -251,6 +262,7 @@ function PanelStudyBrowser({
     displaySetsLoadingState,
     viewports,
     thumbnailImageSrcMap,
+    thumbnailErrorMap,
     customMapDisplaySets,
   ]);
 
@@ -285,12 +297,21 @@ function PanelStudyBrowser({
 
           // When the image arrives, render it and store the result in the thumbnailImgSrcMap
           let { thumbnailSrc } = displaySet;
-          if (!thumbnailSrc && displaySet.getThumbnailSrc) {
-            thumbnailSrc = await displaySet.getThumbnailSrc({ getImageSrc });
-          }
-          if (!thumbnailSrc) {
-            thumbnailSrc = await getImageSrc(imageId);
-            displaySet.thumbnailSrc = thumbnailSrc;
+          try {
+            if (!thumbnailSrc && displaySet.getThumbnailSrc) {
+              thumbnailSrc = await displaySet.getThumbnailSrc({ getImageSrc });
+            }
+            if (!thumbnailSrc) {
+              thumbnailSrc = await getImageSrc(imageId);
+              displaySet.thumbnailSrc = thumbnailSrc;
+            }
+            setThumbnailErrorMap(previous => clearThumbnailError(previous, displaySetInstanceUID));
+          } catch (error) {
+            setThumbnailErrorMap(previous => ({
+              ...previous,
+              [displaySetInstanceUID]: formatThumbnailError(error),
+            }));
+            return;
           }
           newImageSrcEntry[displaySetInstanceUID] = thumbnailSrc;
 
@@ -316,7 +337,8 @@ function PanelStudyBrowser({
           changedDisplaySets,
           displaySetsLoadingState,
           thumbnailImageSrcMap,
-          viewports
+          viewports,
+          thumbnailErrorMap
         );
 
         if (!customMapDisplaySets) {
@@ -334,7 +356,8 @@ function PanelStudyBrowser({
           displaySetService.getActiveDisplaySets(),
           displaySetsLoadingState,
           thumbnailImageSrcMap,
-          viewports
+          viewports,
+          thumbnailErrorMap
         );
 
         if (!customMapDisplaySets) {
@@ -352,6 +375,7 @@ function PanelStudyBrowser({
   }, [
     displaySetsLoadingState,
     thumbnailImageSrcMap,
+    thumbnailErrorMap,
     viewports,
     displaySetService,
     customMapDisplaySets,
@@ -488,7 +512,13 @@ function _mapDataSourceStudies(studies) {
   });
 }
 
-function _mapDisplaySets(displaySets, displaySetLoadingState, thumbnailImageSrcMap, viewports) {
+function _mapDisplaySets(
+  displaySets,
+  displaySetLoadingState,
+  thumbnailImageSrcMap,
+  viewports,
+  thumbnailErrorMap = {}
+) {
   const thumbnailDisplaySets = [];
   const thumbnailNoImageDisplaySets = [];
   displaySets
@@ -517,6 +547,7 @@ function _mapDisplaySets(displaySets, displaySetLoadingState, thumbnailImageSrcM
         StudyInstanceUID: ds.StudyInstanceUID,
         componentType,
         imageSrc: thumbnailSrc || thumbnailImageSrcMap[displaySetInstanceUID],
+        thumbnailError: thumbnailErrorMap[displaySetInstanceUID],
         dragData: {
           type: 'displayset',
           displaySetInstanceUID,
@@ -527,6 +558,23 @@ function _mapDisplaySets(displaySets, displaySetLoadingState, thumbnailImageSrcM
     });
 
   return [...thumbnailDisplaySets, ...thumbnailNoImageDisplaySets];
+}
+
+function clearThumbnailError(errors, displaySetInstanceUID) {
+  if (!errors[displaySetInstanceUID]) {
+    return errors;
+  }
+
+  const next = { ...errors };
+  delete next[displaySetInstanceUID];
+  return next;
+}
+
+function formatThumbnailError(error) {
+  const status = error?.status || error?.response?.status;
+  const message = error?.message || String(error || 'Unknown image rendering error');
+
+  return status ? `HTTP ${status}: ${message}` : message;
 }
 
 function _getComponentType(ds) {

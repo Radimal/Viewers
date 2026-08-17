@@ -38,6 +38,7 @@ const Thumbnail = ({
   children,
   imageSrc,
   imageAltText,
+  thumbnailError,
   description,
   seriesNumber,
   numInstances,
@@ -128,6 +129,23 @@ const Thumbnail = ({
                 messages={messages}
                 id={`display-set-tooltip-${displaySetInstanceUID}`}
               />
+              {thumbnailError && (
+                <Tooltip>
+                  <TooltipTrigger
+                    aria-label="Thumbnail rendering failed"
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <Icons.StatusWarning className="h-[20px] w-[20px] text-yellow-300" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <div className="max-w-80 text-left text-sm text-white">
+                      <div className="font-semibold text-yellow-300">Image preview failed</div>
+                      <div className="mt-1 break-words">{thumbnailError}</div>
+                      <div className="mt-1 text-gray-300">Series {seriesNumber}</div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {isTracked && (
                 <Tooltip>
                   <TooltipTrigger>
@@ -345,6 +363,7 @@ Thumbnail.propTypes = {
     type: PropTypes.string.isRequired,
   }),
   imageAltText: PropTypes.string,
+  thumbnailError: PropTypes.string,
   description: PropTypes.string.isRequired,
   seriesNumber: PropTypes.any,
   numInstances: PropTypes.number.isRequired,
