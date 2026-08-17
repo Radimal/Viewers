@@ -79,6 +79,8 @@ export default function PanelStudyBrowserTracking({
     const thumbnailNoImageDisplaySets = [];
     displaySets
       .filter(ds => !ds.excludeFromThumbnailBrowser)
+      // Radimal: belt-and-braces DNR filter (root filter is in the SOP handlers)
+      .filter(ds => !ds.SeriesDescription?.includes('DNR '))
       .forEach(ds => {
         const { thumbnailSrc, displaySetInstanceUID } = ds;
         const componentType = getComponentType(ds);

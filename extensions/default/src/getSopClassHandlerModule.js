@@ -189,6 +189,13 @@ function getDisplaySetsFromSeries(instances) {
     throw new Error('No instances were provided');
   }
 
+  // Radimal: "DNR " (do not read) series never become display sets — this
+  // is the root filter; they disappear from the browser, hanging protocols,
+  // viewport navigation and prefetching alike.
+  if (instances[0].SeriesDescription?.includes('DNR ')) {
+    return [];
+  }
+
   const displaySets = [];
   const sopClassUids = getSopClassUids(instances);
 
