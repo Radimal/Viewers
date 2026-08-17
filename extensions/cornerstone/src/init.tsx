@@ -38,6 +38,7 @@ import nthLoader from './utils/nthLoader';
 import interleaveTopToBottom from './utils/interleaveTopToBottom';
 import initContextMenu from './initContextMenu';
 import initDoubleClick from './initDoubleClick';
+import setupAutoImageSliceSync from './utils/imageSliceSync/autoImageSliceSync';
 import initViewTiming from './utils/initViewTiming';
 import { colormaps } from './utils/colormaps';
 import { SegmentationRepresentations } from '@cornerstonejs/tools/enums';
@@ -356,6 +357,9 @@ export default async function init({
   }
 
   eventTarget.addEventListener(EVENTS.ELEMENT_ENABLED, elementEnabledHandler.bind(null));
+
+  // Radimal: automatic slice-sync grouping across compatible viewports.
+  setupAutoImageSliceSync({ servicesManager });
 
   colormaps.forEach(registerColormap);
 

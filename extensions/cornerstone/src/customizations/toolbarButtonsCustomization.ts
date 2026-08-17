@@ -734,7 +734,8 @@ const toolbarButtons: Button[] = [
  * append/replace entries without rebuilding.
  */
 export const toolbarSections = {
-  // Radimal: CalibrationLine + ImageSliceSync promoted to the primary row
+  // Radimal: ImageSliceSync promoted to the primary row (manual override on
+  // top of the automatic slice-sync grouping)
   [TOOLBAR_SECTIONS.primary]: [
     'MeasurementTools',
     'Zoom',
@@ -744,7 +745,6 @@ export const toolbarSections = {
     'Capture',
     'Layout',
     'Crosshairs',
-    'CalibrationLine',
     'ImageSliceSync',
     'MoreTools',
   ],
@@ -781,7 +781,7 @@ export const toolbarSections = {
     'LivewireContour',
   ],
 
-  // Radimal: rotate-left added; CalibrationLine/ImageSliceSync moved to primary
+  // Radimal: rotate-left added; ImageSliceSync moved to primary
   MoreTools: [
     'Reset',
     'rotate-right',
@@ -796,6 +796,7 @@ export const toolbarSections = {
     'Angle',
     'CobbAngle',
     'Magnify',
+    'CalibrationLine',
     'TagBrowser',
     'AdvancedMagnify',
     'UltrasoundDirectionalTool',
