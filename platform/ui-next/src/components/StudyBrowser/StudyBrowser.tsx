@@ -23,6 +23,7 @@ const StudyBrowser = ({
   viewPresets,
   ThumbnailMenuItems,
   StudyMenuItems,
+  StudyItemActions,
 }: withAppTypes) => {
   const getTabContent = () => {
     const tabData = tabs.find(tab => tab.name === activeTabName);
@@ -51,6 +52,7 @@ const StudyBrowser = ({
               viewPreset={viewPreset}
               ThumbnailMenuItems={ThumbnailMenuItems}
               StudyMenuItems={StudyMenuItems}
+              StudyItemActions={StudyItemActions}
               StudyInstanceUID={studyInstanceUid}
             />
           </React.Fragment>
@@ -135,6 +137,7 @@ StudyBrowser.propTypes = {
     })
   ),
   StudyMenuItems: PropTypes.func,
+  StudyItemActions: PropTypes.func,
 };
 
 export { StudyBrowser };

@@ -5,6 +5,8 @@ import { ActiveThemeProvider } from '@ohif/ui-next';
 import getPTImageIdInstanceMetadata from './getPTImageIdInstanceMetadata';
 import { registerHangingProtocolAttributes } from './hangingprotocols';
 import { HotkeysManager } from '@ohif/core';
+import { addIcon } from './utils/addIcon';
+import { radimalIcons } from './icons/radimalIcons';
 
 const metadataProvider = classes.MetadataProvider;
 
@@ -20,6 +22,9 @@ export default function init({
   serviceProvidersManager,
   appConfig,
 }: withAppTypes): void {
+  // Radimal icons resolve through Icons.ByName in menus and menu items.
+  Object.entries(radimalIcons).forEach(([name, icon]) => addIcon(name, icon));
+
   const hasThemeModule =
     Array.isArray(appConfig.customizationService) &&
     appConfig.customizationService.some(

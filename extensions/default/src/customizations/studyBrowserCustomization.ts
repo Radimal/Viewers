@@ -3,8 +3,23 @@ import i18n from '@ohif/i18n';
 const { formatDate } = utils;
 
 export default {
-  'studyBrowser.studyMenuItems': [],
+  // Radimal: View Report opens the reporter consultation PDF. This entry
+  // also activates the study-row ⋯ menu (invisible upstream while empty).
+  'studyBrowser.studyMenuItems': [
+    {
+      id: 'viewReport',
+      label: i18n.t('StudyBrowser:View Report'),
+      iconName: 'RadimalPdf',
+      commands: 'viewReport',
+    },
+  ],
   'studyBrowser.thumbnailMenuItems': [
+    {
+      id: 'viewReport',
+      label: i18n.t('StudyBrowser:View Report'),
+      iconName: 'RadimalPdf',
+      commands: 'viewReport',
+    },
     {
       id: 'tagBrowser',
       label: i18n.t('StudyBrowser:Tag Browser'),

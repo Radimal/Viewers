@@ -6,6 +6,7 @@ import { useViewportGrid, StudyBrowser, Separator } from '@ohif/ui-next';
 import { PanelStudyBrowserHeader } from './PanelStudyBrowserHeader';
 import { defaultActionIcons } from './constants';
 import MoreDropdownMenu from '../../Components/MoreDropdownMenu';
+import RadimalCaseIndicator from '../../Components/RadimalCaseIndicator';
 import { CallbackCustomization } from 'platform/core/src/types';
 import { type TabsProps } from '@ohif/core/src/utils/createStudyBrowserTabs';
 import { thumbnailNoImageModalities } from '@ohif/core/src/utils/thumbnailNoImageModalities';
@@ -457,6 +458,7 @@ function PanelStudyBrowser({
           servicesManager,
           menuItemsKey: 'studyBrowser.studyMenuItems',
         })}
+        StudyItemActions={RadimalCaseIndicator}
       />
     </>
   );

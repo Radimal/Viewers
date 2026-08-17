@@ -254,6 +254,110 @@ const commandsModule = ({
     },
 
     /**
+     * Radimal: open the reporter's consultation PDF for a study in a new
+     * tab. Accepts a StudyInstanceUID directly (study-row icon / study menu),
+     * or resolves it from a displaySetInstanceUID (thumbnail menu), or falls
+     * back to the active viewport's display set.
+     */
+    async viewReport({
+      displaySetInstanceUID,
+      StudyInstanceUID,
+    }: {
+      displaySetInstanceUID?: string;
+      StudyInstanceUID?: string;
+    }) {
+      let studyInstanceUID = StudyInstanceUID;
+
+      if (!studyInstanceUID) {
+        const { activeViewportId, viewports } = viewportGridService.getState();
+        const { displaySetInstanceUIDs } = viewports.get(activeViewportId) ?? {};
+        const targetDisplaySetInstanceUID = displaySetInstanceUID || displaySetInstanceUIDs?.[0];
+
+        const displaySet = displaySetService.activeDisplaySets.find(
+          ds => ds.displaySetInstanceUID === targetDisplaySetInstanceUID
+        );
+        if (!displaySet) {
+          uiNotificationService.show({
+            title: 'View Report',
+            message: 'Display set not found.',
+            type: 'error',
+            duration: 3000,
+          });
+          return;
+        }
+        studyInstanceUID = displaySet.StudyInstanceUID;
+      }
+
+      const reporterOrigin = utils.radimalEndpoints.getReporterOrigin();
+
+      let caseData;
+      try {
+        const response = await fetch(`${reporterOrigin}/case/${studyInstanceUID}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        caseData = await response.json();
+
+        if (!caseData?.cases?.length || !caseData.cases[0]?.consultations?.length) {
+          throw new Error('No case/consultations in response');
+        }
+      } catch (error) {
+        console.error('Error fetching case data:', error);
+        uiNotificationService.show({
+          title: 'View Report',
+          message: 'No case found for this study.',
+          type: 'warning',
+          duration: 3000,
+        });
+        return;
+      }
+
+      const s3Url = caseData.cases[0].consultations[0].s3_url;
+      if (!s3Url) {
+        uiNotificationService.show({
+          title: 'View Report',
+          message: 'No report URL found for this consultation.',
+          type: 'warning',
+          duration: 3000,
+        });
+        return;
+      }
+
+      try {
+        const key = s3Url.split('s3.amazonaws.com/')[1];
+        const pdfResponse = await fetch(`${reporterOrigin}/consultation/pdf?key=${key}`, {
+          method: 'GET',
+        });
+
+        if (!pdfResponse.ok) {
+          throw new Error(`Reporter PDF error! status: ${pdfResponse.status}`);
+        }
+
+        let presignedUrl = (await pdfResponse.text()).trim();
+        if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
+          presignedUrl = presignedUrl.slice(1, -1).trim();
+        }
+
+        // Encode so the browser doesn't split the presigned URL's own params.
+        const consultationUrl = `${caseData.platform_url}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
+        window.open(consultationUrl, '_blank');
+      } catch (error) {
+        console.error('Error getting presigned URL:', error);
+        uiNotificationService.show({
+          title: 'View Report',
+          message: 'Failed to generate report URL.',
+          type: 'error',
+          duration: 3000,
+        });
+      }
+    },
+
+    /**
      * Show the context menu.
      * @param options.menuId defines the menu name to lookup, from customizationService
      * @param options.defaultMenu contains the default menu set to use
@@ -903,6 +1007,7 @@ const commandsModule = ({
     closeContextMenu: actions.closeContextMenu,
     clearMeasurements: actions.clearMeasurements,
     toggleOverlays: actions.toggleOverlays,
+    viewReport: actions.viewReport,
     displayNotification: actions.displayNotification,
     setHangingProtocol: actions.setHangingProtocol,
     toggleHangingProtocol: actions.toggleHangingProtocol,

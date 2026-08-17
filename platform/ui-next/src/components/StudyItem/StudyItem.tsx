@@ -22,6 +22,8 @@ const StudyItem = ({
   viewPreset = 'thumbnails',
   ThumbnailMenuItems,
   StudyMenuItems,
+  // Radimal: always-visible per-study action slot (e.g. case PDF indicator)
+  StudyItemActions,
   StudyInstanceUID,
 }: withAppTypes) => {
   return (
@@ -66,6 +68,11 @@ const StudyItem = ({
                 <div className="max-w-[150px] overflow-hidden text-ellipsis">{modalities}</div>
                 <div>{numInstances}</div>
               </div>
+              {StudyItemActions && (
+                <div className="ml-2 flex items-center">
+                  <StudyItemActions StudyInstanceUID={StudyInstanceUID} />
+                </div>
+              )}
               {StudyMenuItems && (
                 <div className="ml-2 flex items-center">
                   <StudyMenuItems StudyInstanceUID={StudyInstanceUID} />
@@ -111,6 +118,7 @@ StudyItem.propTypes = {
   onClickUntrack: PropTypes.func,
   viewPreset: PropTypes.string,
   StudyMenuItems: PropTypes.func,
+  StudyItemActions: PropTypes.func,
   StudyInstanceUID: PropTypes.string,
 };
 
