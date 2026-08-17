@@ -142,8 +142,56 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
         hosts `modes/longitudinal/initToolGroups.js` and @ohif/ui
         UserPreferences no longer exist). frameViewSynchronizer fix and iPad
         two-finger-zoom bindings retire (upstream merged equivalents).
-- [ ] Phase 3 — invasive features on new APIs (reporter buttons, DNR/related
-      studies, hotkeys/HotkeyField, autozoom/overlays, toolbar buttons)
+- [ ] Phase 3 — invasive features on new APIs. Research done (2026-08, three
+      implementation maps; full detail in agent reports). Plan in waves:
+      - Wave 1 (trivial, no decisions): DeferredPromise fix in
+        retrieveMetadataLoaderAsync (bug still live upstream); error-handler
+        guards in cornerstone init.tsx + initWADOImageLoader (TypeError on
+        every failed image load in stock 3.13); ImageOverlayViewerTool bounds
+        check; 5 Radimal hotkeys via 'ohif.hotkeyBindings' $push; 10 overlay
+        fields (sex/neutered/acq time/institution/physician/body part) via
+        'viewportOverlay.topLeft' (customizationType→inheritsFrom); 4-way
+        orientation markers; rotate-left toolbar button + ToolRotateLeft icon
+        via toolbarButtonsCustomization; MRN-query includefield (dependency of
+        shipped patient tabs); Mode.tsx setupRouteInit catch; OIDC PostHog
+        identify (cover BOTH setUser sites); study-bounded series navigation.
+      - Wave 2 (reporter + multi-window; zero ui-next patches): useStudyInfo
+        hook (useSystem idiom); viewReport command (getCases is dead code —
+        drop); icons via Icons.addIcon in default-ext preRegistration;
+        View Report entries in studyBrowser thumbnail/study MenuItems (first
+        studyMenuItems entry activates the ⋯ menu); Reload Study menuOptions
+        (activates already-ported InvalidationService; export it from
+        @ohif/app); Download Study via empty 'secondary' toolbar section;
+        monitor menu as plain menuOptions (no Header prop); ViewerLayout
+        heartbeat/FADE/CLOSE via radimalEndpoints (fix the leaked beforeunload
+        listener); currentStudyId cross-tab sync; DNR guard at SOP-handler
+        top (the ROOT filter — test all-DNR and partial-DNR studies);
+        tracking-panel DNR in customMapDisplaySets; defaultRouteInit
+        duplicate-study handler (use radimalEndpoints).
+      - Wave 3 (moderate/invasive): CR/DX auto-VOI in _setStackViewport
+        (~:930, serves both backends; no upstream equivalent; fix fork bugs:
+        metadata-path VOI check, null guard, typed-array percentiles);
+        auto-trim collimation (isStackViewportType not instanceof; keep
+        rotation/flip restore on Legacy lane only; driver via useSystem +
+        customization gate, runs AFTER rotation/flip seed); preferences modal
+        (mouse bindings via ToolGroupService binding API — fork's
+        applyMouseButtonBindings/reload UX obsolete; zoomSpeed needs scaleBy
+        patch in both backends; wheel half pending native-zoom verdict);
+        case-status gating stage 2 (cache service + 1-line selector widening
+        in menuContentCustomization) if pre-filtering required.
+      - Corrections from research: combineFrameInstance fix is LIKELY OBSOLETE
+        (upstream restructured per-frame objects in 3.13; retest NM multiframe
+        instead of porting — supersedes the earlier 'still needed' note).
+        promptTrackNewSeries → set measurementTrackingMode: 'simplified' in
+        app config (semantic widening: also changes dirty-SR gating). Fork
+        hotkey persistence absorbed upstream INCLUDING a migration that reads
+        the fork's 'hotkey-definitions' localStorage key. Known caveat: the
+        sortingCriteria customization also drives series-METADATA fetch order
+        (objects lack .images there → degrades to SeriesNumber/UID; decide).
+      - Descope candidates: 'Set NxM as Default' layout preference (3.13
+        LayoutSelector rewritten with no extension point); NotificationProvider
+        autoClose (no caller on branch yet); ErrorBoundary prod toast (try
+        showErrorDetails: 'dev' first).
 - [ ] Phase 4 — OpenJPEG multi-tile patch + combineFrameInstance. Confirmed
       still needed: the fork's combineFrameInstance regression test (untracked
       `platform/core/src/utils/combineFrameInstance.test.js`) fails against
