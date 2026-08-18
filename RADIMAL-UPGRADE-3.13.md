@@ -144,6 +144,13 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
         two-finger-zoom bindings retire (upstream merged equivalents).
 - [ ] Phase 3 — invasive features on new APIs. Research done (2026-08, three
       implementation maps; full detail in agent reports). Plan in waves:
+      - Wave 1 — DONE (pushed to staging 2026-08-17). Wave 2 — DONE
+        2026-08-18 incl. automatic image-slice sync (fork feature surfaced by
+        review: auto-groups viewports by patient/study/frame-count/anatomy
+        compatibility; ported to
+        extensions/cornerstone/src/utils/imageSliceSync/autoImageSliceSync.ts)
+        and the NotificationProvider autoClose fix (activated by route-init's
+        persistent error notifications). Remaining: Wave 3.
       - Wave 1 (trivial, no decisions): DeferredPromise fix in
         retrieveMetadataLoaderAsync (bug still live upstream); error-handler
         guards in cornerstone init.tsx + initWADOImageLoader (TypeError on
