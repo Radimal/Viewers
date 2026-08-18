@@ -2,7 +2,79 @@ import { DicomMetadataStore, log, utils, Enums } from '@ohif/core';
 import getStudies from './studiesList';
 import isSeriesFilterUsed from '../../utils/isSeriesFilterUsed';
 
-const { getSplitParam } = utils;
+const { getSplitParam, orthancUtils, radimalEndpoints } = utils;
+
+function isDuplicateStudyError(error: any): boolean {
+  const details = error?.response?.Details;
+  if (typeof details === 'string') {
+    return /Multiple Series found/i.test(details);
+  }
+  return false;
+}
+
+// Tracks whether the duplicate study notification has already been shown
+// (defaultRouteInit may be called more than once for the same study).
+let shownDuplicateStudyNotification = false;
+
+// When Orthanc reports a duplicate StudyInstanceUID, the WADO-RS metadata
+// endpoint cannot disambiguate the two patient records and 404s. The vet app
+// passes the intended Orthanc study UUID as `?studyId=` so we can
+// auto-download the exact copy that matches the consultation; `?patientId=`
+// lets us compute the UUID locally as a backup. `distinct_id` is forwarded
+// for reporter-side attribution.
+function handleDuplicateStudyError(uiNotificationService): void {
+  if (shownDuplicateStudyNotification) {
+    return;
+  }
+  shownDuplicateStudyNotification = true;
+
+  const params = new URLSearchParams(window.location.search);
+  const studyId = params.get('studyId');
+  const distinctId = params.get('distinct_id');
+  const patientIdParam = params.get('patientId') || params.get('PatientID');
+  const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
+  const reporterOrigin = radimalEndpoints.getReporterOrigin();
+
+  let downloadPromise: Promise<void> | null = null;
+  if (studyId) {
+    downloadPromise = orthancUtils.downloadOrthancStudy(studyId, reporterOrigin, distinctId);
+  } else if (patientIdParam && studyInstanceUIDParam) {
+    downloadPromise = orthancUtils.downloadStudyByDICOMIds(
+      patientIdParam,
+      studyInstanceUIDParam,
+      reporterOrigin
+    );
+  }
+
+  if (!downloadPromise) {
+    uiNotificationService.show({
+      title: 'Study Load Error',
+      message:
+        'Multiple patients share this study ID. As an alternative, you can use the download button in the top right.',
+      type: 'error',
+      autoClose: false,
+    });
+    return;
+  }
+
+  uiNotificationService.show({
+    title: 'Study Load Error',
+    message:
+      'Multiple patients share this study ID. Downloading the correct copy automatically — check your browser for the file.',
+    type: 'warning',
+    autoClose: false,
+  });
+
+  downloadPromise.catch((downloadError: any) => {
+    console.error('Auto-download for duplicate study failed:', downloadError);
+    uiNotificationService.show({
+      title: 'Download Failed',
+      message: `Automatic download failed: ${downloadError?.message || 'Unknown error'}. Please use the download button in the top right.`,
+      type: 'error',
+      autoClose: false,
+    });
+  });
+}
 
 /**
  * Initialize the route.
@@ -103,6 +175,16 @@ export async function defaultRouteInit(
   allRetrieves.forEach(retrieve => {
     retrieve.catch(error => {
       console.error(error);
+      if (isDuplicateStudyError(error)) {
+        handleDuplicateStudyError(uiNotificationService);
+      } else {
+        uiNotificationService.show({
+          title: 'Study Load Error',
+          message: 'Failed to load study metadata. Please try refreshing the page.',
+          type: 'error',
+          autoClose: false,
+        });
+      }
     });
   });
 
@@ -127,7 +209,13 @@ export async function defaultRouteInit(
     const remainingPromises = [];
 
     function startRemainingPromises(remainingPromises) {
-      remainingPromises.forEach(p => p.forEach(p => p.start()));
+      remainingPromises.forEach(p =>
+        p.forEach(p => {
+          p.start().catch(error => {
+            console.error('Remaining series metadata fetch failed:', error);
+          });
+        })
+      );
     }
 
     promises.forEach(promise => {
@@ -137,22 +225,59 @@ export async function defaultRouteInit(
       }
 
       if (displaySetFromUrl) {
-        const requiredSeriesPromises = retrieveSeriesMetadataPromise.map(promise =>
-          promise.start()
-        );
+        const requiredSeriesPromises = retrieveSeriesMetadataPromise.map(promise => {
+          const p = promise.start();
+          p.catch(() => {}); // Handled by Promise.allSettled below
+          return p;
+        });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
       } else {
         const { requiredSeries, remaining } = hangingProtocolService.filterSeriesRequiredForRun(
           hangingProtocolId,
           retrieveSeriesMetadataPromise
         );
-        const requiredSeriesPromises = requiredSeries.map(promise => promise.start());
+        const requiredSeriesPromises = requiredSeries.map(promise => {
+          const p = promise.start();
+          p.catch(() => {}); // Handled by Promise.allSettled below
+          return p;
+        });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
         remainingPromises.push(remaining);
       }
     });
 
-    await Promise.allSettled(allPromises).then(applyHangingProtocol);
+    await Promise.allSettled(allPromises).then(studyResults => {
+      let hasDuplicateStudyError = false;
+      let hasOtherSeriesError = false;
+
+      studyResults.forEach(studyResult => {
+        if (studyResult.status === 'fulfilled' && Array.isArray(studyResult.value)) {
+          studyResult.value.forEach(seriesResult => {
+            if (seriesResult.status === 'rejected') {
+              console.error('Series metadata fetch failed:', seriesResult.reason);
+              if (isDuplicateStudyError(seriesResult.reason)) {
+                hasDuplicateStudyError = true;
+              } else {
+                hasOtherSeriesError = true;
+              }
+            }
+          });
+        }
+      });
+
+      if (hasDuplicateStudyError) {
+        handleDuplicateStudyError(uiNotificationService);
+      } else if (hasOtherSeriesError) {
+        uiNotificationService.show({
+          title: 'Study Load Error',
+          message: 'Some series in this study failed to load. Please try refreshing the page.',
+          type: 'error',
+          autoClose: false,
+        });
+      }
+
+      applyHangingProtocol();
+    });
     startRemainingPromises(remainingPromises);
     applyHangingProtocol();
   });

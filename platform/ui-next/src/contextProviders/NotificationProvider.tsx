@@ -65,6 +65,9 @@ const NotificationProvider = ({
       allowDuplicates = false,
       deduplicationInterval: optionsDeduplicationInterval,
       action,
+      // Radimal: UINotificationService forwards autoClose but the provider
+      // dropped it — autoClose: false must keep the toast open.
+      autoClose,
     } = newNotification;
 
     // Use the provider's deduplicationInterval by default, but allow it to be overridden per notification
@@ -124,7 +127,7 @@ const NotificationProvider = ({
 
     // Show the notification with action if provided
     const toastOptions = {
-      duration,
+      duration: autoClose === false ? Infinity : duration,
       position,
       description: message,
       id: options.id, // Use provided ID if available
