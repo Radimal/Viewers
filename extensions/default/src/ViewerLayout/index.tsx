@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 import { InvestigationalUseDialog } from '@ohif/ui-next';
-import { HangingProtocolService, CommandsManager } from '@ohif/core';
+import { HangingProtocolService, CommandsManager, utils } from '@ohif/core';
 import { useAppConfig } from '@state';
 import ViewerHeader from './ViewerHeader';
 import SidePanelWithServices from '../Components/SidePanelWithServices';
@@ -42,6 +42,8 @@ function ViewerLayout({
   const [hasRightPanels, setHasRightPanels] = useState(hasPanels('right'));
   const [hasLeftPanels, setHasLeftPanels] = useState(hasPanels('left'));
   const [leftPanelClosedState, setLeftPanelClosed] = useState(leftPanelClosed);
+  // Radimal: vet-app FADE signal dims the whole viewer chrome.
+  const [fade, setFade] = useState(false);
   const [rightPanelClosedState, setRightPanelClosed] = useState(rightPanelClosed);
 
   const [
@@ -147,10 +149,197 @@ function ViewerLayout({
     };
   }, [panelService, hasPanels]);
 
+
+  // ---------------------------------------------------------------------
+  // Radimal multi-window plumbing. The vet app opens the viewer as
+  // window.name === 'viewerWindow'; the primary window heartbeats its
+  // geometry to the vet app, children mirror FADE/CLOSE over a
+  // BroadcastChannel, and window sets persist in localStorage
+  // (windowData / windowsArray - shared contract with the header's
+  // Duplicate/Open Saved/Close Windows actions).
+  // ---------------------------------------------------------------------
+
+  // One-time storage reset per browser profile.
+  useEffect(() => {
+    if (localStorage.getItem('resetViewerStorage') !== 'false') {
+      localStorage.setItem('resetViewerStorage', 'false');
+      localStorage.removeItem('windowData');
+      localStorage.removeItem('windowsArray');
+    }
+  }, []);
+
+  // Geometry heartbeat + close tracking.
+  useEffect(() => {
+    let lastSaved = null;
+
+    const saveWindowData = () => {
+      const windowData = {
+        id: window.name,
+        x: window.screenX,
+        y: window.screenY,
+        width: window.outerWidth,
+        height: window.outerHeight,
+        closed: false,
+      };
+
+      const serialized = JSON.stringify(windowData);
+      if (serialized !== lastSaved) {
+        lastSaved = serialized;
+        const windows = JSON.parse(localStorage.getItem('windowData')) || [];
+        const index = windows.findIndex(win => win.id === windowData.id);
+        if (index !== -1) {
+          windows[index] = windowData;
+        } else {
+          windows.push(windowData);
+        }
+        localStorage.setItem('windowData', JSON.stringify(windows));
+      }
+
+      if (window.name === 'viewerWindow') {
+        window.opener?.postMessage(windowData, utils.radimalEndpoints.getVetAppOrigin());
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      const windows = JSON.parse(localStorage.getItem('windowData')) || [];
+      const index = windows.findIndex(win => win.id === window.name);
+      if (index !== -1) {
+        windows[index].closed = true;
+        localStorage.setItem('windowData', JSON.stringify(windows));
+        localStorage.setItem('usingViewer', 'false');
+      }
+    };
+
+    saveWindowData();
+    const interval = setInterval(saveWindowData, 1000);
+    window.addEventListener('resize', saveWindowData);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', saveWindowData);
+      // The fork leaked this listener; remove it on unmount.
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  // Vet-app postMessage bridge (FADE / CLOSE) + child-window mirror.
+  useEffect(() => {
+    const channel = new BroadcastChannel('window_channel');
+
+    const closeTrackedWindows = () => {
+      const windowDataArray = [];
+      const windows = JSON.parse(localStorage.getItem('windowData')) || [];
+      windows.forEach(win => {
+        if (win.closed) {
+          return;
+        }
+        const childWindow = window.open('', win.id);
+        if (childWindow) {
+          childWindow.close();
+          win.closed = true;
+          windowDataArray.push(win);
+        }
+      });
+      localStorage.setItem('windowData', JSON.stringify(windows));
+      localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
+      window.close();
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      if (!utils.radimalEndpoints.VET_APP_ALLOWED_ORIGINS.includes(event.origin)) {
+        return;
+      }
+      if (event.data?.type === 'FADE') {
+        channel.postMessage(event.data);
+        setFade(event.data.value);
+      } else if (event.data?.type === 'CLOSE') {
+        channel.postMessage(event.data);
+        closeTrackedWindows();
+      } else {
+        setFade(false);
+      }
+    };
+
+    // Child windows mirror the primary's FADE/CLOSE via the channel
+    // (BroadcastChannel is same-origin scoped; no origin check needed).
+    channel.onmessage = event => {
+      if (event.data?.type === 'FADE') {
+        setFade(event.data.value);
+      } else if (event.data?.type === 'CLOSE' && window.name !== 'viewerWindow') {
+        window.close();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      channel.close();
+    };
+  }, []);
+
+  // Session restore: reopen saved windows on primary-window start.
+  useEffect(() => {
+    let openOnStart = false;
+    try {
+      openOnStart = JSON.parse(localStorage.getItem('openAdditionalWindowsOnStart')) === true;
+    } catch (e) {
+      openOnStart = false;
+    }
+
+    if (!openOnStart || window.name !== 'viewerWindow') {
+      return;
+    }
+
+    const windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
+    windows.forEach((win, index) => {
+      if (win.id === 'viewerWindow') {
+        return;
+      }
+      setTimeout(() => {
+        window.open(
+          window.location.href,
+          win.id,
+          `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
+        );
+      }, index * 200);
+    });
+  }, []);
+
+
+  // Cross-tab study sync: when the primary window navigates to a new study,
+  // duplicated windows follow via the storage event. (Fork had this in
+  // ViewerHeader; it belongs with the rest of the window plumbing.)
+  useEffect(() => {
+    const currentStudyUID =
+      new URLSearchParams(window.location.search).get('StudyInstanceUIDs')?.split(',')[0] ?? '';
+
+    if (window.name === 'viewerWindow' && currentStudyUID) {
+      if (localStorage.getItem('currentStudyId') !== currentStudyUID) {
+        localStorage.setItem('currentStudyId', currentStudyUID);
+      }
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== 'currentStudyId' || !event.newValue || event.newValue === currentStudyUID) {
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('StudyInstanceUIDs', event.newValue);
+      window.location.href = url.toString();
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   const viewportComponents = viewports.map(getViewportComponentData);
 
   return (
-    <div>
+    <div
+      className={'transition-opacity duration-1000 ' + (fade ? 'opacity-10' : 'opacity-100')}
+    >
       <ViewerHeader
         hotkeysManager={hotkeysManager}
         extensionManager={extensionManager}

@@ -2,9 +2,14 @@
   "About": "About",
   "Appearance": "Appearance",
   "Back to Viewer": "Back to Viewer",
+  "Close Windows": "Close Windows",
+  "Download Study": "Download Study",
+  "Duplicate Window": "Duplicate Window",
   "INVESTIGATIONAL USE ONLY": "INVESTIGATIONAL USE ONLY",
+  "Logout": "Logout",
+  "Open Saved Windows": "Open Saved Windows",
   "Options": "Options",
   "Preferences": "Preferences",
-  "Study list": "Study list",
-  "Logout": "Logout"
+  "Reload Study": "Reload Study",
+  "Study list": "Study list"
 }

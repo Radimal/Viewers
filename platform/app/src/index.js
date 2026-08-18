@@ -20,6 +20,7 @@ import { modes as defaultModes, extensions as defaultExtensions } from './plugin
 import loadDynamicConfig from './loadDynamicConfig';
 export { history } from './utils/history';
 export { preserveQueryParameters, preserveQueryStrings } from './utils/preserveQueryParameters';
+export { InvalidationService } from './utils/invalidationService';
 
 loadDynamicConfig(window.config).then(config_json => {
   // Reset Dynamic config if defined

@@ -358,6 +358,76 @@ const commandsModule = ({
     },
 
     /**
+     * Radimal: download the current study's DICOMs via the reporter.
+     * Resolution order: ?studyId= (Orthanc UUID from the vet app) ->
+     * ?patientId=/&StudyInstanceUIDs= (compute UUID client-side) ->
+     * loaded display-set metadata.
+     */
+    async downloadStudy() {
+      const reporterOrigin = utils.radimalEndpoints.getReporterOrigin();
+
+      const params = new URLSearchParams(window.location.search);
+      const studyId = params.get('studyId');
+      const distinctId = params.get('distinct_id');
+      const patientIdParam = params.get('patientId') || params.get('PatientID');
+      const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
+
+      const activeDisplaySet = displaySetService.getActiveDisplaySets()[0];
+      const instance = activeDisplaySet?.instances?.[0] || activeDisplaySet?.instance;
+      const metadataPatientID = instance?.PatientID || activeDisplaySet?.PatientID;
+      const metadataStudyInstanceUID =
+        instance?.StudyInstanceUID || activeDisplaySet?.StudyInstanceUID;
+
+      try {
+        uiNotificationService.show({
+          title: 'Download Started',
+          message: 'Preparing study download...',
+          type: 'info',
+          duration: 3000,
+        });
+
+        if (studyId) {
+          await utils.orthancUtils.downloadOrthancStudy(studyId, reporterOrigin, distinctId);
+        } else if (patientIdParam && studyInstanceUIDParam) {
+          await utils.orthancUtils.downloadStudyByDICOMIds(
+            patientIdParam,
+            studyInstanceUIDParam,
+            reporterOrigin
+          );
+        } else if (metadataPatientID && metadataStudyInstanceUID) {
+          await utils.orthancUtils.downloadStudyByDICOMIds(
+            metadataPatientID,
+            metadataStudyInstanceUID,
+            reporterOrigin
+          );
+        } else {
+          uiNotificationService.show({
+            title: 'Download Error',
+            message: 'Missing required study information for download',
+            type: 'error',
+            duration: 5000,
+          });
+          return;
+        }
+
+        uiNotificationService.show({
+          title: 'Download Complete',
+          message: 'Study download has been completed successfully',
+          type: 'success',
+          duration: 5000,
+        });
+      } catch (error) {
+        console.error('Error downloading study:', error);
+        uiNotificationService.show({
+          title: 'Download Failed',
+          message: `Failed to download study: ${error.message || 'Unknown error'}`,
+          type: 'error',
+          duration: 8000,
+        });
+      }
+    },
+
+    /**
      * Show the context menu.
      * @param options.menuId defines the menu name to lookup, from customizationService
      * @param options.defaultMenu contains the default menu set to use
@@ -1008,6 +1078,7 @@ const commandsModule = ({
     clearMeasurements: actions.clearMeasurements,
     toggleOverlays: actions.toggleOverlays,
     viewReport: actions.viewReport,
+    downloadStudy: actions.downloadStudy,
     displayNotification: actions.displayNotification,
     setHangingProtocol: actions.setHangingProtocol,
     toggleHangingProtocol: actions.toggleHangingProtocol,
