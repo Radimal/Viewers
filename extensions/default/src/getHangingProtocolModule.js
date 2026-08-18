@@ -84,6 +84,16 @@ const defaultProtocol = {
   editableBy: {},
   protocolMatchingRules: [],
   toolGroupIds: ['default'],
+  // Start this protocol once the first rows×cols series have metadata instead
+  // of waiting for every series in the study (the fallback when this is
+  // absent — HangingProtocolService.filterSeriesRequiredForRun). Image series
+  // sort ahead of low-priority modalities (seriesInfoSortingCriteria), so
+  // these are the series the initial viewports display anyway; the rest keep
+  // loading in the background. Upstream removed a minSeriesLoaded:1 here in
+  // #4145 because an unsupported-but-not-low-priority series (e.g. DOC/PDF)
+  // loading first can leave a viewport blank — if that bites, extend
+  // isLowPriorityModality rather than reverting this.
+  hpInitiationCriteria: { minSeriesLoaded: userPref.rows * userPref.columns },
   // -1 would be used to indicate active only, whereas other values are
   // the number of required priors referenced - so 0 means active with
   // 0 or more priors.
