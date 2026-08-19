@@ -8,9 +8,7 @@ let _teardown: (() => void) | null = null;
  * subscription handler is wrapped in try/catch so a PostHog issue can
  * never bubble back into the viewer's event flow.
  */
-export function startPostHogEventBridge(
-  servicesManager: AppTypes.ServicesManager
-): void {
+export function startPostHogEventBridge(servicesManager: AppTypes.ServicesManager): void {
   if (_teardown) {
     _teardown();
     _teardown = null;
@@ -19,7 +17,43 @@ export function startPostHogEventBridge(
   const subs: Array<{ unsubscribe: () => void }> = [];
 
   try {
-    const { displaySetService, measurementService } = servicesManager.services;
+    const {
+      displaySetService,
+      measurementService,
+      cornerstoneViewportService,
+      cineService,
+      viewportGridService,
+    } = servicesManager.services;
+
+    // Tracks the display set currently shown in each viewport so we can
+    // (a) dedupe re-broadcasts for the same display set and (b) attribute
+    // cine play events to the display set being played.
+    const shownDisplaySetByViewport = new Map<string, string>();
+    const changeCountByViewport = new Map<string, number>();
+
+    const describeDisplaySet = (displaySetInstanceUID: string): Record<string, unknown> => {
+      const ds = displaySetService?.getDisplaySetByUID?.(displaySetInstanceUID) as
+        | {
+            instance?: Record<string, unknown>;
+            instances?: Record<string, unknown>[];
+            StudyInstanceUID?: string;
+            SeriesInstanceUID?: string;
+            Modality?: string;
+            SeriesDescription?: string;
+            numImageFrames?: number;
+          }
+        | undefined;
+      const instance = ds?.instance ?? ds?.instances?.[0];
+      return {
+        displaySetInstanceUid: displaySetInstanceUID,
+        studyInstanceUid: ds?.StudyInstanceUID,
+        seriesInstanceUid: ds?.SeriesInstanceUID,
+        modality: ds?.Modality,
+        seriesDescription: ds?.SeriesDescription,
+        instanceNumber: instance?.InstanceNumber,
+        numberOfFrames: instance?.NumberOfFrames ?? ds?.numImageFrames,
+      };
+    };
 
     if (displaySetService?.subscribe) {
       subs.push(
@@ -40,6 +74,64 @@ export function startPostHogEventBridge(
             }
           }
         )
+      );
+    }
+
+    if (cornerstoneViewportService?.subscribe) {
+      subs.push(
+        cornerstoneViewportService.subscribe(
+          cornerstoneViewportService.EVENTS.VIEWPORT_DATA_CHANGED,
+          ({ viewportData, viewportId }) => {
+            try {
+              const primaryUid = (viewportData?.data ?? [])
+                .map((d: Record<string, unknown>) => d?.displaySetInstanceUID)
+                .find(Boolean) as string | undefined;
+              if (!primaryUid) {
+                return;
+              }
+              // The service re-broadcasts on presentation-only updates too —
+              // only capture actual display set swaps in the viewport.
+              if (shownDisplaySetByViewport.get(viewportId) === primaryUid) {
+                return;
+              }
+              shownDisplaySetByViewport.set(viewportId, primaryUid);
+              const changeIndex = changeCountByViewport.get(viewportId) ?? 0;
+              changeCountByViewport.set(viewportId, changeIndex + 1);
+              capturePostHogEvent('viewport_displayset_changed', {
+                viewportId,
+                changeIndex,
+                // changeIndex 0 is the hanging protocol's initial assignment;
+                // anything after that came from a user action (thumbnail
+                // click/drag, next-series, etc.).
+                trigger: changeIndex === 0 ? 'auto' : 'user',
+                ...describeDisplaySet(primaryUid),
+              });
+            } catch (e) {
+              console.warn('[PostHog] VIEWPORT_DATA_CHANGED handler failed', e);
+            }
+          }
+        )
+      );
+    }
+
+    if (cineService?.subscribe) {
+      subs.push(
+        cineService.subscribe(cineService.EVENTS.CINE_STATE_CHANGED, state => {
+          try {
+            const activeViewportId = viewportGridService?.getActiveViewportId?.();
+            const activeUid = activeViewportId
+              ? shownDisplaySetByViewport.get(activeViewportId)
+              : undefined;
+            capturePostHogEvent('cine_state_changed', {
+              isPlaying: state?.isPlaying,
+              isCineEnabled: state?.isCineEnabled,
+              viewportId: activeViewportId,
+              ...(activeUid ? describeDisplaySet(activeUid) : {}),
+            });
+          } catch (e) {
+            console.warn('[PostHog] CINE_STATE_CHANGED handler failed', e);
+          }
+        })
       );
     }
 
