@@ -2,6 +2,10 @@ async function getStudiesForPatientByMRN(dataSource, qidoForStudyUID) {
   if (qidoForStudyUID && qidoForStudyUID.length && qidoForStudyUID[0].mrn) {
     return dataSource.query.studies.search({
       patientId: qidoForStudyUID[0].mrn,
+      // Cap the prior-study list. Without this the search inherits the
+      // qido.js default of 101; QIDO has no server-side sort, so which 25
+      // come back for a >25-study patient is up to the server.
+      limit: 25,
       includefield: [
         '00081030', // Study Description
         '00080060', // Modality

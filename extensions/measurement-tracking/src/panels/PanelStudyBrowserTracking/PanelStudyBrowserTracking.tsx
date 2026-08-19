@@ -149,7 +149,13 @@ export default function PanelStudyBrowserTracking({
         throw new Error('Invalid study URL');
       }
 
-      let qidoStudiesForPatient = qidoForStudyUID;
+      // Show the current study right away, then fetch the patient's prior
+      // studies only after the hanging protocol has applied — so the
+      // prior-study search doesn't compete with the first image for
+      // connections during study load.
+      addStudiesToDisplayList(qidoForStudyUID);
+
+      await _waitForHangingProtocolApplied(hangingProtocolService);
 
       // try to fetch the prior studies based on the patientID if the
       // server can respond.
@@ -157,13 +163,15 @@ export default function PanelStudyBrowserTracking({
         const priorStudies = await getStudiesForPatientByMRN(qidoForStudyUID);
         // Only use the result if it actually returned studies
         if (priorStudies && priorStudies.length > 0) {
-          qidoStudiesForPatient = priorStudies;
+          addStudiesToDisplayList(priorStudies);
         }
       } catch (error) {
         console.warn(error);
       }
+    }
 
-      const mappedStudies = _mapDataSourceStudies(qidoStudiesForPatient);
+    function addStudiesToDisplayList(qidoStudies) {
+      const mappedStudies = _mapDataSourceStudies(qidoStudies);
       const actuallyMappedStudies = mappedStudies.map(qidoStudy => {
         return {
           studyInstanceUid: qidoStudy.StudyInstanceUID,
@@ -565,6 +573,31 @@ function getImageIdForThumbnail(displaySet: any, imageIds: any) {
  *
  * @param {*} studies
  */
+/**
+ * Resolves once the hanging protocol has applied (first PROTOCOL_CHANGED),
+ * so lower-priority requests (the prior-study search) start after the first
+ * image has begun loading. Resolves immediately when a protocol is already
+ * active, and after a timeout as a backstop so the prior-study list can
+ * never be starved by a study that fails to display.
+ */
+function _waitForHangingProtocolApplied(hangingProtocolService, timeoutMs = 10000) {
+  if (hangingProtocolService.getActiveProtocol()?.protocol) {
+    return Promise.resolve();
+  }
+  return new Promise<void>(resolve => {
+    const done = () => {
+      clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    const { unsubscribe } = hangingProtocolService.subscribe(
+      hangingProtocolService.EVENTS.PROTOCOL_CHANGED,
+      done
+    );
+  });
+}
+
 function _mapDataSourceStudies(studies) {
   return studies.map(study => {
     // TODO: Why does the data source return in this format?
