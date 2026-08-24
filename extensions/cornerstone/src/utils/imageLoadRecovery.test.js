@@ -1,9 +1,10 @@
 import {
   attachStallWatchdog,
   createImageLoadFailureRetrier,
+  inspectFrameResponse,
   RADIMAL_IMAGE_LOAD_TELEMETRY_EVENT,
 } from './imageLoadRecovery';
-import { imageLoader, getRenderingEngines } from '@cornerstonejs/core';
+import { imageLoader, getRenderingEngines, metaData } from '@cornerstonejs/core';
 
 jest.mock(
   '@cornerstonejs/core',
@@ -12,6 +13,9 @@ jest.mock(
       loadAndCacheImage: jest.fn(),
     },
     getRenderingEngines: jest.fn(() => []),
+    metaData: {
+      get: jest.fn(),
+    },
   }),
   { virtual: true }
 );
@@ -208,3 +212,113 @@ describe('attachStallWatchdog', () => {
     expect(xhr.addEventListener).not.toHaveBeenCalled();
   });
 });
+
+describe('inspectFrameResponse', () => {
+  const ascii = str => Array.from(str, c => c.charCodeAt(0));
+
+  const multipartBody = payload => {
+    const head = ascii('--BOUNDARY\r\nContent-Type: application/octet-stream\r\n\r\n');
+    const tail = ascii('\r\n--BOUNDARY--');
+    return Uint8Array.from([...head, ...payload, ...tail]).buffer;
+  };
+
+  const fakeXhr = (body, headers, status = 200) => ({
+    status,
+    response: body,
+    getResponseHeader: name => headers[name.toLowerCase()] ?? null,
+  });
+
+  const rawHeaders = length => ({
+    'content-length': String(length),
+    'content-type':
+      'multipart/related; type="application/octet-stream; transfer-syntax=1.2.840.10008.1.2.1"; boundary=BOUNDARY',
+  });
+
+  beforeEach(() => {
+    metaData.get.mockReset().mockImplementation(type => {
+      if (type === 'imagePixelModule') {
+        return { bitsAllocated: 16, samplesPerPixel: 1 };
+      }
+      if (type === 'imagePlaneModule') {
+        return { rows: 10, columns: 10 };
+      }
+      return undefined;
+    });
+  });
+
+  it('emits nothing for a healthy declared-raw frame of the expected size', () => {
+    const telemetry = collectTelemetry();
+    const body = multipartBody(new Array(200).fill(0x41)); // 10x10x16bit = 200 bytes
+    inspectFrameResponse(fakeXhr(body, rawHeaders(body.byteLength)), IMAGE_ID);
+    expect(telemetry.events).toEqual([]);
+    telemetry.stop();
+  });
+
+  it('reports a truncated declared-raw payload as raw_size_mismatch', () => {
+    const telemetry = collectTelemetry();
+    const body = multipartBody(new Array(120).fill(0x41)); // 120 of 200 expected bytes
+    inspectFrameResponse(fakeXhr(body, rawHeaders(body.byteLength)), IMAGE_ID);
+    expect(telemetry.events).toEqual([
+      expect.objectContaining({
+        event: 'frame_integrity_mismatch',
+        imageId: IMAGE_ID,
+        reasons: ['raw_size_mismatch'],
+        payloadBytes: 120,
+        expectedRawBytes: 200,
+      }),
+    ]);
+    telemetry.stop();
+  });
+
+  it('reports a JPEG codestream under a raw label as syntax_mismatch', () => {
+    const telemetry = collectTelemetry();
+    const jpeg = [0xff, 0xd8, 0xff, 0xe0, ...new Array(120).fill(0), 0xff, 0xd9];
+    const body = multipartBody(jpeg);
+    inspectFrameResponse(fakeXhr(body, rawHeaders(body.byteLength)), IMAGE_ID);
+    expect(telemetry.events).toEqual([
+      expect.objectContaining({
+        event: 'frame_integrity_mismatch',
+        reasons: ['syntax_mismatch', 'raw_size_mismatch'],
+      }),
+    ]);
+    telemetry.stop();
+  });
+
+  it('reports a body shorter than Content-Length as length_mismatch', () => {
+    const telemetry = collectTelemetry();
+    const body = multipartBody(new Array(200).fill(0x41));
+    inspectFrameResponse(fakeXhr(body, rawHeaders(body.byteLength + 5000)), IMAGE_ID);
+    expect(telemetry.events).toEqual([
+      expect.objectContaining({
+        event: 'frame_integrity_mismatch',
+        reasons: ['length_mismatch'],
+      }),
+    ]);
+    telemetry.stop();
+  });
+
+  it('skips raw-size checks for compressed transfer syntaxes', () => {
+    const telemetry = collectTelemetry();
+    const jpeg = [0xff, 0xd8, 0xff, 0xe0, ...new Array(120).fill(0), 0xff, 0xd9];
+    const body = multipartBody(jpeg);
+    const headers = {
+      'content-length': String(body.byteLength),
+      'content-type':
+        'multipart/related; type="image/jpeg; transfer-syntax=1.2.840.10008.1.2.4.70"; boundary=BOUNDARY',
+    };
+    inspectFrameResponse(fakeXhr(body, headers), IMAGE_ID);
+    expect(telemetry.events).toEqual([]);
+    telemetry.stop();
+  });
+
+  it('ignores non-2xx responses and missing pixel metadata', () => {
+    const telemetry = collectTelemetry();
+    const body = multipartBody(new Array(120).fill(0x41));
+    inspectFrameResponse(fakeXhr(body, rawHeaders(body.byteLength), 404), IMAGE_ID);
+    metaData.get.mockReturnValue(undefined);
+    inspectFrameResponse(fakeXhr(body, rawHeaders(body.byteLength)), IMAGE_ID);
+    expect(telemetry.events).toEqual([]);
+    telemetry.stop();
+  });
+});
+

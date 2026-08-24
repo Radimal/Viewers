@@ -1,4 +1,4 @@
-import { imageLoader, getRenderingEngines } from '@cornerstonejs/core';
+import { imageLoader, getRenderingEngines, metaData } from '@cornerstonejs/core';
 
 /**
  * Recovery layer for frame loads.
@@ -226,4 +226,162 @@ export function createImageLoadFailureRetrier({
       retrying.delete(imageId);
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Frame integrity probe — OBSERVE ONLY, never alters loading behavior.
+// ---------------------------------------------------------------------------
+
+const UNCOMPRESSED_TRANSFER_SYNTAXES = new Set([
+  '1.2.840.10008.1.2',
+  '1.2.840.10008.1.2.1',
+  '1.2.840.10008.1.2.2',
+]);
+
+const findBytes = (haystack: Uint8Array, needle: number[], fromIndex = 0): number => {
+  for (let i = fromIndex; i <= haystack.length - needle.length; i++) {
+    let match = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return i;
+    }
+  }
+  return -1;
+};
+
+const CRLF_CRLF = [0x0d, 0x0a, 0x0d, 0x0a];
+const CRLF_DASH_DASH = [0x0d, 0x0a, 0x2d, 0x2d];
+
+/**
+ * Inspects a completed frame response and reports integrity mismatches to
+ * telemetry, without ever touching the load itself. Exists to measure how
+ * often (and for whom) frames arrive truncated, byte-shifted, or mislabeled —
+ * the failure class behind "striated" renders and blank images that heal on
+ * reload. Mirrors the checks radimal-vet's precache validator applies to its
+ * own transfers, which cannot see the viewer's transfers.
+ *
+ * Emitted event: `frame_integrity_mismatch` with one or more reasons:
+ * - `length_mismatch`     — body received differs from Content-Length
+ * - `raw_size_mismatch`   — declared-uncompressed payload differs from
+ *                           rows × columns × samplesPerPixel × bytes/sample
+ * - `syntax_mismatch`     — declared-uncompressed payload is a JPEG/J2K
+ *                           codestream (the CDN-poison signature)
+ */
+export function inspectFrameResponse(xhr: XMLHttpRequest, imageId: string): void {
+  try {
+    if (xhr.status !== 200 && xhr.status !== 206) {
+      return; // failures already surface via IMAGE_LOAD_FAILED / the retrier
+    }
+    const body = xhr.response as ArrayBuffer | null;
+    if (!body || typeof body.byteLength !== 'number') {
+      return;
+    }
+
+    const receivedBytes = body.byteLength;
+    const contentLengthHeader = xhr.getResponseHeader('Content-Length');
+    const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : null;
+    const contentType = xhr.getResponseHeader('Content-Type') ?? '';
+    const declaredTransferSyntax = contentType.match(/transfer-syntax=([0-9.]+)/i)?.[1] ?? null;
+
+    const reasons: string[] = [];
+
+    if (contentLength !== null && Number.isFinite(contentLength) && receivedBytes !== contentLength) {
+      reasons.push('length_mismatch');
+    }
+
+    // Locate the multipart payload: part headers end at the first CRLFCRLF
+    // (searched only in the first 2KB), payload ends at the closing
+    // CRLF--boundary (searched only in the last 512 bytes). Non-multipart or
+    // unparseable bodies skip the payload-level checks.
+    let payloadStart = -1;
+    let payloadEnd = -1;
+    const headBytes = new Uint8Array(body, 0, Math.min(2048, receivedBytes));
+    const headersEnd = findBytes(headBytes, CRLF_CRLF);
+    if (headersEnd !== -1) {
+      payloadStart = headersEnd + 4;
+      const tailWindow = Math.min(512, receivedBytes);
+      const tailBytes = new Uint8Array(body, receivedBytes - tailWindow, tailWindow);
+      let last = -1;
+      for (let i = findBytes(tailBytes, CRLF_DASH_DASH); i !== -1; i = findBytes(tailBytes, CRLF_DASH_DASH, i + 1)) {
+        last = i;
+      }
+      payloadEnd = last === -1 ? receivedBytes : receivedBytes - tailWindow + last;
+    }
+
+    if (payloadStart !== -1 && payloadEnd > payloadStart && declaredTransferSyntax && UNCOMPRESSED_TRANSFER_SYNTAXES.has(declaredTransferSyntax)) {
+      const payloadBytes = payloadEnd - payloadStart;
+      const firstBytes = new Uint8Array(body, payloadStart, Math.min(4, receivedBytes - payloadStart));
+
+      const jpegMagic = firstBytes[0] === 0xff && firstBytes[1] === 0xd8 && firstBytes[2] === 0xff;
+      const j2kMagic = firstBytes[0] === 0xff && firstBytes[1] === 0x4f && firstBytes[2] === 0xff && firstBytes[3] === 0x51;
+      if (jpegMagic || j2kMagic) {
+        reasons.push('syntax_mismatch');
+      }
+
+      const pixelModule = metaData.get('imagePixelModule', imageId) as
+        | { bitsAllocated?: number; samplesPerPixel?: number }
+        | undefined;
+      const planeModule = metaData.get('imagePlaneModule', imageId) as
+        | { rows?: number; columns?: number }
+        | undefined;
+      const { rows, columns } = planeModule ?? {};
+      const { bitsAllocated, samplesPerPixel } = pixelModule ?? {};
+      if (rows && columns && bitsAllocated) {
+        const expectedRawBytes = rows * columns * (samplesPerPixel || 1) * Math.ceil(bitsAllocated / 8);
+        // Tolerate the DICOM even-length pad byte; anything further off is a
+        // truncated or byte-shifted payload.
+        if (Math.abs(payloadBytes - expectedRawBytes) > 1) {
+          reasons.push('raw_size_mismatch');
+        }
+        if (reasons.length) {
+          dispatchImageLoadTelemetry('frame_integrity_mismatch', {
+            imageId,
+            reasons,
+            status: xhr.status,
+            receivedBytes,
+            contentLength,
+            payloadBytes,
+            expectedRawBytes,
+            declaredTransferSyntax,
+            rows,
+            columns,
+            bitsAllocated,
+            samplesPerPixel: samplesPerPixel || 1,
+          });
+          return;
+        }
+      }
+    }
+
+    if (reasons.length) {
+      dispatchImageLoadTelemetry('frame_integrity_mismatch', {
+        imageId,
+        reasons,
+        status: xhr.status,
+        receivedBytes,
+        contentLength,
+        declaredTransferSyntax,
+      });
+    }
+  } catch {
+    // The probe must never affect image loading.
+  }
+}
+
+/**
+ * Arms inspectFrameResponse to run once the transfer settles. loadend fires
+ * for load, error, abort and timeout alike; the probe itself ignores
+ * non-2xx outcomes.
+ */
+export function attachFrameIntegrityProbe(xhr: XMLHttpRequest, imageId: string): void {
+  const onLoadEnd = () => {
+    xhr.removeEventListener('loadend', onLoadEnd);
+    inspectFrameResponse(xhr, imageId);
+  };
+  xhr.addEventListener('loadend', onLoadEnd);
 }

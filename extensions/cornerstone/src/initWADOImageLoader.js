@@ -5,7 +5,7 @@ import {
 } from '@cornerstonejs/core/loaders';
 import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
 import { errorHandler, utils } from '@ohif/core';
-import { attachStallWatchdog } from './utils/imageLoadRecovery';
+import { attachStallWatchdog, attachFrameIntegrityProbe } from './utils/imageLoadRecovery';
 
 const { registerVolumeLoader } = volumeLoader;
 
@@ -34,6 +34,11 @@ export default function initWADOImageLoader(
         stallTimeoutMs: appConfig.imageLoadStallTimeoutMs ?? 90000,
         maxDurationMs: appConfig.imageLoadMaxDurationMs ?? 600000,
       });
+
+      // Observe-only: reports truncated / byte-shifted / mislabeled frame
+      // responses to telemetry so we can measure how often (and for whom)
+      // the "striated image" class of failure occurs. Never alters the load.
+      attachFrameIntegrityProbe(xhr, imageId);
 
       //TODO should be removed in the future and request emitted by DicomWebDataSource
       const sourceConfig = extensionManager.getActiveDataSource()?.[0].getConfig() ?? {};
