@@ -107,6 +107,14 @@ declare global {
         compute?: number;
       };
       maxNumberOfWebWorkers?: number;
+      /** Abort a frame request when no progress bytes arrive for this long (ms). 0 disables. */
+      imageLoadStallTimeoutMs?: number;
+      /** Abort a frame request when the whole transfer exceeds this (ms). 0 disables. */
+      imageLoadMaxDurationMs?: number;
+      /** Retry attempts per failed frame load. 0 disables retries. */
+      imageLoadRetryAttempts?: number;
+      /** Base backoff before the first frame-load retry (ms); doubles per attempt. */
+      imageLoadRetryBackoffMs?: number;
       acceptHeader?: string[];
       investigationalUseDialog?: {
         option: 'always' | 'never' | 'configure';

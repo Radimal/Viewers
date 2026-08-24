@@ -33,6 +33,7 @@ import interleaveTopToBottom from './utils/interleaveTopToBottom';
 import initContextMenu from './initContextMenu';
 import initDoubleClick from './initDoubleClick';
 import initViewTiming from './utils/initViewTiming';
+import { createImageLoadFailureRetrier } from './utils/imageLoadRecovery';
 import { colormaps } from './utils/colormaps';
 import { SegmentationRepresentations } from '@cornerstonejs/tools/enums';
 import { useLutPresentationStore } from './stores/useLutPresentationStore';
@@ -227,9 +228,15 @@ export default async function init({
   });
 
   /**
-   * Runs error handler for failed requests.
-   * @param event
+   * Runs error handler for failed requests, then schedules a bounded retry.
+   * Cornerstone evicts failed loads from cache but nothing re-requests them,
+   * so without this a single failed/stalled frame stays blank all session.
    */
+  const retryFailedImageLoad = createImageLoadFailureRetrier({
+    retryAttempts: appConfig.imageLoadRetryAttempts ?? 2,
+    backoffMs: appConfig.imageLoadRetryBackoffMs ?? 1000,
+  });
+
   const imageLoadFailedHandler = ({ detail }) => {
     const handler = errorHandler.getHTTPErrorHandler();
     if (typeof handler === 'function') {
@@ -237,6 +244,7 @@ export default async function init({
     } else {
       console.error('⚠️ Image load failed - no error handler configured:', detail.error);
     }
+    retryFailedImageLoad(detail);
   };
 
   eventTarget.addEventListener(EVENTS.IMAGE_LOAD_FAILED, imageLoadFailedHandler);

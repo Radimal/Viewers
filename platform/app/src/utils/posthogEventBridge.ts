@@ -1,5 +1,26 @@
 import { capturePostHogEvent } from './posthog';
 
+const IMAGE_LOAD_TELEMETRY_EVENT = 'radimal:image-load-telemetry';
+
+/** Extracts DICOM UIDs from a wadors/wadouri imageId so image-load events can
+ * be joined against per-study telemetry (display_set_added, precache_*). */
+function parseWadorsImageId(imageId: unknown): Record<string, string> {
+  if (typeof imageId !== 'string') {
+    return {};
+  }
+  const match = imageId.match(
+    /studies\/([^/]+)\/series\/([^/]+)\/instances\/([^/]+)/
+  );
+  if (!match) {
+    return {};
+  }
+  return {
+    studyInstanceUid: match[1],
+    seriesInstanceUid: match[2],
+    sopInstanceUid: match[3],
+  };
+}
+
 let _teardown: (() => void) | null = null;
 
 /**
@@ -80,6 +101,30 @@ export function startPostHogEventBridge(
   } catch (e) {
     console.warn('[PostHog] event bridge subscribe failed', e);
   }
+
+  // Image-load recovery telemetry (stall aborts, retries, terminal failures)
+  // is announced on a window CustomEvent channel by the cornerstone extension
+  // and the study browser thumbnails — forward it with UIDs parsed from the
+  // wadors imageId so failures are queryable per study/series/instance.
+  const onImageLoadTelemetry = (evt: Event) => {
+    try {
+      const { event, imageId, ...rest } = (evt as CustomEvent).detail ?? {};
+      if (!event) {
+        return;
+      }
+      capturePostHogEvent(event, {
+        imageId,
+        ...parseWadorsImageId(imageId),
+        ...rest,
+      });
+    } catch (e) {
+      console.warn('[PostHog] image load telemetry handler failed', e);
+    }
+  };
+  window.addEventListener(IMAGE_LOAD_TELEMETRY_EVENT, onImageLoadTelemetry);
+  subs.push({
+    unsubscribe: () => window.removeEventListener(IMAGE_LOAD_TELEMETRY_EVENT, onImageLoadTelemetry),
+  });
 
   _teardown = () => {
     subs.forEach(s => {
