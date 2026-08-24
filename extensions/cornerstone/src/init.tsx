@@ -231,6 +231,8 @@ export default async function init({
    * @param event
    */
   const imageLoadFailedHandler = ({ detail }) => {
+    // Feeds instances_failed on study_render_summary (app-layer tracker).
+    (window as any).__studyRenderSummary?.image('failed', detail?.imageId);
     const handler = errorHandler.getHTTPErrorHandler();
     if (typeof handler === 'function') {
       handler(detail.error);
@@ -241,6 +243,11 @@ export default async function init({
 
   eventTarget.addEventListener(EVENTS.IMAGE_LOAD_FAILED, imageLoadFailedHandler);
   eventTarget.addEventListener(EVENTS.IMAGE_LOAD_ERROR, imageLoadFailedHandler);
+
+  // Feeds instances_rendered on study_render_summary.
+  eventTarget.addEventListener(EVENTS.IMAGE_LOADED, ({ detail }) => {
+    (window as any).__studyRenderSummary?.image('rendered', detail?.image?.imageId);
+  });
 
   function elementEnabledHandler(evt) {
     const { element } = evt.detail;

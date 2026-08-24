@@ -12,6 +12,7 @@ import { history } from '../../utils/history';
 import loadModules from '../../pluginImports';
 import { defaultRouteInit } from './defaultRouteInit';
 import { updateAuthServiceAndCleanUrl } from './updateAuthServiceAndCleanUrl';
+import { startStudyRenderSummary, stopStudyRenderSummary } from '../../utils/studyRenderSummary';
 
 const { getSplitParam } = utils;
 
@@ -201,6 +202,10 @@ export default function ModeRoute({
       return;
     }
 
+    // One telemetry session per study open; closed in this effect's cleanup
+    // (in-app switch / navigation away) or by pagehide (tab close).
+    startStudyRenderSummary(servicesManager);
+
     const setupRouteInit = async () => {
       // TODO: For some reason this is running before the Providers
       // are calling setServiceImplementation
@@ -321,6 +326,9 @@ export default function ModeRoute({
       });
 
     return () => {
+      // Fire study_render_summary before teardown clears the display sets it
+      // reads modality from.
+      stopStudyRenderSummary();
       // The mode.onModeExit must be done first to allow it to store
       // information, and must be in a try/catch to ensure subscriptions
       // are unsubscribed.

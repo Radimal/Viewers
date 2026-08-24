@@ -186,6 +186,8 @@ function PanelStudyBrowser({
       if (!imageId || displaySet?.unsupported) {
         return;
       }
+      // Feeds thumbnails_* on study_render_summary (app-layer tracker).
+      (window as any).__studyRenderSummary?.thumbnail('expected', dSet.displaySetInstanceUID);
       // When the image arrives, render it and store the result in the thumbnailImgSrcMap
       try {
         newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(imageId);
@@ -193,7 +195,9 @@ function PanelStudyBrowser({
         setThumbnailImageSrcMap(prevState => {
           return { ...prevState, ...newImageSrcEntry };
         });
+        (window as any).__studyRenderSummary?.thumbnail('rendered', dSet.displaySetInstanceUID);
       } catch (error) {
+        (window as any).__studyRenderSummary?.thumbnail('failed', dSet.displaySetInstanceUID);
         try {
           (window as any).__capturePostHogEvent?.('thumbnail_load_failed', {
             studyInstanceUid: dSet.StudyInstanceUID,
@@ -253,6 +257,8 @@ function PanelStudyBrowser({
           if (!imageId) {
             return;
           }
+          // Feeds thumbnails_* on study_render_summary (app-layer tracker).
+          (window as any).__studyRenderSummary?.thumbnail('expected', dSet.displaySetInstanceUID);
           // When the image arrives, render it and store the result in the thumbnailImgSrcMap
           try {
             newImageSrcEntry[dSet.displaySetInstanceUID] = await getImageSrc(
@@ -263,7 +269,9 @@ function PanelStudyBrowser({
             setThumbnailImageSrcMap(prevState => {
               return { ...prevState, ...newImageSrcEntry };
             });
+            (window as any).__studyRenderSummary?.thumbnail('rendered', dSet.displaySetInstanceUID);
           } catch (error) {
+            (window as any).__studyRenderSummary?.thumbnail('failed', dSet.displaySetInstanceUID);
             try {
               (window as any).__capturePostHogEvent?.('thumbnail_load_failed', {
                 studyInstanceUid: dSet.StudyInstanceUID,

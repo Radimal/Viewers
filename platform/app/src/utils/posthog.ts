@@ -80,9 +80,11 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
 
   // Expose the capture helper so extensions (which can't import from @ohif/app)
   // can still emit events. Optional-chained at call sites for safety.
-  (window as unknown as {
-    __capturePostHogEvent?: (n: string, p?: Record<string, unknown>) => void;
-  }).__capturePostHogEvent = capturePostHogEvent;
+  (
+    window as unknown as {
+      __capturePostHogEvent?: (n: string, p?: Record<string, unknown>) => void;
+    }
+  ).__capturePostHogEvent = capturePostHogEvent;
 
   // Cross-app identity hand-off: vet.radimal.ai (and other entry points)
   // can append ?distinct_id=<id> when redirecting users into the viewer so
@@ -121,7 +123,10 @@ export function identifyPostHogUser(
 
 export function capturePostHogEvent(
   name: string,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
+  // Passed through to posthog.capture — e.g. { transport: 'sendBeacon' } for
+  // events fired during pagehide, which the normal batched XHR would lose.
+  options?: Record<string, unknown>
 ): void {
   if (!isReady()) {
     if (isProductionBuild()) {
@@ -130,7 +135,7 @@ export function capturePostHogEvent(
     return;
   }
   try {
-    posthog.capture(name, properties);
+    posthog.capture(name, properties, options);
   } catch (e) {
     console.warn(`PostHog capture failed for "${name}"`, e);
   }
