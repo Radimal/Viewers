@@ -153,7 +153,6 @@ function ViewerHeader({
           try {
             const cacheNames = await caches.keys();
             await Promise.all(cacheNames.map(name => caches.delete(name)));
-            console.log('✅ Cleared Cache API storage');
           } catch (error) {
             console.warn('⚠️ Could not clear Cache API:', error);
           }
@@ -180,7 +179,6 @@ function ViewerHeader({
           try {
             const cacheNames = await caches.keys();
             await Promise.all(cacheNames.map(name => caches.delete(name)));
-            console.log('✅ Cleared Cache API storage after error');
           } catch (cacheError) {
             console.warn('⚠️ Could not clear Cache API after error:', cacheError);
           }
@@ -228,13 +226,11 @@ function ViewerHeader({
       if (event.key === 'familyDepartureTarget') {
         const departure = readFamilyDepartureSinceLoad();
         if (departure && departure.url !== window.location.href) {
-          console.log('Following family to sibling origin', departure.url);
           window.location.href = departure.url;
         }
         return;
       }
       if (event.key === 'currentStudyId') {
-        console.log('Changing study', event);
         const newStudyId = event.newValue;
         if (currentStudyId !== newStudyId) {
           refreshTab(newStudyId);
@@ -251,10 +247,8 @@ function ViewerHeader({
     if (followsFamilyStudy && currentStudyId) {
       const decision = reconcileFamilyOnMount(currentStudyId);
       if (decision.action === 'follow-departure') {
-        console.log('Following family to sibling origin', decision.url);
         window.location.href = decision.url;
       } else if (decision.action === 'catch-up') {
-        console.log('Catching up to family study', decision.studyInstanceUid);
         refreshTab(decision.studyInstanceUid);
       }
     }

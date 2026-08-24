@@ -41,7 +41,6 @@ class ViewportPersistenceService extends PubSubService {
     // Mark as no longer initial load after a delay
     this.initialLoadTimer = setTimeout(() => {
       this.isInitialLoad = false;
-      console.log('📱 Initial load period ended');
     }, 3000); // 3 seconds should be enough for initial app setup
   }
 
@@ -98,26 +97,16 @@ class ViewportPersistenceService extends PubSubService {
       }
 
       if (!currentImageId) {
-        console.log('❌ No current image ID found for hash generation');
         return null;
       }
 
-      console.log('🔍 Hash generation details:', {
-        currentImageId,
-        viewportType: viewport.constructor?.name,
-        currentIndex: viewport.getCurrentImageIdIndex?.() || 'unknown',
-      });
-
       const imageUids = this._extractUIDsFromImageId(currentImageId);
-      console.log('🔍 Extracted UIDs:', imageUids);
 
       if (!imageUids?.studyUID || !imageUids?.seriesUID || !imageUids?.instanceUID) {
-        console.log('❌ Missing required UIDs for hash generation');
         return null;
       }
 
       const hash = `${imageUids.studyUID}-${imageUids.seriesUID}-${imageUids.instanceUID}`;
-      console.log('🔍 Generated hash:', hash);
 
       return hash;
     } catch (error) {
@@ -177,12 +166,6 @@ class ViewportPersistenceService extends PubSubService {
       if (!hash || !state) return;
 
       this._storeViewportState(hash, state);
-
-      console.log('📦 Storing state:', {
-        viewportId,
-        hash,
-        state: state.rotationFlip,
-      });
 
       this._broadcastEvent(ViewportPersistenceService.EVENTS.VIEWPORT_STATE_STORED, {
         viewportId,
@@ -490,12 +473,6 @@ class ViewportPersistenceService extends PubSubService {
         }
       }
 
-      console.log('🔍 Extracting state from viewport:', {
-        viewportType: viewport.constructor?.name,
-        extractedState: rotationFlipState,
-        viewportId: viewport.id,
-      });
-
       if (Object.keys(rotationFlipState).length > 0) {
         state.rotationFlip = rotationFlipState;
         return state;
@@ -531,24 +508,14 @@ class ViewportPersistenceService extends PubSubService {
     try {
       if (!state.rotationFlip) return;
 
-      console.log('🔧 Applying state to viewport:', {
-        viewportType: viewport.constructor?.name,
-        targetState: state.rotationFlip,
-        viewportId: viewport.id,
-        imageIds: viewport.getImageIds?.()?.length || 'unknown',
-        currentImageIndex: viewport.getCurrentImageIdIndex?.() || 'unknown',
-      });
-
       // Special handling for stack viewports with multiple images (like CT stacks)
       const isStackViewport = viewport.constructor?.name === 'StackViewport';
       const imageIds = viewport.getImageIds?.() || [];
       const isMultiImageStack = isStackViewport && imageIds.length > 1;
 
       if (isMultiImageStack) {
-        console.log('📚 Detected multi-image stack (CT/MRI), using stack-specific application');
         this._applyStackTransformations(viewport, state.rotationFlip);
       } else {
-        console.log('🖼️ Single image or volume viewport, using standard application');
         // Ensure the viewport is ready before applying transformations
         try {
           // Force a render first to ensure the viewport is in a good state
@@ -573,8 +540,6 @@ class ViewportPersistenceService extends PubSubService {
 
   private _applyStackTransformations(viewport: any, rotationFlipState: any): void {
     try {
-      console.log('🔄 Applying transformations to stack viewport...');
-
       // For stack viewports, we need to be more careful about timing
       // and ensure transformations apply to the entire stack, not per-image
 
@@ -595,12 +560,10 @@ class ViewportPersistenceService extends PubSubService {
       }, 50);
 
       if (!applied) {
-        console.log(
+        console.warn(
           '⚠️ Stack transformation application failed for viewport type:',
           viewport.constructor?.name
         );
-      } else {
-        console.log('✅ Stack transformations completed successfully');
       }
     } catch (error) {
       console.error('Error applying stack transformations:', error);
@@ -619,7 +582,7 @@ class ViewportPersistenceService extends PubSubService {
       }, 10);
 
       if (!applied) {
-        console.log(
+        console.warn(
           '⚠️ No state application method succeeded for viewport type:',
           viewport.constructor?.name
         );
@@ -687,7 +650,6 @@ class ViewportPersistenceService extends PubSubService {
     }
 
     if (Object.keys(updates).length === 0) {
-      console.log('✅ Viewport already matches stored state, nothing to apply');
       return true;
     }
 
@@ -720,10 +682,9 @@ class ViewportPersistenceService extends PubSubService {
       try {
         viewport.setViewPresentation(updates);
         restorePan();
-        console.log('✅ Applied state via setViewPresentation:', updates);
         return true;
       } catch (error) {
-        console.log('❌ Failed setViewPresentation:', error.message);
+        console.warn('❌ Failed setViewPresentation:', error.message);
       }
     }
 
@@ -745,10 +706,9 @@ class ViewportPersistenceService extends PubSubService {
 
       try {
         viewport.setCamera(cameraUpdates);
-        console.log('✅ Applied flips via setCamera:', cameraUpdates);
         flipsApplied = true;
       } catch (error) {
-        console.log('❌ Failed setCamera flips:', error.message);
+        console.warn('❌ Failed setCamera flips:', error.message);
       }
     }
 
@@ -756,20 +716,18 @@ class ViewportPersistenceService extends PubSubService {
       if (viewport.setRotation) {
         try {
           viewport.setRotation(updates.rotation);
-          console.log('✅ Applied rotation via setRotation:', updates.rotation);
           rotationApplied = true;
         } catch (error) {
-          console.log('❌ Failed setRotation:', error.message);
+          console.warn('❌ Failed setRotation:', error.message);
         }
       }
 
       if (!rotationApplied && viewport.setProperties) {
         try {
           viewport.setProperties({ rotation: updates.rotation });
-          console.log('✅ Applied rotation via setProperties:', updates.rotation);
           rotationApplied = true;
         } catch (error) {
-          console.log('❌ Failed setProperties rotation:', error.message);
+          console.warn('❌ Failed setProperties rotation:', error.message);
         }
       }
     }

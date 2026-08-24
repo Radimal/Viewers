@@ -70,7 +70,7 @@ export class HotkeysManager {
     this._servicesManager = servicesManager;
     this._commandsManager = commandsManager;
     if (typeof window !== 'undefined') {
-      window.debugHotkeys = () => this.logRegisteredHotkeys();
+      window.debugHotkeys = () => this.getRegisteredHotkeys();
     }
   }
 
@@ -141,29 +141,22 @@ export class HotkeysManager {
   setDefaultHotKeys(hotkeyDefinitions = []) {
     const definitions = this.getValidDefinitions(hotkeyDefinitions);
     this.hotkeyDefaults = definitions;
-    console.log('[HOTKEY DEBUG] Setting default hotkeys:', {
-      count: definitions.length,
-      hotkeys: definitions.map(def => ({
-        commandName: def.commandName,
-        keys: def.keys,
-        label: def.label
-      }))
-    });
   }
 
   /**
-   * Debug method to log all currently registered hotkeys
+   * Summary of the currently registered hotkeys, for `window.debugHotkeys()`.
+   * Returned rather than logged so it only prints when a human asks for it.
    */
-  logRegisteredHotkeys() {
-    console.log('[HOTKEY DEBUG] Currently registered hotkeys:', {
+  getRegisteredHotkeys() {
+    return {
       total: Object.keys(this.hotkeyDefinitions).length,
       isEnabled: this.isEnabled,
       hotkeys: Object.values(this.hotkeyDefinitions).map(def => ({
         commandName: def.commandName,
         keys: def.keys,
-        label: def.label
-      }))
-    });
+        label: def.label,
+      })),
+    };
   }
 
   /**
@@ -312,22 +305,10 @@ export class HotkeysManager {
     hotkeys.bind(combinedKeys, evt => {
       evt.preventDefault();
       evt.stopPropagation();
-      console.log('[HOTKEY DEBUG] Key pressed:', {
-        key: evt.key,
-        code: evt.code,
-        combinedKeys,
-        commandName,
-        commandOptions,
-        context,
-        timestamp: new Date().toISOString()
-      });
-      
       try {
-        console.log('[HOTKEY DEBUG] Executing command:', commandName);
         this._commandsManager.runCommand(commandName, { evt, ...commandOptions }, context);
-        console.log('[HOTKEY DEBUG] Command executed successfully:', commandName);
       } catch (error) {
-        console.error('[HOTKEY DEBUG] Command execution failed:', {
+        console.error('[HOTKEYS] Command execution failed:', {
           commandName,
           error: error.message,
           stack: error.stack

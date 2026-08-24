@@ -302,13 +302,10 @@ function ViewerLayout({
       ];
 
       if (!allowedOrigins.includes(event.origin)) return;
-      console.log('Received message:', event.data);
       if (event.data && event.data.type === 'FADE') {
-        console.log('Received fade event:', event.data);
         channel.postMessage(event.data);
         setFade(event.data.value);
       } else if (event.data && event.data.type === 'CLOSE') {
-        console.log('Received close event:', event.data);
         // closeAllViewerWindows broadcasts CLOSE to the rest of the family itself.
         closeAllViewerWindows();
       } else if (
@@ -322,7 +319,6 @@ function ViewerLayout({
         // monitor windows follow via the currentStudyId storage event once this window reloads;
         // cross-origin they can't (storage events are per-origin), so hand them the target URL
         // over the family channel while everyone still shares this origin.
-        console.log('Received load study event:', event.data);
         try {
           const url = new URL(event.data.url, window.location.origin);
           const targetVet = vetOriginFor(url.origin);
@@ -404,10 +400,8 @@ function ViewerLayout({
     setFade(false);
     channel.onmessage = event => {
       if (event.data.type === 'FADE') {
-        console.log('All children received fade event:', event.data);
         setFade(event.data.value);
       } else if (event.data.type === 'CLOSE') {
-        console.log('All children received fade event:', event.data);
         window.close();
       } else if (event.data.type === 'NAVIGATE_FAMILY') {
         // The primary received a cross-origin case switch (VEG<->non-VEG) and is about to
