@@ -26,6 +26,67 @@ const MODIFIER_OPTIONS = [
 
 const DEFAULT_TOOL_BINDINGS_STORAGE_KEY = 'user-preferred-tool-bindings';
 
+// Radimal: mouse-button tool assignment + zoom speed (fork parity).
+const MOUSE_TOOL_OPTIONS = ['WindowLevel', 'Pan', 'Zoom'];
+const MOUSE_BUTTONS = [
+  { key: 'left', label: 'Left Click', mouseButton: 1 },
+  { key: 'middle', label: 'Middle Click', mouseButton: 4 },
+  { key: 'right', label: 'Right Click', mouseButton: 2 },
+];
+const DEFAULT_MOUSE_TOOLS = { left: 'WindowLevel', middle: 'Pan', right: 'Zoom' };
+const ZOOM_SPEED_OPTIONS = ['0.05', '0.1', '0.2', '0.3', '0.4'];
+
+function getZoomSpeedPref(): string {
+  try {
+    const saved = localStorage.getItem('zoomSpeed');
+    return ZOOM_SPEED_OPTIONS.includes(saved) ? saved : '0.1';
+  } catch (e) {
+    return '0.1';
+  }
+}
+
+/** Which of the three tools currently owns each mouse button in the default tool group. */
+function getMouseToolAssignment(toolGroupService): Record<string, string> {
+  const assignment = { ...DEFAULT_MOUSE_TOOLS };
+  if (!toolGroupService) {
+    return assignment;
+  }
+  MOUSE_TOOL_OPTIONS.forEach(toolName => {
+    const bindings = toolGroupService.getToolBindings?.('default', toolName) || [];
+    bindings.forEach(binding => {
+      const button = MOUSE_BUTTONS.find(
+        b => binding.mouseButton === b.mouseButton && binding.modifierKey == null
+      );
+      if (button) {
+        assignment[button.key] = toolName;
+      }
+    });
+  });
+  return assignment;
+}
+
+/** Persist + apply the button->tool assignment on the default tool group. */
+function applyMouseToolAssignment(toolGroupService, assignment: Record<string, string>): void {
+  if (!toolGroupService) {
+    return;
+  }
+  MOUSE_TOOL_OPTIONS.forEach(toolName => {
+    const bindings = MOUSE_BUTTONS.filter(b => assignment[b.key] === toolName).map(b => ({
+      mouseButton: b.mouseButton,
+    }));
+    if (!bindings.length) {
+      return; // tool keeps toolbar/hotkey activation only
+    }
+    // Preserve touch bindings that button reassignment must not clobber.
+    if (toolName === 'Zoom') {
+      bindings.push({ numTouchPoints: 2 } as any);
+    }
+    toolGroupService.setToolBindings('default', toolName, bindings);
+    toolGroupService.applyToolBindings('default', toolName, { replaceExisting: true });
+    toolGroupService.persistToolBindings('default', toolName, bindings);
+  });
+}
+
 function getToolModifier(
   toolGroupService: any,
   toolGroupId: string,
@@ -115,6 +176,8 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     hotkeyDefinitions: initialHotkeyDefinitions,
     languageValue: currentLanguage.value,
     crosshairModifier: initialCrosshairModifier,
+    mouseTools: getMouseToolAssignment(toolGroupService),
+    zoomSpeed: getZoomSpeedPref(),
   });
 
   const onLanguageChangeHandler = (value: string) => {
@@ -142,6 +205,10 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
       crosshairModifier: getModifierFromBindings(defaultCrosshairBindings, 1),
     }));
 
+    setState(state => ({ ...state, mouseTools: { ...DEFAULT_MOUSE_TOOLS }, zoomSpeed: '0.1' }));
+    MOUSE_TOOL_OPTIONS.forEach(toolName =>
+      toolGroupService?.removePersistedToolBindings?.('default', toolName)
+    );
     hotkeysManager.restoreDefaultBindings();
     if (toolGroupService && defaultCrosshairBindings?.length) {
       toolGroupService.setToolBindings('mpr', 'Crosshairs', defaultCrosshairBindings);
@@ -235,6 +302,63 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
           ))}
         </UserPreferencesModal.HotkeysGrid>
 
+        <UserPreferencesModal.SubHeading>
+          {t('MouseTools', { defaultValue: 'Mouse Buttons' })}
+        </UserPreferencesModal.SubHeading>
+        <UserPreferencesModal.HotkeysGrid>
+          {MOUSE_BUTTONS.map(button => (
+            <div
+              key={button.key}
+              className="flex items-center justify-between gap-2"
+            >
+              <span className="text-foreground text-base">{t(button.label)}</span>
+              <Select
+                value={state.mouseTools[button.key]}
+                onValueChange={val =>
+                  setState(s => ({ ...s, mouseTools: { ...s.mouseTools, [button.key]: val } }))
+                }
+              >
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MOUSE_TOOL_OPTIONS.map(toolName => (
+                    <SelectItem
+                      key={toolName}
+                      value={toolName}
+                    >
+                      {t(toolName)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-foreground text-base">
+              {t('ZoomSpeed', { defaultValue: 'Zoom Speed' })}
+            </span>
+            <Select
+              value={state.zoomSpeed}
+              onValueChange={val => setState(s => ({ ...s, zoomSpeed: val }))}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ZOOM_SPEED_OPTIONS.map(speed => (
+                  <SelectItem
+                    key={speed}
+                    value={speed}
+                  >
+                    {Math.round(parseFloat(speed) * 100)}%
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </UserPreferencesModal.HotkeysGrid>
+
         {state.crosshairModifier != null && (
           <>
             <UserPreferencesModal.SubHeading>
@@ -298,6 +422,14 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                 return; // Exit early since we're reloading
               }
               hotkeysManager.setHotkeys(state.hotkeyDefinitions);
+
+              // Radimal: mouse-button tools + zoom speed
+              applyMouseToolAssignment(toolGroupService, state.mouseTools);
+              try {
+                localStorage.setItem('zoomSpeed', state.zoomSpeed);
+              } catch (e) {
+                /* storage unavailable */
+              }
 
               if (toolGroupService && state.crosshairModifier != null) {
                 const bindings = [

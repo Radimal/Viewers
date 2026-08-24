@@ -3,6 +3,7 @@ import {
   CONSTANTS as csConstants,
   Types as CoreTypes,
 } from '@cornerstonejs/core';
+import { getZoomScaleFactor } from '../../../utils/zoomSpeed';
 import { getViewportAdapter } from '../adapter';
 import { legacyViewportOperations } from './LegacyViewportOperations';
 import type {
@@ -80,7 +81,7 @@ export const nextViewportOperations: IViewportOperations = {
   scaleBy(viewport: CoreTypes.IViewport, direction: number): void {
     // parallelScale and zoom are inversely related (smaller parallelScale = more
     // zoomed in = larger zoom), so divide by scaleFactor to match the legacy direction.
-    const scaleFactor = direction > 0 ? 0.9 : 1.1;
+    const scaleFactor = getZoomScaleFactor(direction); // Radimal zoomSpeed preference
     const vp = viewport as unknown as {
       getZoom?: () => number;
       setZoom?: (zoom: number) => void;

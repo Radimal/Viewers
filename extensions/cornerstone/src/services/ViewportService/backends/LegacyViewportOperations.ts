@@ -1,4 +1,5 @@
 import { utilities as csUtils, Types as CoreTypes } from '@cornerstonejs/core';
+import { getZoomScaleFactor } from '../../../utils/zoomSpeed';
 import { mat4, vec3 } from 'gl-matrix';
 import {
   isStackViewportType,
@@ -108,7 +109,7 @@ export const legacyViewportOperations: IViewportOperations = {
   },
 
   scaleBy(viewport: CoreTypes.IViewport, direction: number): void {
-    const scaleFactor = direction > 0 ? 0.9 : 1.1;
+    const scaleFactor = getZoomScaleFactor(direction); // Radimal zoomSpeed preference
     if (isStackViewportType(viewport)) {
       const vp = viewport as CoreTypes.IStackViewport;
       if (direction) {
