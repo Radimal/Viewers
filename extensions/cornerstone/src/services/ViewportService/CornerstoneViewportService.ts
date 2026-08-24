@@ -10,6 +10,7 @@ import {
   Enums as csEnums,
   metaData,
 } from '@cornerstonejs/core';
+import { estimateXrayVOI, hasMetadataVOI } from '../../utils/estimateXrayVOI';
 
 import { utilities as csToolsUtils, Enums as csToolsEnums } from '@cornerstonejs/tools';
 import { IViewportService } from './IViewportService';
@@ -936,6 +937,24 @@ class CornerstoneViewportService
           voi.windowCenter
         );
         properties.voiRange = { lower, upper };
+      } else {
+        // Radimal: CR/DX with no usable metadata VOI gets a pixel-percentile
+        // estimate (vet X-rays frequently ship without WindowCenter/Width).
+        const { displaySetService } = this.servicesManager.services;
+        const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUIDs[0]);
+        const isXray = displaySet?.Modality === 'CR' || displaySet?.Modality === 'DX';
+        const firstImageId = imageIds?.[0];
+
+        if (isXray && firstImageId && !hasMetadataVOI(firstImageId)) {
+          const estimated = await estimateXrayVOI(firstImageId).catch(() => null);
+          if (estimated) {
+            const { lower, upper } = csUtils.windowLevel.toLowHighRange(
+              estimated.windowWidth,
+              estimated.windowCenter
+            );
+            properties.voiRange = { lower, upper };
+          }
+        }
       }
 
       properties.invert = voiInverted ?? properties.invert;

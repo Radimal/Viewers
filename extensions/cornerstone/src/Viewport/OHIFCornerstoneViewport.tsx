@@ -15,11 +15,17 @@ import type { Types } from '@ohif/core';
 import OHIFViewportActionCorners from '../components/OHIFViewportActionCorners';
 import { getViewportPresentations } from '../utils/presentations/getViewportPresentations';
 import { loadRotationFlip, saveRotationFlip } from '../utils/presentations/rotationFlipStorage';
+import { autoTrimBorders } from '../utils/autoTrimBorders';
+import { useSystem } from '@ohif/core';
 import { useSynchronizersStore } from '../stores/useSynchronizersStore';
 import ActiveViewportBehavior from '../utils/ActiveViewportBehavior';
 import { WITH_NAVIGATION } from '../services/ViewportService/CornerstoneViewportService';
 
 const STACK = 'stack';
+
+// Radimal: per-displaySet zoom/pan snapshot after auto-trim; if the user has
+// since zoomed/panned, re-trim is suppressed on remount.
+const autoTrimStateCache = new Map<string, { zoom: number; panX: number; panY: number }>();
 
 // Cache for viewport dimensions, persists across component remounts
 const viewportDimensions = new Map<string, { width: number; height: number }>();
@@ -357,6 +363,75 @@ const OHIFCornerstoneViewport = React.memo(
         persistRotationFlip(displaySets);
       };
     }, [viewportOptions, displaySets, dataSource]);
+
+
+    const { extensionManager } = useSystem();
+
+    // Radimal: auto-trim collimation borders on CR/DX once the image renders.
+    // Runs via IMAGE_RENDERED (+100ms) so it always lands after the
+    // rotation/flip seed; autoTrimBorders preserves rotation/flip itself.
+    useEffect(() => {
+      if (extensionManager?.appConfig?.autoTrimCollimationBorders === false) {
+        return;
+      }
+
+      const element = elementRef.current;
+      const modality = displaySets?.[0]?.Modality;
+      if (!element || !modality || !['CR', 'DX'].includes(modality)) {
+        return;
+      }
+
+      let trimDone = false;
+      let attempts = 0;
+      const MAX_ATTEMPTS = 10;
+      const displaySetKey = displaySets.map(ds => ds.displaySetInstanceUID).join(',');
+
+      const handleImageRendered = () => {
+        if (trimDone || attempts >= MAX_ATTEMPTS) {
+          return;
+        }
+        attempts++;
+
+        // Delay slightly so the image data is fully available in cache.
+        setTimeout(() => {
+          try {
+            const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            if (!csViewport) {
+              return;
+            }
+
+            const cached = autoTrimStateCache.get(displaySetKey);
+            if (cached) {
+              const zoom = csViewport.getZoom?.() ?? csViewport.getCamera()?.parallelScale;
+              const pan = csViewport.getPan?.() ?? [0, 0];
+              if (
+                Math.abs((zoom || 0) - cached.zoom) > 0.01 ||
+                Math.abs((pan[0] || 0) - cached.panX) + Math.abs((pan[1] || 0) - cached.panY) > 0.5
+              ) {
+                trimDone = true;
+                return;
+              }
+            }
+
+            if (!autoTrimBorders(csViewport)) {
+              return; // not ready yet; retry on next render
+            }
+
+            trimDone = true;
+            autoTrimStateCache.set(displaySetKey, {
+              zoom: csViewport.getZoom?.() ?? 0,
+              panX: csViewport.getPan?.()?.[0] || 0,
+              panY: csViewport.getPan?.()?.[1] || 0,
+            });
+          } catch (error) {
+            console.warn('Auto-trim borders failed:', error);
+          }
+        }, 100);
+      };
+
+      element.addEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+      return () => element.removeEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+    }, [viewportId, displaySets, extensionManager]);
 
     const Notification = customizationService.getCustomization('ui.notificationComponent');
 

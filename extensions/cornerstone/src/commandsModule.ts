@@ -30,6 +30,7 @@ import {
   callInputDialog,
 } from '@ohif/extension-default';
 import toggleImageSliceSync from './utils/imageSliceSync/toggleImageSliceSync';
+import { autoTrimBorders } from './utils/autoTrimBorders';
 // Sanctioned flag read: RTSTRUCT contour hydration pins the referenced image to
 // stack mode on the native ("next") path, a decision made before a target viewport exists.
 import { getHydrationViewportTypeForModality } from './utils/nextViewportPolicies';
@@ -2488,6 +2489,13 @@ function commandsModule({
     },
     setToolEnabled: {
       commandFn: actions.setToolEnabled,
+    },
+    autoTrimBorders: {
+      commandFn: ({ viewportId: viewportIdParam }) => {
+        const { activeViewportId } = viewportGridService.getState();
+        const viewportId = viewportIdParam || activeViewportId;
+        return autoTrimBorders(cornerstoneViewportService.getCornerstoneViewport(viewportId));
+      },
     },
     rotateViewportCW: {
       commandFn: actions.rotateViewportBy,
