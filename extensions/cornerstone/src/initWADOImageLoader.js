@@ -5,6 +5,7 @@ import {
 } from '@cornerstonejs/core/loaders';
 import dicomImageLoader from '@cornerstonejs/dicom-image-loader';
 import { errorHandler, utils } from '@ohif/core';
+import { attachStallWatchdog } from './utils/imageLoadRecovery';
 
 const { registerVolumeLoader } = volumeLoader;
 
@@ -25,7 +26,15 @@ export default function initWADOImageLoader(
       Math.max(navigator.hardwareConcurrency - 1, 1),
       appConfig.maxNumberOfWebWorkers
     ),
-    beforeSend: function (xhr) {
+    beforeSend: function (xhr, imageId) {
+      // Abort transfers that stall mid-flight (dead client connections on
+      // large frames otherwise hang forever and leave the image blank for
+      // the whole session — the failure path in init.tsx then retries them).
+      attachStallWatchdog(xhr, imageId, {
+        stallTimeoutMs: appConfig.imageLoadStallTimeoutMs ?? 90000,
+        maxDurationMs: appConfig.imageLoadMaxDurationMs ?? 600000,
+      });
+
       //TODO should be removed in the future and request emitted by DicomWebDataSource
       const sourceConfig = extensionManager.getActiveDataSource()?.[0].getConfig() ?? {};
       const headers = userAuthenticationService.getAuthorizationHeader();
