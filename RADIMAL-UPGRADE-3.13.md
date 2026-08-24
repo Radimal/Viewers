@@ -150,7 +150,7 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
         compatibility; ported to
         extensions/cornerstone/src/utils/imageSliceSync/autoImageSliceSync.ts)
         and the NotificationProvider autoClose fix (activated by route-init's
-        persistent error notifications). Remaining: Wave 3.
+        persistent error notifications). Wave 3 — DONE 2026-08-18 (CR/DX auto-VOI, collimation auto-trim, prefs modal mouse bindings + zoom speed; wheel-tool UI still parked on the zoom verdict). Phase 3 code complete — staging verification next.
       - Wave 1 (trivial, no decisions): DeferredPromise fix in
         retrieveMetadataLoaderAsync (bug still live upstream); error-handler
         guards in cornerstone init.tsx + initWADOImageLoader (TypeError on
