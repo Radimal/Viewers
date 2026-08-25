@@ -10,10 +10,16 @@ import { capturePostHogEvent } from './posthog';
  * TTFB, and transfer-size percentiles. Resource timing is observational only:
  * nothing here wraps fetch or can affect image loading.
  *
- * transferSize/TTFB detail requires same-origin frames (or Timing-Allow-Origin),
- * which holds for our clusters where the viewer and dicom-web share a host;
- * entries without that detail still contribute duration and are counted in
- * `opaque_frames` instead of the cached/network split.
+ * transferSize/TTFB detail requires same-origin frames or `Timing-Allow-Origin`.
+ * Frames are NOT same-origin: the viewer runs on veg-view / view.radimal.ai while
+ * frames come from the CloudFront hostnames, so this depends entirely on the TAO
+ * header (radimal-terraform #366 / Asana T29). Note that
+ * `Access-Control-Allow-Origin` — which these responses do send — is a separate
+ * grant and does NOT unlock timing detail. Until TAO ships, `responseStart` and
+ * `transferSize` are 0 for every frame and every request lands in
+ * `opaque_frames`; duration percentiles are unaffected either way.
+ *
+ * `opaque_frames == frames` is the canary for TAO having been lost again.
  */
 
 const FRAME_URL_REGEX = /\/dicom-web\/studies\/([^/]+)\/[^?#]*\/frames\//;
@@ -26,7 +32,9 @@ type StudyStats = {
   durations: number[];
   ttfbs: number[];
   networkBytes: number;
-  networkMs: number;
+  // [start, end) of each network fetch, in performance-timeline ms. Frames are
+  // fetched concurrently, so these overlap and must be unioned rather than summed.
+  networkSpans: Array<[number, number]>;
   cachedFrames: number;
   networkFrames: number;
   opaqueFrames: number;
@@ -42,7 +50,7 @@ function newStudyStats(): StudyStats {
     durations: [],
     ttfbs: [],
     networkBytes: 0,
-    networkMs: 0,
+    networkSpans: [],
     cachedFrames: 0,
     networkFrames: 0,
     opaqueFrames: 0,
@@ -89,7 +97,7 @@ function recordEntry(entry: PerformanceResourceTiming): void {
     } else {
       stats.networkFrames += 1;
       stats.networkBytes += entry.transferSize;
-      stats.networkMs += entry.duration;
+      stats.networkSpans.push([entry.startTime, entry.startTime + entry.duration]);
       stats.ttfbs.push(entry.responseStart - entry.startTime);
     }
   } else {
@@ -97,11 +105,40 @@ function recordEntry(entry: PerformanceResourceTiming): void {
   }
 }
 
+/**
+ * Wall-clock milliseconds during which at least one network fetch was in flight.
+ *
+ * The loader runs up to `maxNumRequests.interaction` frames concurrently (20 in
+ * the deployed config) multiplexed over a single HTTP/2 connection, so each
+ * entry's `duration` spans the same window. Summing them overcounts elapsed time
+ * by roughly the concurrency factor and understates throughput by the same
+ * factor; the union of the intervals is the actual transfer window.
+ */
+function activeMs(spans: Array<[number, number]>): number {
+  if (!spans.length) {
+    return 0;
+  }
+  const sorted = spans.slice().sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let [start, end] = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    const [s, e] = sorted[i];
+    if (s > end) {
+      total += end - start;
+      [start, end] = [s, e];
+    } else if (e > end) {
+      end = e;
+    }
+  }
+  return total + (end - start);
+}
+
 function flush(reason: string): void {
   _pending.forEach((stats, studyInstanceUid) => {
     try {
       const durations = stats.durations.slice().sort((a, b) => a - b);
       const ttfbs = stats.ttfbs.slice().sort((a, b) => a - b);
+      const networkMs = activeMs(stats.networkSpans);
       capturePostHogEvent('frame_download_stats', {
         study_instance_uid: studyInstanceUid,
         cluster: window.location.host,
@@ -118,9 +155,10 @@ function flush(reason: string): void {
         p50_ttfb_ms: ttfbs.length ? Math.round(quantile(ttfbs, 0.5)) : null,
         max_ttfb_ms: ttfbs.length ? Math.round(ttfbs[ttfbs.length - 1]) : null,
         network_bytes: stats.networkBytes,
-        // Effective per-connection throughput while frames were in flight.
-        network_kbps:
-          stats.networkMs > 0 ? Math.round((stats.networkBytes * 8) / stats.networkMs) : null,
+        // Throughput over the wall-clock window in which frames were in flight —
+        // the pipe, not one request's share of it. See activeMs().
+        network_kbps: networkMs > 0 ? Math.round((stats.networkBytes * 8) / networkMs) : null,
+        network_active_ms: Math.round(networkMs),
       });
     } catch (e) {
       console.warn('[PostHog] frame_download_stats capture failed', e);
