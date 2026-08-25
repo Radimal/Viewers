@@ -41,6 +41,10 @@ import OpenIdConnectRoutes from './utils/OpenIdConnectRoutes';
 import { ShepherdJourneyProvider } from 'react-shepherd';
 import { initPostHog, posthog } from './utils/posthog';
 import { startPostHogEventBridge, stopPostHogEventBridge } from './utils/posthogEventBridge';
+import {
+  startFrameDownloadTelemetry,
+  stopFrameDownloadTelemetry,
+} from './utils/frameDownloadTelemetry';
 
 let commandsManager: CommandsManager,
   extensionManager: ExtensionManager,
@@ -72,6 +76,7 @@ function App({
   const [init, setInit] = useState(null);
   useEffect(() => {
     initPostHog(config?.posthog);
+    startFrameDownloadTelemetry();
     const run = async () => {
       appInit(config, defaultExtensions, defaultModes).then(setInit).catch(console.error);
     };
@@ -85,6 +90,7 @@ function App({
     if (typeof window !== 'undefined') {
       window.cacheManager = cacheManager;
     }
+    return () => stopFrameDownloadTelemetry();
   }, []);
 
   useEffect(() => {
