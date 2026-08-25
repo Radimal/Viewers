@@ -51,6 +51,9 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
     session_recording: {
       maskAllInputs: false,
       maskInputOptions: { password: true },
+      // ponytail: canvas capture at 2fps/0.3 quality so replays show the DICOM
+      // viewport without competing with the render budget. Raise if too choppy.
+      captureCanvas: { recordCanvas: true, canvasFps: 2, canvasQuality: '0.3' },
     },
     loaded: ph => {
       // Expose for console debugging in DevTools.

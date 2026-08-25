@@ -407,7 +407,6 @@ function commandsModule({
     return false;
   };
 
-
   const { measurementServiceSource } = this;
 
   function _getActiveViewportEnabledElement() {
@@ -731,18 +730,11 @@ function commandsModule({
      * @see ViewportOverlay and CustomizableViewportOverlay components
      */
     toggleOverlays: () => {
-      console.log('[HOTKEYS] toggleOverlays command executed (cornerstone)');
       const overlays = document.getElementsByClassName('viewport-overlay');
-      console.log(`[HOTKEYS] Found ${overlays.length} overlay elements with class 'viewport-overlay'`, overlays);
-      
       for (let i = 0; i < overlays.length; i++) {
         const overlay = overlays.item(i);
-        const wasHidden = overlay.classList.contains('hidden');
         overlay.classList.toggle('hidden');
-        console.log(`[HOTKEYS] Overlay ${i}: ${wasHidden ? 'showing' : 'hiding'}`, overlay);
       }
-      
-      console.log('[HOTKEYS] toggleOverlays command completed');
     },
 
     setViewportWindowLevel({ viewportId, window, level }) {
