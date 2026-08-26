@@ -75,8 +75,12 @@ function App({
 }) {
   const [init, setInit] = useState(null);
   useEffect(() => {
-    initPostHog(config?.posthog);
+    // Before initPostHog: posthog-js registers its own `pagehide` handler during
+    // init(), and same-type listeners fire in registration order. Registering
+    // ours second would queue the final flush *after* posthog had already
+    // drained its request queue, and that event would never be sent.
     startFrameDownloadTelemetry();
+    initPostHog(config?.posthog);
     const run = async () => {
       appInit(config, defaultExtensions, defaultModes).then(setInit).catch(console.error);
     };

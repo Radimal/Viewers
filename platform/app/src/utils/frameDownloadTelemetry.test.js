@@ -134,6 +134,57 @@ describe('frameDownloadTelemetry', () => {
     expect(capturePostHogEvent).not.toHaveBeenCalled();
   });
 
+  it('measures throughput over the wall clock, not the sum of concurrent durations', () => {
+    // 20 frames x 13.25MB fetched concurrently over one HTTP/2 connection in 20s.
+    // Each entry's duration spans the whole window, so summing them would
+    // overcount elapsed time 20x and understate throughput by the same factor.
+    const N = 20;
+    const BYTES = 13_250_340;
+    const WALL_MS = 20_000;
+    emit(
+      Array.from({ length: N }, (_, i) =>
+        frameEntry({
+          name: `${FRAME_BASE}/${i}`,
+          startTime: 1000,
+          duration: WALL_MS,
+          responseStart: 1050,
+          transferSize: BYTES,
+        })
+      )
+    );
+    flushInterval();
+
+    const [, props] = capturePostHogEvent.mock.calls[0];
+    expect(props.network_frames).toBe(N);
+    expect(props.network_active_ms).toBe(WALL_MS);
+    // bits / ms === kbit/s
+    expect(props.network_kbps).toBe(Math.round((N * BYTES * 8) / WALL_MS));
+  });
+
+  it('excludes idle gaps between bursts from the active window', () => {
+    // Two 100ms bursts separated by a 5s gap: 200ms active, not 5.2s.
+    emit([
+      frameEntry({ startTime: 1000, duration: 100, responseStart: 1010 }),
+      frameEntry({ name: `${FRAME_BASE}/2`, startTime: 1050, duration: 50, responseStart: 1060 }),
+      frameEntry({ name: `${FRAME_BASE}/3`, startTime: 6100, duration: 100, responseStart: 6110 }),
+    ]);
+    flushInterval();
+
+    const [, props] = capturePostHogEvent.mock.calls[0];
+    expect(props.network_active_ms).toBe(200);
+  });
+
+  it('reports null throughput when no frame had readable timing detail', () => {
+    // The cross-origin/no-TAO case: responseStart 0 => opaque, no spans.
+    emit([frameEntry({ responseStart: 0, transferSize: 0 })]);
+    flushInterval();
+
+    const [, props] = capturePostHogEvent.mock.calls[0];
+    expect(props.opaque_frames).toBe(1);
+    expect(props.network_kbps).toBeNull();
+    expect(props.network_active_ms).toBe(0);
+  });
+
   it('flushes pending stats on stop', () => {
     emit([frameEntry()]);
     stopFrameDownloadTelemetry();
