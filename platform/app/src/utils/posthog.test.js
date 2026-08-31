@@ -42,11 +42,16 @@ const withEnv = async (overrides, fn) => {
 const initFresh = ({
   visibilityState = 'visible',
   commitHash,
+  buildTime,
   hideAfterEval = false,
   visibleAgainBeforeInit = false,
 } = {}) =>
   withEnv(
-    { NODE_ENV: 'production', ...(commitHash === undefined ? {} : { COMMIT_HASH: commitHash }) },
+    {
+      NODE_ENV: 'production',
+      ...(commitHash === undefined ? {} : { COMMIT_HASH: commitHash }),
+      ...(buildTime === undefined ? {} : { BUILD_TIME: buildTime }),
+    },
     async () => {
       Object.defineProperty(document, 'visibilityState', {
         value: visibilityState,
@@ -57,9 +62,12 @@ const initFresh = ({
       await jest.isolateModulesAsync(async () => {
         const posthog = (await import('posthog-js')).default;
         mod = await import('./posthog');
-        // discarded instances from earlier cases, whose visibilitychange
+        // Plain assignment rather than jest.spyOn: restoreAllMocks would re-arm
+        // the discarded instances from earlier cases, whose visibilitychange
         // listeners are still attached to the shared jsdom document, and they
-        // would then reach the real posthog.capture during later tests.
+        // would then reach the REAL posthog.capture — XHRs and retry timers
+        // inside unrelated tests. With nothing to restore they stay stubbed and
+        // push into their own orphaned calls array, which is harmless.
         const realRegister = posthog.register.bind(posthog);
         posthog.register = p => {
           calls.push(['register', p]);
@@ -117,6 +125,11 @@ describe('_initPostHogUnsafe wiring', () => {
 
   // webpack.base.js reads commit.txt without trimming, unlike webpack.pwa.js,
   // so /version.json and the bundle would otherwise disagree by a newline.
+  it('reports the baked build time when one is present', async () => {
+    const event = viewerLoaded(await initFresh({ buildTime: '2026-08-31T12:00:00Z' }));
+    expect(event[1].build_time).toBe('2026-08-31T12:00:00Z');
+  });
+
   it('trims the baked commit hash', async () => {
     const event = viewerLoaded(await initFresh({ commitHash: '  abc123def\n' }));
     expect(event[1].build_commit).toBe('abc123def');
@@ -156,11 +169,17 @@ describe('_initPostHogUnsafe wiring', () => {
       setVisibility('hidden');
       const events = hiddenEvents(calls);
       expect(events).toHaveLength(1);
-      // Strictly greater than zero: >= 0 also passes for a hardcoded 0 or a
-      // never-assigned counter, which is the realistic regression here.
+      // Bounded on both sides. >= 0 passes for a hardcoded 0; no upper bound
+      // passes for Date.now(), whose ~1.79e12 would put every session on the
+      // "reader gave up" side of the threshold the analysis query uses.
       expect(events[0][1].ms_since_navigation_start).toBeGreaterThan(0);
+      expect(events[0][1].ms_since_navigation_start).toBeLessThan(60_000);
       // Routed through the shared helper, so build identity rides along.
       expect(events[0][1]).toHaveProperty('build_commit');
+      // app is a super property; if this event were emitted before register,
+      // every dashboard filtering app = viewer would silently drop it — and it
+      // would drop it for the background-tab cohort specifically.
+      expect(events[0][2]).toBe('viewer');
     });
 
     it('does not fire when the tab merely becomes visible', async () => {
@@ -169,9 +188,6 @@ describe('_initPostHogUnsafe wiring', () => {
       expect(hiddenEvents(calls)).toHaveLength(0);
     });
 
-    // The listener is armed at module eval but PostHog is not ready until the
-    // App.tsx mount effect. A hide in that gap must not consume the one shot,
-    // or the session reads foreground on hidden_at_boot AND viewer_hidden.
     // The listener is armed at module eval but PostHog is not ready until the
     // App.tsx mount effect. visibilitychange fires only on transitions, so a
     // reader who backgrounds in that gap and never comes back would otherwise
@@ -182,13 +198,23 @@ describe('_initPostHogUnsafe wiring', () => {
       expect(hiddenEvents(calls)).toHaveLength(1);
     });
 
-    // Pins the isReady() check to its remaining job. If it were dropped, this
-    // pre-init hide would unsubscribe the listener while the event itself was
-    // still being no-ope'd, and the reader's real backgrounding later in the
-    // session would go unrecorded.
-    it('stays armed when a pre-init hide ended before PostHog was ready', async () => {
+    // The blind spot this closes: a reader who backgrounds during bundle
+    // download and returns before the App.tsx mount effect. The listener cannot
+    // report it (PostHog is not loaded) and visibilitychange never fires again
+    // for that hide, so before the latch this session read foreground on
+    // hidden_at_boot, on viewer_hidden, and on hidden_during_load — while
+    // having been throttled through the longest stretch of the load.
+    it('reports a pre-init hide that ended before PostHog was ready', async () => {
       const { calls } = await initFresh({ hideAfterEval: true, visibleAgainBeforeInit: true });
-      expect(hiddenEvents(calls)).toHaveLength(0);
+      const events = hiddenEvents(calls);
+      expect(events).toHaveLength(1);
+      // The latched timestamp, not the time of the flush at init.
+      expect(events[0][1].ms_since_navigation_start).toBeGreaterThan(0);
+      expect(events[0][1].ms_since_navigation_start).toBeLessThan(60_000);
+    });
+
+    it('does not report that hide a second time when the reader backgrounds again', async () => {
+      const { calls } = await initFresh({ hideAfterEval: true, visibleAgainBeforeInit: true });
       setVisibility('hidden');
       expect(hiddenEvents(calls)).toHaveLength(1);
     });
