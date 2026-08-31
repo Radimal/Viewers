@@ -8,6 +8,27 @@ const IMAGE_TIMING_KEYS = [];
 // is what distinguishes switch_type 'in_app' from 'reload'.
 let hasCapturedFirstImageThisPageLoad = false;
 
+// A hidden tab suspends requestAnimationFrame, so IMAGE_RENDERED can fire
+// minutes — even hours — after the study was actually delivered, while
+// performance.now() keeps counting. Those samples measure when the clinician
+// came back to the tab, not how fast the study loaded.
+let lastVisibilityChangeAt = 0;
+document.addEventListener('visibilitychange', () => {
+  lastVisibilityChangeAt = performance.now();
+});
+
+/**
+ * True when the tab was hidden at any point in [startedAt, now]: either it is
+ * hidden right now, or visibility flipped after the timer started — any flip
+ * inside the window means one side of it was hidden.
+ * Reported as `hidden_during_load`; filter on it at query time.
+ * ponytail: one page-level timestamp, no per-timer bookkeeping — only one
+ * first-image timer is ever in flight.
+ */
+export function wasHiddenDuringWindow(startedAt: number): boolean {
+  return document.visibilityState !== 'visible' || lastVisibilityChangeAt > startedAt;
+}
+
 const imageTiming = {
   viewportsWaiting: 0,
 };
@@ -62,6 +83,9 @@ function imageRenderedListener(evt) {
  * clinician-perceived study-open → first-image-on-screen time. Fires once per
  * study load: only while the STUDY_TO_FIRST_IMAGE timer is still running, i.e.
  * before the log.timeEnd() call below this one stops it for later viewports.
+ * Samples whose measured window overlapped a hidden tab are flagged
+ * `hidden_during_load` — see wasHiddenDuringWindow above. They measure
+ * time-until-refocus, not load latency, and must be excluded at query time.
  * No patient data in the properties.
  */
 function captureFirstImageRendered(evt) {
@@ -78,6 +102,15 @@ function captureFirstImageRendered(evt) {
       modality: getRenderedModality(evt),
       cluster: window.location.host,
       switch_type,
+      // Flagged, not dropped. A backgrounded tab measures time-until-refocus
+      // (seen up to 1.8h), so percentile and rate tiles must exclude these —
+      // the `secs >= 0 AND secs < 600` bound every first_image_rendered
+      // insight already carries removes them from numerator and denominator
+      // alike. Dropping instead would emit no event at all, which is
+      // indistinguishable from "the viewer never rendered" — the signal we
+      // now use to judge whether backgrounded tabs explain the never-render
+      // rate. A guard must not manufacture the thing it is measuring.
+      hidden_during_load: wasHiddenDuringWindow(startedAt),
     });
   } catch {
     // Never let analytics break rendering.

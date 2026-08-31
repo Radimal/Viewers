@@ -74,7 +74,14 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
         console.warn('[PostHog] startSessionRecording failed', e);
       }
       try {
-        ph.capture('viewer_loaded');
+        // A viewer_loaded with no matching first_image_rendered is how we count
+        // opens that never painted an image. Without this property there is
+        // nothing to separate a case opened into a background tab — where the
+        // browser throttles the load and nothing paints until refocus — from a
+        // genuine failure to render.
+        ph.capture('viewer_loaded', {
+          hidden_at_load: document.visibilityState !== 'visible',
+        });
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }
