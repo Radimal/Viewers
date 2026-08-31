@@ -37,17 +37,46 @@ const BUILD_PROPS = {
 // initPostHog is called from an App.tsx useEffect, and `loaded` is invoked
 // synchronously from init(). A snapshot, not a latch over later
 // visibilitychange events — a latch would also flag a foreground load whose
-// user tabbed away during boot.
+// user tabbed away during boot, and `viewer_hidden` below covers that case
+// without conflating the two.
 //
-// READ IT NARROWLY. This answers "was this case opened into a background tab",
-// and only that. A session that loads in the foreground and is backgrounded a
-// second later reports false, so a low hidden_at_load rate among never-render
-// sessions does NOT license the conclusion that background tabs fail to explain
-// the veg-view.prod-1 vs view.radimal.ai gap. Settling that needs the pagehide
-// event tracked in Asana 1218030829553758, not this boolean.
-// ponytail: also blind to hiding before the bundle evaluates. An inline stamp
-// in index.html would close that, if the numbers ever suggest it matters.
-const HIDDEN_AT_LOAD = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+// Named for the boot instant, NOT `hidden_during_load` on first_image_rendered:
+// that one is an interval flag over the measured window, this one is a point
+// sample at t=0. Different events, different questions — the two-character
+// difference in the old name was an invitation to filter on the wrong one.
+// ponytail: blind to hiding before the bundle evaluates. An inline stamp in
+// index.html would close that, if the numbers ever suggest it matters.
+const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+
+// The other half of the never-render question. `hidden_at_boot` only catches
+// tabs that were ALREADY hidden; this fires once for tabs backgrounded after
+// that, which is the case a point sample structurally cannot see. Together they
+// let a never-render query separate throttling from real failure:
+//
+//   viewer_loaded AND NOT first_image_rendered
+//                 AND NOT hidden_at_boot AND NOT viewer_hidden
+//
+// ms_since_load is performance.now(), i.e. ms since navigation start.
+//
+// One-shot: only the first backgrounding matters for that query, and an
+// unbounded listener on a viewer left open all day is noise. But the isReady()
+// check has to come BEFORE the listener unsubscribes, or a tab backgrounded in
+// the gap between bundle eval and the App.tsx mount effect would both drop the
+// event (capturePostHogEvent no-ops when PostHog has not loaded) and burn the
+// one shot — leaving a session that was genuinely hidden looking foreground on
+// both properties. Staying armed costs one clause.
+// ponytail: the first hide's timestamp is still lost in that window. Buffering
+// it until init would recover it; not worth the extra state for tens of ms.
+if (typeof document !== 'undefined') {
+  const onFirstHide = () => {
+    if (document.visibilityState === 'visible' || !isReady()) {
+      return;
+    }
+    document.removeEventListener('visibilitychange', onFirstHide);
+    capturePostHogEvent('viewer_hidden', { ms_since_load: Math.round(performance.now()) });
+  };
+  document.addEventListener('visibilitychange', onFirstHide);
+}
 
 function isReady(): boolean {
   return typeof window !== 'undefined' && Boolean((posthog as { __loaded?: boolean }).__loaded);
@@ -128,7 +157,7 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
         // Routed through the shared helper so BUILD_PROPS is attached in
         // exactly one place. Safe this early: posthog sets __loaded at the top
         // of init(), before it invokes this callback, so isReady() holds.
-        capturePostHogEvent('viewer_loaded', { hidden_at_load: HIDDEN_AT_LOAD });
+        capturePostHogEvent('viewer_loaded', { hidden_at_boot: HIDDEN_AT_BOOT });
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }

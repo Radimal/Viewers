@@ -122,11 +122,11 @@ describe('_initPostHogUnsafe wiring', () => {
     }
   );
 
-  it('reports hidden_at_load from the visibility state at bundle eval', async () => {
-    expect(viewerLoaded(await initFresh({ visibilityState: 'visible' }))[1].hidden_at_load).toBe(
+  it('reports hidden_at_boot from the visibility state at bundle eval', async () => {
+    expect(viewerLoaded(await initFresh({ visibilityState: 'visible' }))[1].hidden_at_boot).toBe(
       false
     );
-    expect(viewerLoaded(await initFresh({ visibilityState: 'hidden' }))[1].hidden_at_load).toBe(
+    expect(viewerLoaded(await initFresh({ visibilityState: 'hidden' }))[1].hidden_at_boot).toBe(
       true
     );
   });
@@ -137,6 +137,48 @@ describe('_initPostHogUnsafe wiring', () => {
     const event = viewerLoaded(
       await initFresh({ visibilityState: 'visible', hideAfterEval: true })
     );
-    expect(event[1].hidden_at_load).toBe(false);
+    expect(event[1].hidden_at_boot).toBe(false);
+  });
+
+  describe('viewer_hidden', () => {
+    const hiddenEvents = calls => calls.filter(c => c[0] === 'viewer_hidden');
+
+    it('fires once when the tab is first backgrounded, with ms_since_load', async () => {
+      const { calls } = await initFresh();
+      setVisibility('hidden');
+      const events = hiddenEvents(calls);
+      expect(events).toHaveLength(1);
+      expect(typeof events[0][1].ms_since_load).toBe('number');
+      expect(events[0][1].ms_since_load).toBeGreaterThanOrEqual(0);
+      // Routed through the shared helper, so build identity rides along.
+      expect(events[0][1]).toHaveProperty('build_commit');
+    });
+
+    it('does not fire when the tab merely becomes visible', async () => {
+      const { calls } = await initFresh();
+      setVisibility('visible');
+      expect(hiddenEvents(calls)).toHaveLength(0);
+    });
+
+    // The listener is armed at module eval but PostHog is not ready until the
+    // App.tsx mount effect. A hide in that gap must not consume the one shot,
+    // or the session reads foreground on hidden_at_boot AND viewer_hidden.
+    it('stays armed when the tab is hidden before PostHog is ready', async () => {
+      const { calls } = await initFresh({ hideAfterEval: true });
+      expect(hiddenEvents(calls)).toHaveLength(0);
+      setVisibility('visible');
+      setVisibility('hidden');
+      expect(hiddenEvents(calls)).toHaveLength(1);
+    });
+
+    // A viewer left open all day would otherwise emit one of these per tab
+    // switch; only the first backgrounding answers the never-render query.
+    it('does not fire again on later backgroundings', async () => {
+      const { calls } = await initFresh();
+      setVisibility('hidden');
+      setVisibility('visible');
+      setVisibility('hidden');
+      expect(hiddenEvents(calls)).toHaveLength(1);
+    });
   });
 });
