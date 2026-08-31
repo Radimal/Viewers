@@ -1,48 +1,71 @@
-// posthog-js is mocked so importing this module doesn't pull the real SDK into
-// jsdom. Only the module-scope visibility latch is under test here.
-jest.mock('posthog-js', () => ({
-  default: { init: () => {}, register: () => {}, capture: () => {} },
-  __esModule: true,
-}));
+// Guards the wiring inside _initPostHogUnsafe, using the real posthog-js so the
+// synchronous-`loaded` behaviour under test is the SDK's actual behaviour and
+// not a mock's guess at it.
+const KEY = 'phc_test_key_0000000000000000000000';
+const HOST = 'http://127.0.0.1:1';
 
-describe('hidden_at_load latch', () => {
-  const setVisibility = state => {
-    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  };
+// initPostHog no-ops unless NODE_ENV is production; isProductionBuild() reads it
+// at call time, so setting it here is enough.
+const withProdEnv = async fn => {
+  const prev = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    return await fn();
+  } finally {
+    process.env.NODE_ENV = prev;
+  }
+};
 
-  // The latch is module state, so each case needs a fresh module registry to
-  // control what visibilityState was at import (= page load) time.
-  const loadWith = async state => {
-    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
-    let mod;
-    await jest.isolateModulesAsync(async () => {
-      mod = await import('./posthog');
+// Fresh module registry per case: posthog-js refuses to re-init, and the
+// hidden_at_load snapshot is taken once at module eval.
+const initFresh = (visibilityState = 'visible') =>
+  withProdEnv(async () => {
+    Object.defineProperty(document, 'visibilityState', {
+      value: visibilityState,
+      configurable: true,
     });
-    return mod;
-  };
-
-  it('is false for a tab that loaded visible and stayed visible', async () => {
-    const { wasHiddenBeforeLoad } = await loadWith('visible');
-    expect(wasHiddenBeforeLoad()).toBe(false);
+    const calls = [];
+    await jest.isolateModulesAsync(async () => {
+      const posthog = (await import('posthog-js')).default;
+      const { initPostHog } = await import('./posthog');
+      jest.spyOn(posthog, 'register').mockImplementation(p => calls.push(['register', p]));
+      jest.spyOn(posthog, 'capture').mockImplementation((n, p) => calls.push([n, p]));
+      initPostHog({ apiKey: KEY, apiHost: HOST });
+    });
+    return calls;
   });
 
-  it('is true for a tab that was already hidden at load', async () => {
-    const { wasHiddenBeforeLoad } = await loadWith('hidden');
-    expect(wasHiddenBeforeLoad()).toBe(true);
+describe('_initPostHogUnsafe wiring', () => {
+  // Regression guard: posthog invokes `loaded` synchronously from inside
+  // init(), so registering after init() returns leaves viewer_loaded without
+  // `app`. That is invisible for returning users (super property is already in
+  // localStorage) and only breaks first visits, so nothing but an ordering
+  // assertion catches it.
+  it('registers app=viewer before capturing viewer_loaded', async () => {
+    const calls = await initFresh();
+    // posthog-js registers its own super properties ($initialization_time), so
+    // match on ours specifically rather than on the first register call.
+    const appRegister = calls.findIndex(c => c[0] === 'register' && c[1] && c[1].app === 'viewer');
+    const viewerLoaded = calls.findIndex(c => c[0] === 'viewer_loaded');
+    expect(appRegister).toBeGreaterThanOrEqual(0);
+    expect(viewerLoaded).toBeGreaterThanOrEqual(0);
+    expect(appRegister).toBeLessThan(viewerLoaded);
   });
 
-  // The regression this guards: reading visibilityState inside posthog's async
-  // `loaded` callback would report 'visible' here and lose the sample.
-  it('stays true after a tab hidden at load is focused before viewer_loaded', async () => {
-    const { wasHiddenBeforeLoad } = await loadWith('hidden');
-    setVisibility('visible');
-    expect(wasHiddenBeforeLoad()).toBe(true);
+  it('puts build identity on the event itself, not only in super properties', async () => {
+    const calls = await initFresh();
+    const props = calls.find(c => c[0] === 'viewer_loaded')[1];
+    expect(props).toHaveProperty('build_commit');
+    expect(props).toHaveProperty('build_time');
+    // No trailing whitespace: commit.txt is read untrimmed by webpack.base.js.
+    expect(props.build_commit).toBe(props.build_commit.trim());
   });
 
-  it('latches true when a visible tab is backgrounded before viewer_loaded', async () => {
-    const { wasHiddenBeforeLoad } = await loadWith('visible');
-    setVisibility('hidden');
-    expect(wasHiddenBeforeLoad()).toBe(true);
+  it('reports hidden_at_load from the visibility state at bundle eval', async () => {
+    const visible = await initFresh('visible');
+    expect(visible.find(c => c[0] === 'viewer_loaded')[1].hidden_at_load).toBe(false);
+
+    const hidden = await initFresh('hidden');
+    expect(hidden.find(c => c[0] === 'viewer_loaded')[1].hidden_at_load).toBe(true);
   });
 });

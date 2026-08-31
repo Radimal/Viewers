@@ -29,28 +29,20 @@ const BUILD_PROPS = {
   build_time: process.env.BUILD_TIME || null,
 };
 
-// Whether the tab has been hidden at any point before viewer_loaded fires.
-// Reading document.visibilityState inside posthog's `loaded` callback is too
-// late to answer "was this case opened into a background tab": `loaded` is
-// invoked from a promise chain after init() returns, so a tab opened hidden and
-// focused before then reads 'visible' while its load really was throttled —
-// the same point-in-time trap wasHiddenDuringWindow avoids for
-// first_image_rendered. Latch from module eval instead.
+// Was the tab already hidden when this bundle evaluated? Snapshotted here
+// rather than read inside posthog's `loaded` callback, which runs one React
+// mount later — initPostHog is called from an App.tsx useEffect, and `loaded`
+// is invoked synchronously from init() (posthog-core.js takes the non-segment
+// branch, `this._loaded()`, with no promise in between). Module eval is the
+// earliest point this module can observe, so it is the closest available proxy
+// for "was this case opened into a background tab".
+//
+// A snapshot, deliberately NOT a latch over later visibilitychange events: a
+// latch would also flag a foreground load whose user tabbed away during boot,
+// inflating the very background-tab cohort this property exists to isolate.
 // ponytail: still blind to hiding before the bundle evaluates. An inline stamp
 // in index.html would close that, if the numbers ever suggest it matters.
-let _hiddenBeforeLoad = typeof document !== 'undefined' && document.visibilityState !== 'visible';
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') {
-      _hiddenBeforeLoad = true;
-    }
-  });
-}
-
-/** Exported for the test that guards the latch; read as `hidden_at_load`. */
-export function wasHiddenBeforeLoad(): boolean {
-  return _hiddenBeforeLoad;
-}
+const HIDDEN_AT_LOAD = typeof document !== 'undefined' && document.visibilityState !== 'visible';
 
 function isReady(): boolean {
   return typeof window !== 'undefined' && Boolean((posthog as { __loaded?: boolean }).__loaded);
@@ -101,6 +93,17 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       captureCanvas: { recordCanvas: true, canvasFps: 2, canvasQuality: '0.3' },
     },
     loaded: ph => {
+      // MUST come before the viewer_loaded capture below. `loaded` is invoked
+      // synchronously from inside init(), so registering after init() returns
+      // is too late: viewer_loaded has already been captured. On a repeat visit
+      // the super property is still in localStorage and the loss is invisible,
+      // so the events that lose `app` are exactly the first-visit ones — the
+      // one-shot sessions the never-render cohort is made of.
+      try {
+        ph.register({ app: 'viewer' });
+      } catch (e) {
+        console.warn('[PostHog] register super properties failed', e);
+      }
       // Expose for console debugging in DevTools.
       (window as unknown as { posthog?: typeof posthog }).posthog = ph;
       // Start session recording for everyone — including anonymous users —
@@ -118,7 +121,7 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
         // browser throttles the load and nothing paints until refocus — from a
         // genuine failure to render.
         ph.capture('viewer_loaded', {
-          hidden_at_load: wasHiddenBeforeLoad(),
+          hidden_at_load: HIDDEN_AT_LOAD,
           ...BUILD_PROPS,
         });
       } catch (e) {
@@ -126,16 +129,6 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       }
     },
   });
-
-  // Registered here, synchronously after init() returns, NOT in the `loaded`
-  // callback: `loaded` is invoked from a promise chain, so it runs after the
-  // URL identify below and $identify would ship without `app`. Only `app` is a
-  // super property — build identity is per-event (see BUILD_PROPS).
-  try {
-    posthog.register({ app: 'viewer' });
-  } catch (e) {
-    console.warn('[PostHog] register super properties failed', e);
-  }
 
   // Expose the capture helper so extensions (which can't import from @ohif/app)
   // can still emit events. Optional-chained at call sites for safety.
