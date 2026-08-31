@@ -1,4 +1,5 @@
 import posthog from 'posthog-js';
+import { normalizeCommit } from './updateDetection';
 
 export type PostHogConfig = {
   apiKey?: string;
@@ -6,6 +7,50 @@ export type PostHogConfig = {
 };
 
 let _identifiedFromUrl = false;
+
+// Build identity of THIS bundle, baked in at compile time by DefinePlugin
+// (.webpack/webpack.base.js). Attached per-event in capturePostHogEvent rather
+// than registered as a PostHog super property: super properties live in
+// localStorage, which is shared across every tab on the origin, so the last tab
+// to init would relabel events emitted by the others. Two windows running
+// different builds side by side is a case this app explicitly supports — see
+// the header comment in ./updateDetection and the cacheManager that converges
+// it — so a per-event value is the only one that stays true.
+//
+// normalizeCommit trims: webpack.base.js reads commit.txt without trimming
+// (unlike webpack.pwa.js, which builds /version.json), and every other consumer
+// of COMMIT_HASH normalizes for that reason. 'local' is updateDetection's own
+// sentinel for "not a real deploy".
+const BUILD_PROPS = {
+  build_commit: normalizeCommit(process.env.COMMIT_HASH) || 'local',
+  // NOTE: build-*start* time (webpack config load), NOT the buildTime in
+  // /version.json, which is stamped at asset-emit time and is later by the
+  // whole build duration. These two never match — join on build_commit.
+  build_time: process.env.BUILD_TIME || null,
+};
+
+// Whether the tab has been hidden at any point before viewer_loaded fires.
+// Reading document.visibilityState inside posthog's `loaded` callback is too
+// late to answer "was this case opened into a background tab": `loaded` is
+// invoked from a promise chain after init() returns, so a tab opened hidden and
+// focused before then reads 'visible' while its load really was throttled —
+// the same point-in-time trap wasHiddenDuringWindow avoids for
+// first_image_rendered. Latch from module eval instead.
+// ponytail: still blind to hiding before the bundle evaluates. An inline stamp
+// in index.html would close that, if the numbers ever suggest it matters.
+let _hiddenBeforeLoad = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+      _hiddenBeforeLoad = true;
+    }
+  });
+}
+
+/** Exported for the test that guards the latch; read as `hidden_at_load`. */
+export function wasHiddenBeforeLoad(): boolean {
+  return _hiddenBeforeLoad;
+}
 
 function isReady(): boolean {
   return typeof window !== 'undefined' && Boolean((posthog as { __loaded?: boolean }).__loaded);
@@ -58,24 +103,6 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
     loaded: ph => {
       // Expose for console debugging in DevTools.
       (window as unknown as { posthog?: typeof posthog }).posthog = ph;
-      // Tags every event with app=viewer so dashboards can filter viewer
-      // activity apart from vet.radimal.ai (shared PostHog project).
-      try {
-        // `app` separates viewer traffic from vet.radimal.ai in the shared project.
-        // COMMIT_HASH / BUILD_TIME are baked into the bundle at compile time by
-        // DefinePlugin (.webpack/webpack.base.js) and are the same identity
-        // /version.json serves, so tagging every event with them makes "did this
-        // metric move because of a deploy" answerable in a query instead of by
-        // curling /version.json and guessing. Registered as super properties so
-        // they land on autocaptured events too, not just the ones we emit.
-        ph.register({
-          app: 'viewer',
-          build_commit: process.env.COMMIT_HASH || 'local',
-          build_time: process.env.BUILD_TIME || null,
-        });
-      } catch (e) {
-        console.warn('[PostHog] register super properties failed', e);
-      }
       // Start session recording for everyone — including anonymous users —
       // so we can debug user-reported issues (e.g. hotkey resets) regardless
       // of whether the user came in via vet.radimal.ai with a distinct_id.
@@ -91,13 +118,24 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
         // browser throttles the load and nothing paints until refocus — from a
         // genuine failure to render.
         ph.capture('viewer_loaded', {
-          hidden_at_load: document.visibilityState !== 'visible',
+          hidden_at_load: wasHiddenBeforeLoad(),
+          ...BUILD_PROPS,
         });
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }
     },
   });
+
+  // Registered here, synchronously after init() returns, NOT in the `loaded`
+  // callback: `loaded` is invoked from a promise chain, so it runs after the
+  // URL identify below and $identify would ship without `app`. Only `app` is a
+  // super property — build identity is per-event (see BUILD_PROPS).
+  try {
+    posthog.register({ app: 'viewer' });
+  } catch (e) {
+    console.warn('[PostHog] register super properties failed', e);
+  }
 
   // Expose the capture helper so extensions (which can't import from @ohif/app)
   // can still emit events. Optional-chained at call sites for safety.
@@ -151,7 +189,7 @@ export function capturePostHogEvent(
     return;
   }
   try {
-    posthog.capture(name, properties);
+    posthog.capture(name, { ...BUILD_PROPS, ...properties });
   } catch (e) {
     console.warn(`PostHog capture failed for "${name}"`, e);
   }
