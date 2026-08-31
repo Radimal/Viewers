@@ -31,6 +31,8 @@
     "dev:cornerstone": "yarn run dev",
     "build": "cross-env NODE_ENV=production webpack --progress --config .webpack/webpack.prod.js",
     "build:package-1": "yarn run build",
+    "test:unit": "jest --watchAll",
+    "test:unit:ci": "jest --ci --runInBand --collectCoverage --passWithNoTests",
     "start": "yarn run dev"
   },
   "peerDependencies": {
