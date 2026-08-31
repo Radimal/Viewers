@@ -49,33 +49,42 @@ const BUILD_PROPS = {
 const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilityState !== 'visible';
 
 // The other half of the never-render question. `hidden_at_boot` only catches
-// tabs that were ALREADY hidden; this fires once for tabs backgrounded after
-// that, which is the case a point sample structurally cannot see. Together they
-// let a never-render query separate throttling from real failure:
+// tabs that were ALREADY hidden; this fires once for a tab backgrounded after
+// that, which a point sample structurally cannot see.
 //
-//   viewer_loaded AND NOT first_image_rendered
-//                 AND NOT hidden_at_boot AND NOT viewer_hidden
+// USE THE ELAPSED TIME, NEVER MERE PRESENCE. Browsers fire visibilitychange →
+// hidden on tab close and on navigate-away, so a clinician who waits 40s on a
+// spinner and gives up emits this event too — with ms_since_navigation_start
+// around 40000. Treating "a viewer_hidden exists" as "this session was
+// throttled" therefore reclassifies the genuine failures as throttled ones and
+// concludes that background tabs explain everything. An early hide means
+// throttled; a late one means the reader gave up. The threshold, and the
+// session-level HogQL this needs (these are three separate events, and PostHog
+// stores booleans as the JSON strings 'true'/'false'), live in
+// __artifacts/viewer-slowness-detection.md — not reproducible in a filter row.
 //
-// ms_since_load is performance.now(), i.e. ms since navigation start.
+// Also not sufficient on its own: a headless mail-security link scanner loads
+// visible and never fires visibilitychange at all, so it lands in whatever
+// bucket "never hidden" maps to. The lifetime-render-count cohort filter has to
+// be applied alongside this, exactly as it is for the 14.0%/7.0% figures.
 //
-// One-shot: only the first backgrounding matters for that query, and an
-// unbounded listener on a viewer left open all day is noise. But the isReady()
-// check has to come BEFORE the listener unsubscribes, or a tab backgrounded in
-// the gap between bundle eval and the App.tsx mount effect would both drop the
-// event (capturePostHogEvent no-ops when PostHog has not loaded) and burn the
-// one shot — leaving a session that was genuinely hidden looking foreground on
-// both properties. Staying armed costs one clause.
-// ponytail: the first hide's timestamp is still lost in that window. Buffering
-// it until init would recover it; not worth the extra state for tens of ms.
+// One-shot: only the first backgrounding bears on the question, and a viewer
+// left open all day would otherwise emit one per tab switch.
+const captureFirstHide = () => {
+  // isReady() is checked BEFORE unsubscribing on purpose. capturePostHogEvent
+  // no-ops until PostHog has loaded, so unsubscribing first would drop the
+  // event AND spend the one shot.
+  if (typeof document === 'undefined' || document.visibilityState === 'visible' || !isReady()) {
+    return;
+  }
+  document.removeEventListener('visibilitychange', captureFirstHide);
+  capturePostHogEvent('viewer_hidden', {
+    ms_since_navigation_start: Math.round(performance.now()),
+  });
+};
+
 if (typeof document !== 'undefined') {
-  const onFirstHide = () => {
-    if (document.visibilityState === 'visible' || !isReady()) {
-      return;
-    }
-    document.removeEventListener('visibilitychange', onFirstHide);
-    capturePostHogEvent('viewer_hidden', { ms_since_load: Math.round(performance.now()) });
-  };
-  document.addEventListener('visibilitychange', onFirstHide);
+  document.addEventListener('visibilitychange', captureFirstHide);
 }
 
 function isReady(): boolean {
@@ -161,14 +170,22 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }
+      // If the tab went hidden between bundle eval and here, the listener above
+      // returned without firing (PostHog was not ready) and visibilitychange
+      // will not fire again unless the reader comes back — so the event would
+      // be lost outright, not delayed. Re-read live visibility now that it is
+      // ready. No-op when the tab is visible.
+      captureFirstHide();
     },
   });
 
   // Expose the capture helper so extensions (which can't import from @ohif/app)
   // can still emit events. Optional-chained at call sites for safety.
-  (window as unknown as {
-    __capturePostHogEvent?: (n: string, p?: Record<string, unknown>) => void;
-  }).__capturePostHogEvent = capturePostHogEvent;
+  (
+    window as unknown as {
+      __capturePostHogEvent?: (n: string, p?: Record<string, unknown>) => void;
+    }
+  ).__capturePostHogEvent = capturePostHogEvent;
 
   // Cross-app identity hand-off: vet.radimal.ai (and other entry points)
   // can append ?distinct_id=<id> when redirecting users into the viewer so
@@ -205,10 +222,7 @@ export function identifyPostHogUser(
   }
 }
 
-export function capturePostHogEvent(
-  name: string,
-  properties?: Record<string, unknown>
-): void {
+export function capturePostHogEvent(name: string, properties?: Record<string, unknown>): void {
   if (!isReady()) {
     if (isProductionBuild()) {
       console.warn(`PostHog not loaded; event "${name}" dropped`);

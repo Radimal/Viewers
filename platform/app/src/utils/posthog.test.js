@@ -39,7 +39,12 @@ const withEnv = async (overrides, fn) => {
  * `hideAfterEval` backgrounds the tab AFTER module eval but BEFORE init, which
  * is what separates a bundle-eval snapshot from a read at capture time.
  */
-const initFresh = ({ visibilityState = 'visible', commitHash, hideAfterEval = false } = {}) =>
+const initFresh = ({
+  visibilityState = 'visible',
+  commitHash,
+  hideAfterEval = false,
+  visibleAgainBeforeInit = false,
+} = {}) =>
   withEnv(
     { NODE_ENV: 'production', ...(commitHash === undefined ? {} : { COMMIT_HASH: commitHash }) },
     async () => {
@@ -52,16 +57,20 @@ const initFresh = ({ visibilityState = 'visible', commitHash, hideAfterEval = fa
       await jest.isolateModulesAsync(async () => {
         const posthog = (await import('posthog-js')).default;
         mod = await import('./posthog');
+        // discarded instances from earlier cases, whose visibilitychange
+        // listeners are still attached to the shared jsdom document, and they
+        // would then reach the real posthog.capture during later tests.
         const realRegister = posthog.register.bind(posthog);
-        jest.spyOn(posthog, 'register').mockImplementation(p => {
+        posthog.register = p => {
           calls.push(['register', p]);
           return realRegister(p);
-        });
-        jest
-          .spyOn(posthog, 'capture')
-          .mockImplementation((n, p) => calls.push([n, p, posthog.get_property('app')]));
+        };
+        posthog.capture = (n, p) => calls.push([n, p, posthog.get_property('app')]);
         if (hideAfterEval) {
           setVisibility('hidden');
+          if (visibleAgainBeforeInit) {
+            setVisibility('visible');
+          }
         }
         mod.initPostHog({ apiKey: KEY, apiHost: HOST });
       });
@@ -84,7 +93,6 @@ describe('_initPostHogUnsafe wiring', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
     // jsdom's document is shared file-wide; don't leave it hidden for whatever
     // test gets appended after this suite.
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
@@ -143,13 +151,14 @@ describe('_initPostHogUnsafe wiring', () => {
   describe('viewer_hidden', () => {
     const hiddenEvents = calls => calls.filter(c => c[0] === 'viewer_hidden');
 
-    it('fires once when the tab is first backgrounded, with ms_since_load', async () => {
+    it('fires once when the tab is first backgrounded, with ms_since_navigation_start', async () => {
       const { calls } = await initFresh();
       setVisibility('hidden');
       const events = hiddenEvents(calls);
       expect(events).toHaveLength(1);
-      expect(typeof events[0][1].ms_since_load).toBe('number');
-      expect(events[0][1].ms_since_load).toBeGreaterThanOrEqual(0);
+      // Strictly greater than zero: >= 0 also passes for a hardcoded 0 or a
+      // never-assigned counter, which is the realistic regression here.
+      expect(events[0][1].ms_since_navigation_start).toBeGreaterThan(0);
       // Routed through the shared helper, so build identity rides along.
       expect(events[0][1]).toHaveProperty('build_commit');
     });
@@ -163,9 +172,29 @@ describe('_initPostHogUnsafe wiring', () => {
     // The listener is armed at module eval but PostHog is not ready until the
     // App.tsx mount effect. A hide in that gap must not consume the one shot,
     // or the session reads foreground on hidden_at_boot AND viewer_hidden.
-    it('stays armed when the tab is hidden before PostHog is ready', async () => {
+    // The listener is armed at module eval but PostHog is not ready until the
+    // App.tsx mount effect. visibilitychange fires only on transitions, so a
+    // reader who backgrounds in that gap and never comes back would otherwise
+    // emit nothing at all — reading foreground on hidden_at_boot AND on
+    // viewer_hidden. init re-reads live visibility to recover it.
+    it('recovers a tab hidden before PostHog was ready, with no second transition', async () => {
       const { calls } = await initFresh({ hideAfterEval: true });
+      expect(hiddenEvents(calls)).toHaveLength(1);
+    });
+
+    // Pins the isReady() check to its remaining job. If it were dropped, this
+    // pre-init hide would unsubscribe the listener while the event itself was
+    // still being no-ope'd, and the reader's real backgrounding later in the
+    // session would go unrecorded.
+    it('stays armed when a pre-init hide ended before PostHog was ready', async () => {
+      const { calls } = await initFresh({ hideAfterEval: true, visibleAgainBeforeInit: true });
       expect(hiddenEvents(calls)).toHaveLength(0);
+      setVisibility('hidden');
+      expect(hiddenEvents(calls)).toHaveLength(1);
+    });
+
+    it('does not double-fire when that tab is later backgrounded again', async () => {
+      const { calls } = await initFresh({ hideAfterEval: true });
       setVisibility('visible');
       setVisibility('hidden');
       expect(hiddenEvents(calls)).toHaveLength(1);
