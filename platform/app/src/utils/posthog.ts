@@ -36,9 +36,9 @@ const BUILD_PROPS = {
 // inside posthog's `loaded` callback, which runs one React mount later:
 // initPostHog is called from an App.tsx useEffect, and `loaded` is invoked
 // synchronously from init(). A snapshot, not a latch over later
-// visibilitychange events — a latch would also flag a foreground load whose
-// user tabbed away during boot, and `viewer_hidden` below covers that case
-// without conflating the two.
+// visibilitychange events — a latch here would also flag a foreground load
+// whose user tabbed away during boot, which `viewer_hidden` below reports
+// separately with its own timestamp rather than folding into this flag.
 //
 // Named for the boot instant, NOT `hidden_during_load` on first_image_rendered:
 // that one is an interval flag over the measured window, this one is a point
@@ -61,7 +61,8 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilitySta
 // throttled; a late one means the reader gave up. The threshold, and the
 // session-level HogQL this needs (these are three separate events, and PostHog
 // stores booleans as the JSON strings 'true'/'false'), live in
-// __artifacts/viewer-slowness-detection.md — not reproducible in a filter row.
+// the radimal `__artifacts/viewer-slowness-detection.md` (a sibling repo, not
+// this one) — it is a session-level anti-join, not a filter row.
 //
 // Also not sufficient on its own: a headless mail-security link scanner loads
 // visible and never fires visibilitychange at all, so it lands in whatever
@@ -69,18 +70,33 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilitySta
 // be applied alongside this, exactly as it is for the 14.0%/7.0% figures.
 //
 // One-shot: only the first backgrounding bears on the question, and a viewer
-// left open all day would otherwise emit one per tab switch.
+// left open all day would otherwise emit one per tab switch. The latch is a
+// flag rather than just the unsubscribe, so calling this directly a second time
+// cannot double-emit — the property is structural, not positional.
+let firstHiddenAtMs: number | null = null;
+let hideReported = false;
+
 const captureFirstHide = () => {
-  // isReady() is checked BEFORE unsubscribing on purpose. capturePostHogEvent
-  // no-ops until PostHog has loaded, so unsubscribing first would drop the
-  // event AND spend the one shot.
-  if (typeof document === 'undefined' || document.visibilityState === 'visible' || !isReady()) {
+  if (hideReported) {
     return;
   }
+  // Record the hide even when PostHog is not loaded yet. capturePostHogEvent
+  // no-ops before load, and visibilitychange fires only on TRANSITIONS, so a
+  // reader who backgrounds during bundle download and returns before the
+  // App.tsx mount effect would otherwise never be recorded at all: the
+  // listener could not report it, and no further event would ever fire. This
+  // is the longest and most throttled stretch of a background-tab load, so it
+  // is the one that least deserves to be invisible. Latching the timestamp
+  // keeps it exact instead of approximating it at init.
+  if (firstHiddenAtMs === null && document.visibilityState !== 'visible') {
+    firstHiddenAtMs = Math.round(performance.now());
+  }
+  if (firstHiddenAtMs === null || !isReady()) {
+    return;
+  }
+  hideReported = true;
   document.removeEventListener('visibilitychange', captureFirstHide);
-  capturePostHogEvent('viewer_hidden', {
-    ms_since_navigation_start: Math.round(performance.now()),
-  });
+  capturePostHogEvent('viewer_hidden', { ms_since_navigation_start: firstHiddenAtMs });
 };
 
 if (typeof document !== 'undefined') {
@@ -170,11 +186,11 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }
-      // If the tab went hidden between bundle eval and here, the listener above
-      // returned without firing (PostHog was not ready) and visibilitychange
-      // will not fire again unless the reader comes back — so the event would
-      // be lost outright, not delayed. Re-read live visibility now that it is
-      // ready. No-op when the tab is visible.
+      // Flush a hide that the listener latched but could not report, because
+      // PostHog was not loaded yet. Covers both the tab still hidden now and
+      // the one that was hidden and came back before this point —
+      // visibilitychange would never fire again for the latter, so without this
+      // the event is lost outright rather than delayed. No-op if never hidden.
       captureFirstHide();
     },
   });
