@@ -1,5 +1,5 @@
 import posthog from 'posthog-js';
-import { normalizeCommit } from './updateDetection';
+import { isLocalCommit, normalizeCommit } from './updateDetection';
 
 export type PostHogConfig = {
   apiKey?: string;
@@ -19,27 +19,25 @@ let _identifiedFromUrl = false;
 //
 // normalizeCommit trims: webpack.base.js reads commit.txt without trimming
 // (unlike webpack.pwa.js, which builds /version.json), and every other consumer
-// of COMMIT_HASH normalizes for that reason. 'local' is updateDetection's own
-// sentinel for "not a real deploy".
+// of COMMIT_HASH normalizes for that reason. isLocalCommit owns what counts as
+// "not a real deploy" ('', 'local', 'dev') — collapsing them to one value keeps
+// local builds in a single PostHog bucket instead of splitting it.
 const BUILD_PROPS = {
-  build_commit: normalizeCommit(process.env.COMMIT_HASH) || 'local',
+  build_commit: isLocalCommit(process.env.COMMIT_HASH)
+    ? 'local'
+    : normalizeCommit(process.env.COMMIT_HASH),
   // NOTE: build-*start* time (webpack config load), NOT the buildTime in
   // /version.json, which is stamped at asset-emit time and is later by the
   // whole build duration. These two never match — join on build_commit.
   build_time: process.env.BUILD_TIME || null,
 };
 
-// Was the tab already hidden when this bundle evaluated? Snapshotted here
-// rather than read inside posthog's `loaded` callback, which runs one React
-// mount later — initPostHog is called from an App.tsx useEffect, and `loaded`
-// is invoked synchronously from init() (posthog-core.js takes the non-segment
-// branch, `this._loaded()`, with no promise in between). Module eval is the
-// earliest point this module can observe, so it is the closest available proxy
-// for "was this case opened into a background tab".
-//
-// A snapshot, deliberately NOT a latch over later visibilitychange events: a
-// latch would also flag a foreground load whose user tabbed away during boot,
-// inflating the very background-tab cohort this property exists to isolate.
+// Was the tab already hidden when this bundle evaluated? Read here and not
+// inside posthog's `loaded` callback, which runs one React mount later:
+// initPostHog is called from an App.tsx useEffect, and `loaded` is invoked
+// synchronously from init(). A snapshot, not a latch over later
+// visibilitychange events — a latch would also flag a foreground load whose
+// user tabbed away during boot.
 //
 // READ IT NARROWLY. This answers "was this case opened into a background tab",
 // and only that. A session that loads in the foreground and is backgrounded a
@@ -100,7 +98,9 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       captureCanvas: { recordCanvas: true, canvasFps: 2, canvasQuality: '0.3' },
     },
     loaded: ph => {
-      // MUST come before the viewer_loaded capture below. `loaded` is invoked
+      // Expose for console debugging in DevTools.
+      (window as unknown as { posthog?: typeof posthog }).posthog = ph;
+      // MUST stay above the viewer_loaded capture below. `loaded` is invoked
       // synchronously from inside init(), so registering after init() returns
       // is too late: viewer_loaded has already been captured. On a repeat visit
       // the super property is still in localStorage and the loss is invisible,
@@ -111,8 +111,6 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       } catch (e) {
         console.warn('[PostHog] register super properties failed', e);
       }
-      // Expose for console debugging in DevTools.
-      (window as unknown as { posthog?: typeof posthog }).posthog = ph;
       // Start session recording for everyone — including anonymous users —
       // so we can debug user-reported issues (e.g. hotkey resets) regardless
       // of whether the user came in via vet.radimal.ai with a distinct_id.
