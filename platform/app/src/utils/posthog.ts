@@ -61,7 +61,18 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       // Tags every event with app=viewer so dashboards can filter viewer
       // activity apart from vet.radimal.ai (shared PostHog project).
       try {
-        ph.register({ app: 'viewer' });
+        // `app` separates viewer traffic from vet.radimal.ai in the shared project.
+        // COMMIT_HASH / BUILD_TIME are baked into the bundle at compile time by
+        // DefinePlugin (.webpack/webpack.base.js) and are the same identity
+        // /version.json serves, so tagging every event with them makes "did this
+        // metric move because of a deploy" answerable in a query instead of by
+        // curling /version.json and guessing. Registered as super properties so
+        // they land on autocaptured events too, not just the ones we emit.
+        ph.register({
+          app: 'viewer',
+          build_commit: process.env.COMMIT_HASH || 'local',
+          build_time: process.env.BUILD_TIME || null,
+        });
       } catch (e) {
         console.warn('[PostHog] register super properties failed', e);
       }
