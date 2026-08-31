@@ -40,7 +40,14 @@ const BUILD_PROPS = {
 // A snapshot, deliberately NOT a latch over later visibilitychange events: a
 // latch would also flag a foreground load whose user tabbed away during boot,
 // inflating the very background-tab cohort this property exists to isolate.
-// ponytail: still blind to hiding before the bundle evaluates. An inline stamp
+//
+// READ IT NARROWLY. This answers "was this case opened into a background tab",
+// and only that. A session that loads in the foreground and is backgrounded a
+// second later reports false, so a low hidden_at_load rate among never-render
+// sessions does NOT license the conclusion that background tabs fail to explain
+// the veg-view.prod-1 vs view.radimal.ai gap. Settling that needs the pagehide
+// event tracked in Asana 1218030829553758, not this boolean.
+// ponytail: also blind to hiding before the bundle evaluates. An inline stamp
 // in index.html would close that, if the numbers ever suggest it matters.
 const HIDDEN_AT_LOAD = typeof document !== 'undefined' && document.visibilityState !== 'visible';
 
@@ -120,10 +127,10 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
         // nothing to separate a case opened into a background tab — where the
         // browser throttles the load and nothing paints until refocus — from a
         // genuine failure to render.
-        ph.capture('viewer_loaded', {
-          hidden_at_load: HIDDEN_AT_LOAD,
-          ...BUILD_PROPS,
-        });
+        // Routed through the shared helper so BUILD_PROPS is attached in
+        // exactly one place. Safe this early: posthog sets __loaded at the top
+        // of init(), before it invokes this callback, so isReady() holds.
+        capturePostHogEvent('viewer_loaded', { hidden_at_load: HIDDEN_AT_LOAD });
       } catch (e) {
         console.warn('[PostHog] viewer_loaded capture failed', e);
       }
