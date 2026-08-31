@@ -58,11 +58,10 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilitySta
 // around 40000. Treating "a viewer_hidden exists" as "this session was
 // throttled" therefore reclassifies the genuine failures as throttled ones and
 // concludes that background tabs explain everything. An early hide means
-// throttled; a late one means the reader gave up. The threshold, and the
-// session-level HogQL this needs (these are three separate events, and PostHog
-// stores booleans as the JSON strings 'true'/'false'), live in
-// the radimal `__artifacts/viewer-slowness-detection.md` (a sibling repo, not
-// this one) — it is a session-level anti-join, not a filter row.
+// throttled; a late one means the reader gave up. Two traps for whoever writes
+// that query: these are three separate events, so it is a session-level
+// anti-join and cannot be typed into an insight filter row; and PostHog stores
+// booleans as the JSON strings 'true'/'false', so compare against 'true'.
 //
 // Also not sufficient on its own: a headless mail-security link scanner loads
 // visible and never fires visibilitychange at all, so it lands in whatever
