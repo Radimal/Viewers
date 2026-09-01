@@ -109,13 +109,18 @@ function captureFirstImageRendered(evt) {
       // to judge whether backgrounded tabs explain the never-render rate. A
       // guard must not manufacture the thing it is measuring.
       //
-      // THE EXISTING INSIGHTS ARE NOT ALREADY CLEAN. A `secs < 600` bound drops
-      // only the extreme outliers. Measured over the 14 days to 2026-09-01:
-      // of 43,954 samples it removes 349 and RETAINS 1,565 above 10s, of which
-      // 331 are over a full minute. Every percentile and rate tile therefore
-      // needs `properties.hidden_during_load != 'true'` added explicitly — the
-      // string 'true', since PostHog stores custom booleans as JSON strings and
-      // `= true` matches nothing while failing open.
+      // THE EXISTING INSIGHTS ARE NOT ALREADY CLEAN. Measured 2026-09-01: 16
+      // saved insights reference first_image_rendered and NONE of them exclude
+      // hidden samples. An upper `secs` bound does not do it either — over 14
+      // days it dropped 349 of 43,954 samples while RETAINING 1,565 above 10s,
+      // 331 of those over a full minute.
+      //
+      // So every percentile and rate tile needs
+      // `properties.hidden_during_load != 'true'` added explicitly — the
+      // string, since PostHog stores custom booleans as JSON strings and
+      // `= true` matches nothing while failing open. `!= 'true'` is safe on
+      // pre-deploy history: HogQL evaluates NULL != 'true' to 1, so old events
+      // are kept rather than silently dropped (verified, not assumed).
       hidden_during_load: wasHiddenDuringWindow(startedAt),
     });
   } catch {
