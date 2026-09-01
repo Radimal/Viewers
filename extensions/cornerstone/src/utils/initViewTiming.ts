@@ -13,9 +13,11 @@ let hasCapturedFirstImageThisPageLoad = false;
 // performance.now() keeps counting. Those samples measure when the clinician
 // came back to the tab, not how fast the study loaded.
 let lastVisibilityChangeAt = 0;
-document.addEventListener('visibilitychange', () => {
-  lastVisibilityChangeAt = performance.now();
-});
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    lastVisibilityChangeAt = performance.now();
+  });
+}
 
 /**
  * True when the tab was hidden at any point in [startedAt, now]: either it is
@@ -102,14 +104,17 @@ function captureFirstImageRendered(evt) {
       modality: getRenderedModality(evt),
       cluster: window.location.host,
       switch_type,
-      // Flagged, not dropped. A backgrounded tab measures time-until-refocus
-      // (seen up to 1.8h), so percentile and rate tiles must exclude these —
-      // the `secs >= 0 AND secs < 600` bound every first_image_rendered
-      // insight already carries removes them from numerator and denominator
-      // alike. Dropping instead would emit no event at all, which is
-      // indistinguishable from "the viewer never rendered" — the signal we
-      // now use to judge whether backgrounded tabs explain the never-render
-      // rate. A guard must not manufacture the thing it is measuring.
+      // Flagged, not dropped, because dropping would emit no event at all —
+      // indistinguishable from "the viewer never rendered", the signal we use
+      // to judge whether backgrounded tabs explain the never-render rate. A
+      // guard must not manufacture the thing it is measuring.
+      //
+      // THE EXISTING INSIGHTS ARE NOT ALREADY CLEAN. Their `secs < 600` bound
+      // drops the 27h outliers but keeps a 30s hide, which is the magnitude
+      // that actually moves p90. Every percentile and rate tile therefore needs
+      // `properties.hidden_during_load != 'true'` added explicitly — and it is
+      // the string 'true', since PostHog stores custom booleans as JSON strings
+      // and `= true` matches nothing while failing open.
       hidden_during_load: wasHiddenDuringWindow(startedAt),
     });
   } catch {

@@ -76,9 +76,12 @@ const initFresh = ({
         posthog.capture = (n, p) => calls.push([n, p, posthog.get_property('app')]);
         if (hideAfterEval) {
           setVisibility('hidden');
-          if (visibleAgainBeforeInit) {
-            setVisibility('visible');
-          }
+        }
+        // Independent of hideAfterEval, so it also composes with
+        // visibilityState: 'hidden' — a tab hidden from navigation start that
+        // the reader returns to before the App.tsx mount effect.
+        if (visibleAgainBeforeInit) {
+          setVisibility('visible');
         }
         mod.initPostHog({ apiKey: KEY, apiHost: HOST });
       });
@@ -211,6 +214,34 @@ describe('_initPostHogUnsafe wiring', () => {
       // The latched timestamp, not the time of the flush at init.
       expect(events[0][1].ms_since_navigation_start).toBeGreaterThan(0);
       expect(events[0][1].ms_since_navigation_start).toBeLessThan(60_000);
+    });
+
+    // A ctrl-clicked / "open in background tab" case link is hidden from
+    // navigation start and fires NO visibilitychange, so the only latch left is
+    // the flush at init — which would stamp bundle-eval + mount time. In a
+    // throttled background tab that is the inflated number this event exists to
+    // explain, so the analysis query ("early hide = throttled, late hide = the
+    // reader gave up") would file the most-throttled sessions under "gave up".
+    // Seeded from HIDDEN_AT_BOOT instead: hidden since navigation start is 0.
+    it('stamps a tab hidden from navigation start at 0, not at init time', async () => {
+      const { calls } = await initFresh({ visibilityState: 'hidden' });
+      const events = hiddenEvents(calls);
+      expect(events).toHaveLength(1);
+      expect(events[0][1].ms_since_navigation_start).toBe(0);
+    });
+
+    // Same root cause, second symptom: the first transition is hidden→visible,
+    // so the live-visibility latch never fires and the flush at init sees
+    // 'visible'. Without the seed this session emits no viewer_hidden at all,
+    // and the session-level anti-join reads it as never hidden.
+    it('reports a tab hidden at boot that came back before PostHog was ready', async () => {
+      const { calls } = await initFresh({
+        visibilityState: 'hidden',
+        visibleAgainBeforeInit: true,
+      });
+      const events = hiddenEvents(calls);
+      expect(events).toHaveLength(1);
+      expect(events[0][1].ms_since_navigation_start).toBe(0);
     });
 
     it('does not report that hide a second time when the reader backgrounds again', async () => {
