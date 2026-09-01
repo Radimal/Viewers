@@ -46,6 +46,12 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilitySta
 // the genuine failures as throttled and concludes background tabs explain
 // everything. An early hide means throttled; a late one means the reader gave up.
 //
+// TWO LIMITS ON THAT RULE, both structural. It only discriminates within
+// `hidden_at_boot = false`: a boot-hidden tab's first hide IS navigation start,
+// so it always reports 0, and a later give-up hide in that cohort is
+// unobservable because the one-shot latch has already fired. And "early" has no
+// settled cut yet — derive it from the deployed distribution, do not invent one.
+//
 // Three query traps: these are three separate events, so it is a session-level
 // anti-join, not an insight filter row; PostHog stores custom booleans as the
 // JSON strings 'true'/'false', so `= true` matches nothing while failing open;

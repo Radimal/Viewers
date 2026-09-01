@@ -228,6 +228,14 @@ describe('_initPostHogUnsafe wiring', () => {
       const events = hiddenEvents(calls);
       expect(events).toHaveLength(1);
       expect(events[0][1].ms_since_navigation_start).toBe(0);
+      // The FLUSH path's own ordering guard. The assertion above on the
+      // listener path cannot cover this one: there `register` ran long before.
+      // Here the flush is a sibling statement of `register` inside `loaded`, so
+      // moving it above `register` silently drops `app` from every viewer_hidden
+      // in the boot-hidden cohort — exactly the cohort this event measures —
+      // and every dashboard filtering app = viewer loses them. Verified to
+      // survive the whole suite without this line.
+      expect(events[0][2]).toBe('viewer');
     });
 
     // Same root cause, second symptom: the first transition is hidden→visible,
