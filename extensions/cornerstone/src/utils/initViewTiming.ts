@@ -109,12 +109,13 @@ function captureFirstImageRendered(evt) {
       // to judge whether backgrounded tabs explain the never-render rate. A
       // guard must not manufacture the thing it is measuring.
       //
-      // THE EXISTING INSIGHTS ARE NOT ALREADY CLEAN. Their `secs < 600` bound
-      // drops the 27h outliers but keeps a 30s hide, which is the magnitude
-      // that actually moves p90. Every percentile and rate tile therefore needs
-      // `properties.hidden_during_load != 'true'` added explicitly — and it is
-      // the string 'true', since PostHog stores custom booleans as JSON strings
-      // and `= true` matches nothing while failing open.
+      // THE EXISTING INSIGHTS ARE NOT ALREADY CLEAN. A `secs < 600` bound drops
+      // only the extreme outliers. Measured over the 14 days to 2026-09-01:
+      // of 43,954 samples it removes 349 and RETAINS 1,565 above 10s, of which
+      // 331 are over a full minute. Every percentile and rate tile therefore
+      // needs `properties.hidden_during_load != 'true'` added explicitly — the
+      // string 'true', since PostHog stores custom booleans as JSON strings and
+      // `= true` matches nothing while failing open.
       hidden_during_load: wasHiddenDuringWindow(startedAt),
     });
   } catch {
