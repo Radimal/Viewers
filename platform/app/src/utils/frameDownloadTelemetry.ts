@@ -20,6 +20,12 @@ import { capturePostHogEvent } from './posthog';
  * `opaque_frames`; duration percentiles are unaffected either way.
  *
  * `opaque_frames == frames` is the canary for TAO having been lost again.
+ *
+ * Each event also carries four figures describing the flush WINDOW rather than
+ * the study — `window_ms`, `hidden_ms`, `long_tasks`, `long_task_ms`. They
+ * separate "the frames were slow to arrive" from "the tab was backgrounded and
+ * the browser deferred the work" from "the main thread was blocked". See the
+ * flush-window accounting block below for how they must be aggregated.
  */
 
 const FRAME_URL_REGEX = /\/dicom-web\/studies\/([^/]+)\/[^?#]*\/frames\//;
@@ -42,8 +48,34 @@ type StudyStats = {
 };
 
 let _observer: PerformanceObserver | null = null;
+let _longTaskObserver: PerformanceObserver | null = null;
 let _flushTimer: ReturnType<typeof setInterval> | null = null;
 const _pending = new Map<string, StudyStats>();
+
+/**
+ * Flush-window accounting.
+ *
+ * `window_ms`, `hidden_ms`, `long_tasks` and `long_task_ms` describe the FLUSH
+ * WINDOW — the span since the previous flush — and not the study. A flush with
+ * two pending studies emits two events carrying identical window figures, so
+ * these four must never be summed across the events of one flush. Group by
+ * (session, flush) first. `frames` and the byte counters stay per-study and are
+ * summed across flushes exactly as before.
+ */
+let _windowStartedAt = 0;
+let _hiddenMsThisWindow = 0;
+// Non-null while the tab is hidden, holding the moment it went hidden. Seeded
+// at start() rather than only on transitions: a tab opened in the background
+// (ctrl-click, "open link in a background tab") fires NO visibilitychange, and
+// would otherwise read as visible for its entire first window — which is the
+// case hidden_ms most needs to catch.
+let _hiddenSince: number | null = null;
+let _longTasks = 0;
+let _longTaskMs = 0;
+// Distinguishes "measured zero long tasks" from "long tasks were not measured".
+// Emitted as null in the latter case so a consumer cannot read an unsupported
+// browser as a quiet main thread.
+let _longTasksObserved = false;
 
 function newStudyStats(): StudyStats {
   return {
@@ -134,6 +166,14 @@ function activeMs(spans: Array<[number, number]>): number {
 }
 
 function flush(reason: string): void {
+  const now = performance.now();
+  // An in-progress hidden stretch counts up to now; it is re-based below rather
+  // than closed, since the tab is still hidden when the next window opens.
+  const hiddenMs = _hiddenMsThisWindow + (_hiddenSince !== null ? now - _hiddenSince : 0);
+  const windowMs = now - _windowStartedAt;
+  const longTasks = _longTasksObserved ? _longTasks : null;
+  const longTaskMs = _longTasksObserved ? Math.round(_longTaskMs) : null;
+
   _pending.forEach((stats, studyInstanceUid) => {
     try {
       const durations = stats.durations.slice().sort((a, b) => a - b);
@@ -159,17 +199,52 @@ function flush(reason: string): void {
         // the pipe, not one request's share of it. See activeMs().
         network_kbps: networkMs > 0 ? Math.round((stats.networkBytes * 8) / networkMs) : null,
         network_active_ms: Math.round(networkMs),
+        // Wall clock actually elapsed since the previous flush. For
+        // flush_reason = 'interval' the scheduled span is FLUSH_INTERVAL_MS, so
+        // the excess is how much the browser deferred the timer — the only
+        // direct read we have on background timer throttling, measured on real
+        // readers' browsers rather than inferred.
+        window_ms: Math.round(windowMs),
+        // Milliseconds of that window during which the tab was hidden.
+        // Deliberately an interval measure, not document.visibilityState at
+        // emit time: flush('hidden') runs AT the transition and flush('pagehide')
+        // at teardown, so an instantaneous read reports 'hidden' for two of the
+        // four flush reasons regardless of what the window actually contained.
+        hidden_ms: Math.round(hiddenMs),
+        // Main-thread blocking during the window. null (not 0) where the
+        // browser does not support the longtask entry type.
+        long_tasks: longTasks,
+        long_task_ms: longTaskMs,
       });
     } catch (e) {
       console.warn('[PostHog] frame_download_stats capture failed', e);
     }
   });
   _pending.clear();
+
+  // Reset unconditionally, including on a flush that emitted nothing: these
+  // describe the span since the previous flush, not since the last event. Were
+  // they only reset when _pending was non-empty, an idle stretch would be
+  // charged to the next window that happened to have frames in it.
+  _windowStartedAt = now;
+  _hiddenMsThisWindow = 0;
+  _hiddenSince = _hiddenSince !== null ? now : null;
+  _longTasks = 0;
+  _longTaskMs = 0;
 }
 
 function onVisibilityChange(): void {
   if (document.visibilityState === 'hidden') {
+    // Flush first, then latch. The two orderings turn out to be equivalent --
+    // the clock does not move between them, so this window's hidden_ms rounds
+    // to 0 either way, and a mutation swapping them survives the suite. Written
+    // this way because it matches what the window means, not because it changes
+    // the number.
     flush('hidden');
+    _hiddenSince = performance.now();
+  } else if (_hiddenSince !== null) {
+    _hiddenMsThisWindow += performance.now() - _hiddenSince;
+    _hiddenSince = null;
   }
 }
 
@@ -210,9 +285,43 @@ export function startFrameDownloadTelemetry(): void {
     _observer = null;
     return;
   }
+  startLongTaskObserver();
+  _windowStartedAt = performance.now();
+  _hiddenMsThisWindow = 0;
+  _hiddenSince = document.visibilityState === 'hidden' ? _windowStartedAt : null;
   _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('pagehide', onPageHide);
+}
+
+/**
+ * Counts main-thread long tasks per flush window, so a study whose frames
+ * arrived promptly but rendered late can be told apart from one that was
+ * waiting on the network. Not buffered: tasks from before this call belong to
+ * application boot, which is a different question.
+ */
+function startLongTaskObserver(): void {
+  if (!PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+    return;
+  }
+  try {
+    _longTaskObserver = new PerformanceObserver(list => {
+      try {
+        list.getEntries().forEach(entry => {
+          _longTasks += 1;
+          _longTaskMs += entry.duration;
+        });
+      } catch (e) {
+        console.warn('[PostHog] long task observer callback failed', e);
+      }
+    });
+    _longTaskObserver.observe({ type: 'longtask' });
+    _longTasksObserved = true;
+  } catch (e) {
+    console.warn('[PostHog] long task observer failed to start', e);
+    _longTaskObserver = null;
+    _longTasksObserved = false;
+  }
 }
 
 export function stopFrameDownloadTelemetry(): void {
@@ -225,6 +334,15 @@ export function stopFrameDownloadTelemetry(): void {
     console.warn('[PostHog] frame download observer disconnect failed', e);
   }
   _observer = null;
+  if (_longTaskObserver) {
+    try {
+      _longTaskObserver.disconnect();
+    } catch (e) {
+      console.warn('[PostHog] long task observer disconnect failed', e);
+    }
+    _longTaskObserver = null;
+  }
+  _longTasksObserved = false;
   if (_flushTimer !== null) {
     clearInterval(_flushTimer);
     _flushTimer = null;
