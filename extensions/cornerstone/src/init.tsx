@@ -10,6 +10,7 @@ import {
   metaData,
   volumeLoader,
   imageLoadPoolManager,
+  imageRetrievalPoolManager,
   getEnabledElement,
   Settings,
   utilities as csUtilities,
@@ -33,6 +34,7 @@ import interleaveTopToBottom from './utils/interleaveTopToBottom';
 import initContextMenu from './initContextMenu';
 import initDoubleClick from './initDoubleClick';
 import initViewTiming from './utils/initViewTiming';
+import unthrottleHiddenDownloads from './utils/unthrottleHiddenDownloads';
 import { colormaps } from './utils/colormaps';
 import { SegmentationRepresentations } from '@cornerstonejs/tools/enums';
 import { useLutPresentationStore } from './stores/useLutPresentationStore';
@@ -168,6 +170,10 @@ export default async function init({
     [RequestTypes.Prefetch]: appConfig?.maxNumRequests?.prefetch || 5,
     [RequestTypes.Compute]: appConfig?.maxNumRequests?.compute || 10,
   };
+
+  // Those slots only get refilled on a timer, which Chrome throttles hard in a
+  // hidden page — see unthrottleHiddenDownloads for the numbers.
+  unthrottleHiddenDownloads([imageLoadPoolManager, imageRetrievalPoolManager]);
 
   initWADOImageLoader(userAuthenticationService, appConfig, extensionManager);
 
