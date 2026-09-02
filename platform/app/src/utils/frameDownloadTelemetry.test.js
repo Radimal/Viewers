@@ -262,13 +262,16 @@ describe('frameDownloadTelemetry', () => {
   });
 
   it('does not resurrect the flush timer on the final flush', () => {
-    // flush() re-phases the interval, and stop() flushes after clearing it.
+    // flush() re-phases the interval, and stop() flushes after clearing it, so
+    // an unguarded re-phase leaves a live timer behind on a stopped module.
+    //
+    // Asserted on the timer, not on emitted events: stop() clears _pending, so
+    // the resurrected interval flushes an empty map and captures nothing. The
+    // event count cannot see this bug at all.
     emit([frameEntry()]);
     stopFrameDownloadTelemetry();
-    capturePostHogEvent.mockClear();
-    advance(60_000);
 
-    expect(capturePostHogEvent).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   describe('flush-window accounting', () => {
@@ -431,12 +434,26 @@ describe('frameDownloadTelemetry', () => {
     it('advances window_started_ms to the previous flush, so flushes are distinguishable', () => {
       // Without this a consumer cannot separate two flushes of one session, and
       // the aggregation rule above has no key to group by.
+      //
+      // Asserted as the identity `start + window = next start` rather than as a
+      // difference: a difference alone also holds if the field stamps the flush
+      // INSTANT instead of the window start, which is off by one whole window
+      // and would silently mis-join the two.
+      const startedAt = nowMs; // the clock reading start() saw, in beforeEach
+
       emit([frameEntry()]);
       flushInterval();
       emit([frameEntry()]);
       flushInterval();
 
-      expect(propsOf(1).window_started_ms - propsOf(0).window_started_ms).toBe(15_000);
+      // Anchored absolutely, because `start + window = next start` alone is
+      // invariant under a uniform one-window shift: stamping the flush INSTANT
+      // instead of the window start satisfies it while being off by a whole
+      // window, which would mis-join every consumer that uses the key.
+      expect(propsOf(0).window_started_ms).toBe(startedAt);
+      expect(propsOf(0).window_started_ms + propsOf(0).window_ms).toBe(
+        propsOf(1).window_started_ms
+      );
     });
 
     it('reports identical window figures on every study in one flush', () => {
