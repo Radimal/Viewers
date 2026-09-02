@@ -8,16 +8,32 @@ jest.mock('./posthog', () => ({
 const FRAME_BASE =
   'https://veg-view.prod-1.radimal.ai/dicom-web/studies/1.2.3/series/4.5/instances/6.7/frames';
 
-let observerCallback;
+let observers;
 let observeSpy;
 let disconnectSpy;
+let nowMs;
 
+// Callbacks are registered by the entry type passed to observe(), because the
+// module now runs two observers and "the last one constructed" is ambiguous.
 class MockPerformanceObserver {
   constructor(cb) {
-    observerCallback = cb;
-    this.observe = observeSpy;
+    this.observe = init => {
+      observers[init.type] = cb;
+      observeSpy(init);
+    };
     this.disconnect = disconnectSpy;
   }
+}
+
+function setVisibility(state) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => state,
+  });
+}
+
+function fireVisibilityChange() {
+  document.dispatchEvent(new Event('visibilitychange'));
 }
 
 const frameEntry = (overrides = {}) => ({
@@ -29,16 +45,42 @@ const frameEntry = (overrides = {}) => ({
   ...overrides,
 });
 
-const emit = entries => observerCallback({ getEntries: () => entries });
+const emit = entries => observers.resource({ getEntries: () => entries });
 
-const flushInterval = () => jest.advanceTimersByTime(15000);
+const emitLongTasks = durations =>
+  observers.longtask({ getEntries: () => durations.map(duration => ({ duration })) });
+
+// performance.now() is driven explicitly rather than relying on fake timers to
+// fake it, so window_ms and hidden_ms assertions are exact rather than
+// approximate. Wall clock must advance before the timer fires, since the flush
+// reads the clock from inside the interval callback.
+const advance = ms => {
+  nowMs += ms;
+  jest.advanceTimersByTime(ms);
+};
+
+const flushInterval = () => advance(15000);
+
+/** Restarts the module so a test can change what the environment supports. */
+const restart = () => {
+  stopFrameDownloadTelemetry();
+  capturePostHogEvent.mockClear();
+  startFrameDownloadTelemetry();
+};
+
+const propsOf = index => capturePostHogEvent.mock.calls[index][1];
 
 describe('frameDownloadTelemetry', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    observers = {};
     observeSpy = jest.fn();
     disconnectSpy = jest.fn();
+    nowMs = 1_000_000;
+    performance.now = () => nowMs;
+    delete MockPerformanceObserver.supportedEntryTypes;
     global.PerformanceObserver = MockPerformanceObserver;
+    setVisibility('visible');
     capturePostHogEvent.mockClear();
     startFrameDownloadTelemetry();
   });
@@ -47,6 +89,7 @@ describe('frameDownloadTelemetry', () => {
     stopFrameDownloadTelemetry();
     jest.useRealTimers();
     delete global.PerformanceObserver;
+    setVisibility('visible');
   });
 
   it('observes buffered resource entries', () => {
@@ -192,5 +235,169 @@ describe('frameDownloadTelemetry', () => {
     expect(capturePostHogEvent).toHaveBeenCalledTimes(1);
     expect(capturePostHogEvent.mock.calls[0][1].flush_reason).toBe('stop');
     expect(disconnectSpy).toHaveBeenCalled();
+  });
+
+  describe('flush-window accounting', () => {
+    // One test per reachable cell of
+    // {flush reason} x {visibility during the window} x {visibility at emit}.
+
+    it('reports the wall clock actually elapsed, not the scheduled interval', () => {
+      // A deferred timer is the only direct read available on background timer
+      // throttling: the interval is scheduled for 15s, so anything longer is
+      // time the browser withheld.
+      emit([frameEntry()]);
+      nowMs += 45_000;
+      jest.advanceTimersByTime(15_000);
+
+      expect(propsOf(0).window_ms).toBe(45_000);
+    });
+
+    it('reports hidden_ms 0 for a window that stayed visible', () => {
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0).hidden_ms).toBe(0);
+    });
+
+    it('reports hidden_ms 0 on the flush triggered BY the hide', () => {
+      // The window that just ended was the visible one. Reading
+      // document.visibilityState at emit time would call this window hidden,
+      // because the hide is what triggered the flush.
+      emit([frameEntry()]);
+      advance(6_000);
+      setVisibility('hidden');
+      fireVisibilityChange();
+
+      expect(propsOf(0).flush_reason).toBe('hidden');
+      expect(propsOf(0).hidden_ms).toBe(0);
+      expect(propsOf(0).window_ms).toBe(6_000);
+    });
+
+    it('charges a fully hidden window entirely to hidden_ms', () => {
+      setVisibility('hidden');
+      fireVisibilityChange();
+      capturePostHogEvent.mockClear();
+
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ hidden_ms: 15_000, window_ms: 15_000 });
+    });
+
+    it('keeps charging hidden_ms across consecutive flushes in one hidden stretch', () => {
+      // The stretch outlives the window. A flush that closed it instead of
+      // re-basing it would report the first window hidden and every window
+      // after it visible -- wrong in exactly the long-backgrounded case this
+      // field exists for.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      capturePostHogEvent.mockClear();
+
+      emit([frameEntry()]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ hidden_ms: 15_000, window_ms: 15_000 });
+      expect(propsOf(1)).toMatchObject({ hidden_ms: 15_000, window_ms: 15_000 });
+    });
+
+    it('accumulates a hidden stretch that ended inside the window', () => {
+      // The flush at the hide clears the window, so the measured stretch is
+      // hidden -> visible -> flush.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      advance(4_000);
+      setVisibility('visible');
+      fireVisibilityChange();
+      advance(1_000);
+      emit([frameEntry()]);
+      capturePostHogEvent.mockClear();
+      advance(10_000);
+      jest.advanceTimersByTime(0);
+
+      expect(propsOf(0)).toMatchObject({ hidden_ms: 4_000, window_ms: 15_000 });
+    });
+
+    it('charges a tab that booted hidden without ever firing visibilitychange', () => {
+      // ctrl-click / "open link in a background tab" fires no transition at
+      // all, so a listener-only implementation reads this window as visible --
+      // the case hidden_ms most needs to catch.
+      stopFrameDownloadTelemetry();
+      setVisibility('hidden');
+      capturePostHogEvent.mockClear();
+      startFrameDownloadTelemetry();
+
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0).hidden_ms).toBe(15_000);
+    });
+
+    it('resets the window on a flush that emitted nothing', () => {
+      flushInterval(); // nothing pending
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(capturePostHogEvent).toHaveBeenCalledTimes(1);
+      expect(propsOf(0).window_ms).toBe(15_000);
+    });
+
+    it('reports identical window figures on every study in one flush', () => {
+      // These four describe the flush, not the study, so a consumer that sums
+      // them across the events of one flush double-counts.
+      emit([
+        frameEntry(),
+        frameEntry({
+          name: FRAME_BASE.replace('/studies/1.2.3/', '/studies/9.9.9/') + '/1',
+        }),
+      ]);
+      flushInterval();
+
+      expect(capturePostHogEvent).toHaveBeenCalledTimes(2);
+      expect(propsOf(0).window_ms).toBe(propsOf(1).window_ms);
+      expect(propsOf(0).hidden_ms).toBe(propsOf(1).hidden_ms);
+    });
+  });
+
+  describe('long tasks', () => {
+    const withLongTaskSupport = () => {
+      MockPerformanceObserver.supportedEntryTypes = ['longtask'];
+      restart();
+    };
+
+    it('counts long tasks and their duration within the window', () => {
+      withLongTaskSupport();
+      emit([frameEntry()]);
+      emitLongTasks([120, 65.4]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ long_tasks: 2, long_task_ms: 185 });
+    });
+
+    it('resets the long-task counters per window', () => {
+      withLongTaskSupport();
+      emit([frameEntry()]);
+      emitLongTasks([120]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(1)).toMatchObject({ long_tasks: 0, long_task_ms: 0 });
+    });
+
+    it('reports null, not zero, where the browser cannot measure long tasks', () => {
+      // Zero would read as a quiet main thread on a browser that never looked.
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ long_tasks: null, long_task_ms: null });
+    });
+
+    it('observes long tasks unbuffered, so application boot is excluded', () => {
+      withLongTaskSupport();
+
+      expect(observeSpy).toHaveBeenCalledWith({ type: 'longtask' });
+    });
   });
 });
