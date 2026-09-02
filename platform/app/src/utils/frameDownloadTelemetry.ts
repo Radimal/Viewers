@@ -59,8 +59,15 @@ const _pending = new Map<string, StudyStats>();
  * WINDOW — the span since the previous flush — and not the study. A flush with
  * two pending studies emits two events carrying identical window figures, so
  * these four must never be summed across the events of one flush. Group by
- * (session, flush) first. `frames` and the byte counters stay per-study and are
- * summed across flushes exactly as before.
+ * (`$session_id`, `window_started_ms`) first — that pair identifies one flush,
+ * which is why `window_started_ms` is emitted at all. `frames` and the byte
+ * counters stay per-study and are summed across flushes exactly as before.
+ *
+ * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
+ * Resource-timing entries are delivered at completion and span the whole
+ * request, so a fetch that began several windows ago lands wholly in the window
+ * that saw it finish. Measured on production 2026-09-02: `network_active_ms`
+ * already exceeds the 15s interval on 13.2% of flushes, topping out at 134s.
  */
 let _windowStartedAt = 0;
 let _hiddenMsThisWindow = 0;
@@ -140,8 +147,8 @@ function recordEntry(entry: PerformanceResourceTiming): void {
 /**
  * Wall-clock milliseconds during which at least one network fetch was in flight.
  *
- * The loader runs up to `maxNumRequests.interaction` frames concurrently (20 in
- * the deployed config) multiplexed over a single HTTP/2 connection, so each
+ * The loader runs up to `maxNumRequests.interaction` frames concurrently (100
+ * in both deployed configs) multiplexed over a single HTTP/2 connection, so each
  * entry's `duration` spans the same window. Summing them overcounts elapsed time
  * by roughly the concurrency factor and understates throughput by the same
  * factor; the union of the intervals is the actual transfer window.
@@ -170,6 +177,7 @@ function flush(reason: string): void {
   // An in-progress hidden stretch counts up to now; it is re-based below rather
   // than closed, since the tab is still hidden when the next window opens.
   const hiddenMs = _hiddenMsThisWindow + (_hiddenSince !== null ? now - _hiddenSince : 0);
+  const windowStartedAt = _windowStartedAt;
   const windowMs = now - _windowStartedAt;
   const longTasks = _longTasksObserved ? _longTasks : null;
   const longTaskMs = _longTasksObserved ? Math.round(_longTaskMs) : null;
@@ -205,6 +213,12 @@ function flush(reason: string): void {
         // direct read we have on background timer throttling, measured on real
         // readers' browsers rather than inferred.
         window_ms: Math.round(windowMs),
+        // Identifies the flush. Every event of one flush carries the same value,
+        // so (`$session_id`, `window_started_ms`) is the grouping key the
+        // aggregation rule above requires. Without it a consumer has to
+        // approximate a flush by timestamp, which splits one that straddles a
+        // second boundary.
+        window_started_ms: Math.round(windowStartedAt),
         // Milliseconds of that window during which the tab was hidden.
         // Deliberately an interval measure, not document.visibilityState at
         // emit time: flush('hidden') runs AT the transition and flush('pagehide')
@@ -227,6 +241,19 @@ function flush(reason: string): void {
   // they only reset when _pending was non-empty, an idle stretch would be
   // charged to the next window that happened to have frames in it.
   _windowStartedAt = now;
+  // Re-phase the interval to the window it measures. A 'hidden' / 'pagehide'
+  // flush rebases _windowStartedAt mid-interval; leaving the timer on its
+  // original phase would hand the next 'interval' flush a window SHORTER than
+  // FLUSH_INTERVAL_MS. window_ms is documented above as measured-minus-
+  // scheduled deferral, so a consumer would read that shortfall as NEGATIVE
+  // deferral — on production traffic 8.4% of interval flushes directly follow a
+  // non-interval one (measured over 7 days to 2026-09-02).
+  // Guarded on _flushTimer: stop() clears the timer before its final flush and
+  // must not resurrect it.
+  if (_flushTimer !== null) {
+    clearInterval(_flushTimer);
+    _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
+  }
   _hiddenMsThisWindow = 0;
   _hiddenSince = _hiddenSince !== null ? now : null;
   _longTasks = 0;
@@ -342,7 +369,6 @@ export function stopFrameDownloadTelemetry(): void {
     }
     _longTaskObserver = null;
   }
-  _longTasksObserved = false;
   if (_flushTimer !== null) {
     clearInterval(_flushTimer);
     _flushTimer = null;
@@ -350,4 +376,9 @@ export function stopFrameDownloadTelemetry(): void {
   document.removeEventListener('visibilitychange', onVisibilityChange);
   window.removeEventListener('pagehide', onPageHide);
   flush('stop');
+  // AFTER the final flush. Clearing it first made every flush_reason = 'stop'
+  // event report long_tasks: null on a browser that had measured them, which
+  // reads as "this browser cannot measure long tasks" — the one thing null is
+  // documented to mean.
+  _longTasksObserved = false;
 }
