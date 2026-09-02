@@ -120,6 +120,30 @@ describe('frameDownloadTelemetry', () => {
     });
   });
 
+  it('takes the nearest-rank percentile at an even sample count', () => {
+    // Three samples make ceil(q*n)-1 and floor(q*n) agree, so every other
+    // percentile assertion here is blind to which one is implemented.
+    emit([
+      frameEntry({ duration: 50 }),
+      frameEntry({ name: `${FRAME_BASE}/2`, duration: 150 }),
+      frameEntry({ name: `${FRAME_BASE}/3`, duration: 1000 }),
+      frameEntry({ name: `${FRAME_BASE}/4`, duration: 2000 }),
+    ]);
+    flushInterval();
+
+    expect(propsOf(0)).toMatchObject({ frames: 4, p50_ms: 150, max_ms: 2000 });
+  });
+
+  it('flushes pending stats on pagehide', () => {
+    // The only flush a window gets when the page is frozen without a preceding
+    // hide (bfcache, the `unload` fallback path).
+    emit([frameEntry()]);
+    advance(3_000);
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(propsOf(0)).toMatchObject({ flush_reason: 'pagehide', window_ms: 3_000 });
+  });
+
   it('ignores resources that are not dicom-web frame requests', () => {
     emit([frameEntry({ name: 'https://veg-view.prod-1.radimal.ai/app.js' })]);
     flushInterval();
@@ -237,6 +261,16 @@ describe('frameDownloadTelemetry', () => {
     expect(disconnectSpy).toHaveBeenCalled();
   });
 
+  it('does not resurrect the flush timer on the final flush', () => {
+    // flush() re-phases the interval, and stop() flushes after clearing it.
+    emit([frameEntry()]);
+    stopFrameDownloadTelemetry();
+    capturePostHogEvent.mockClear();
+    advance(60_000);
+
+    expect(capturePostHogEvent).not.toHaveBeenCalled();
+  });
+
   describe('flush-window accounting', () => {
     // One test per reachable cell of
     // {flush reason} x {visibility during the window} x {visibility at emit}.
@@ -343,6 +377,68 @@ describe('frameDownloadTelemetry', () => {
       expect(propsOf(0).window_ms).toBe(15_000);
     });
 
+    it('re-phases the flush interval to the window it measures', () => {
+      // A 'hidden' flush rebases the window mid-interval. On the original phase
+      // the next 'interval' flush would cover 9s of a 15s schedule, and
+      // window_ms is read as measured-minus-scheduled deferral -- so a consumer
+      // would compute -6000ms of deferral on a completely unthrottled clock.
+      emit([frameEntry()]);
+      advance(6_000);
+      setVisibility('hidden');
+      fireVisibilityChange();
+      setVisibility('visible');
+      fireVisibilityChange();
+      capturePostHogEvent.mockClear();
+
+      emit([frameEntry()]);
+      advance(9_000); // where the original, un-rephased tick would have landed
+      expect(capturePostHogEvent).not.toHaveBeenCalled();
+
+      advance(6_000);
+      expect(propsOf(0)).toMatchObject({ flush_reason: 'interval', window_ms: 15_000 });
+    });
+
+    it('does not re-charge a hidden stretch to the window after it', () => {
+      // The mirror of the consecutive-flush case: a stretch that ENDED must not
+      // keep being charged, or one 4s backgrounding reads as 4s hidden in every
+      // window for the rest of the session.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      advance(4_000);
+      setVisibility('visible');
+      fireVisibilityChange();
+      emit([frameEntry()]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0).hidden_ms).toBe(4_000);
+      expect(propsOf(1).hidden_ms).toBe(0);
+    });
+
+    it('stamps every event of one flush with the same window_started_ms', () => {
+      emit([
+        frameEntry(),
+        frameEntry({
+          name: FRAME_BASE.replace('/studies/1.2.3/', '/studies/9.9.9/') + '/1',
+        }),
+      ]);
+      flushInterval();
+
+      expect(propsOf(0).window_started_ms).toBe(propsOf(1).window_started_ms);
+    });
+
+    it('advances window_started_ms to the previous flush, so flushes are distinguishable', () => {
+      // Without this a consumer cannot separate two flushes of one session, and
+      // the aggregation rule above has no key to group by.
+      emit([frameEntry()]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(1).window_started_ms - propsOf(0).window_started_ms).toBe(15_000);
+    });
+
     it('reports identical window figures on every study in one flush', () => {
       // These four describe the flush, not the study, so a consumer that sums
       // them across the events of one flush double-counts.
@@ -392,6 +488,22 @@ describe('frameDownloadTelemetry', () => {
       flushInterval();
 
       expect(propsOf(0)).toMatchObject({ long_tasks: null, long_task_ms: null });
+    });
+
+    it('reports the long tasks it measured on the final flush', () => {
+      // long_tasks: null is documented to mean "this browser cannot measure
+      // them". Emitting null here would say that about a browser that just did.
+      withLongTaskSupport();
+      emit([frameEntry()]);
+      emitLongTasks([120, 65.4]);
+      capturePostHogEvent.mockClear();
+      stopFrameDownloadTelemetry();
+
+      expect(propsOf(0)).toMatchObject({
+        flush_reason: 'stop',
+        long_tasks: 2,
+        long_task_ms: 185,
+      });
     });
 
     it('observes long tasks unbuffered, so application boot is excluded', () => {
