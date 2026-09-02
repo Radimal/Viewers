@@ -22,10 +22,12 @@ import { capturePostHogEvent } from './posthog';
  * `opaque_frames == frames` is the canary for TAO having been lost again.
  *
  * Each event also carries four figures describing the flush WINDOW rather than
- * the study — `window_ms`, `hidden_ms`, `long_tasks`, `long_task_ms`. They
- * separate "the frames were slow to arrive" from "the tab was backgrounded and
- * the browser deferred the work" from "the main thread was blocked". See the
- * flush-window accounting block below for how they must be aggregated.
+ * the study — `window_ms`, `hidden_ms`, `long_tasks`, `long_task_ms` — plus
+ * `window_started_ms`, which identifies the window rather than measuring it.
+ * The four separate "the frames were slow to arrive" from "the tab was
+ * backgrounded and the browser deferred the work" from "the main thread was
+ * blocked". See the flush-window accounting block below for how they must be
+ * aggregated, and why the fifth is needed to do it.
  */
 
 const FRAME_URL_REGEX = /\/dicom-web\/studies\/([^/]+)\/[^?#]*\/frames\//;
@@ -58,8 +60,10 @@ const _pending = new Map<string, StudyStats>();
  * `window_ms`, `hidden_ms`, `long_tasks` and `long_task_ms` describe the FLUSH
  * WINDOW — the span since the previous flush — and not the study. A flush with
  * two pending studies emits two events carrying identical window figures, so
- * these four must never be summed across the events of one flush. Group by
- * (`$session_id`, `$window_id`, `window_started_ms`) first. All three are
+ * those four must never be summed across the events of one flush. Group by
+ * (`$session_id`, `$window_id`, `window_started_ms`) first — `window_started_ms`
+ * is the fifth window-scoped property and exists to make that grouping possible;
+ * it is a key, never a quantity to aggregate. All three are
  * required: `window_started_ms` is a `performance.now()` reading, whose origin
  * is the DOCUMENT's navigation start, so two page loads in one analytics
  * session each count from zero and their offsets overlap. Measured 2026-09-02:
@@ -71,9 +75,12 @@ const _pending = new Map<string, StudyStats>();
  * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
  * Resource-timing entries are delivered at completion and span the whole
  * request, so a fetch that began several windows ago lands wholly in the window
- * that saw it finish. Measured on 2026-09-02, the first day this event reached
- * both production clusters: `network_active_ms` exceeds the 15s interval on
- * 8.1% of emitted events (101 of 1,253), topping out at 135s.
+ * that saw it finish. On 2026-09-02, the first day this event reached both
+ * production clusters, `network_active_ms` topped out at 135s — nine intervals
+ * of span reported against one window. Roughly a tenth of emitted events exceed
+ * the interval; that share is given loosely on purpose, because three
+ * measurements through the same still-accumulating day read 8.2%, 8.1% and
+ * 10.3%. The maximum is the stable part and the part that matters.
  */
 let _windowStartedAt = 0;
 let _hiddenMsThisWindow = 0;
@@ -250,6 +257,11 @@ function flush(reason: string): void {
   // they only reset when _pending was non-empty, an idle stretch would be
   // charged to the next window that happened to have frames in it.
   _windowStartedAt = now;
+  _hiddenMsThisWindow = 0;
+  _hiddenSince = _hiddenSince !== null ? now : null;
+  _longTasks = 0;
+  _longTaskMs = 0;
+
   // Re-phase the interval to the window it measures. A 'hidden' / 'pagehide'
   // flush rebases _windowStartedAt mid-interval; leaving the timer on its
   // original phase would hand the next 'interval' flush a window SHORTER than
@@ -278,10 +290,6 @@ function flush(reason: string): void {
     clearInterval(_flushTimer);
     _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
   }
-  _hiddenMsThisWindow = 0;
-  _hiddenSince = _hiddenSince !== null ? now : null;
-  _longTasks = 0;
-  _longTaskMs = 0;
 }
 
 function onVisibilityChange(): void {
