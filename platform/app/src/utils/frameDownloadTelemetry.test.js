@@ -397,7 +397,14 @@ describe('frameDownloadTelemetry', () => {
       advance(9_000); // where the original, un-rephased tick would have landed
       expect(capturePostHogEvent).not.toHaveBeenCalled();
 
-      advance(6_000);
+      // Stepped to the boundary rather than jumped past it: advance() moves the
+      // clock in bulk, so a single advance(6_000) reads window_ms as 15_000 for
+      // any re-phase period in (14_000, 15_000] and cannot see a period that is
+      // merely close.
+      advance(5_999);
+      expect(capturePostHogEvent).not.toHaveBeenCalled();
+
+      advance(1);
       expect(propsOf(0)).toMatchObject({ flush_reason: 'interval', window_ms: 15_000 });
     });
 
@@ -420,6 +427,11 @@ describe('frameDownloadTelemetry', () => {
     });
 
     it('stamps every event of one flush with the same window_started_ms', () => {
+      // The clock must MOVE inside the flush. Pinned, a per-event
+      // performance.now() read gives every event the same value too, and the
+      // snapshot this invariant actually rests on goes untested.
+      performance.now = () => (nowMs += 1);
+
       emit([
         frameEntry(),
         frameEntry({
