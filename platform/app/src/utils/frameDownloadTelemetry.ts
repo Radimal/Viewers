@@ -59,16 +59,21 @@ const _pending = new Map<string, StudyStats>();
  * WINDOW — the span since the previous flush — and not the study. A flush with
  * two pending studies emits two events carrying identical window figures, so
  * these four must never be summed across the events of one flush. Group by
- * (`$session_id`, `window_started_ms`) first — that pair identifies one flush,
- * which is why `window_started_ms` is emitted at all. `frames` and the byte
- * counters stay per-study and are summed across flushes exactly as before.
+ * (`$session_id`, `$window_id`, `window_started_ms`) first. All three are
+ * required: `window_started_ms` is a `performance.now()` reading, whose origin
+ * is the DOCUMENT's navigation start, so two page loads in one analytics
+ * session each count from zero and their offsets overlap. Measured 2026-09-02:
+ * 17.8% of sessions carrying this event span more than one page load (105 of
+ * 591), up to 8. `$window_id` is what separates them, and PostHog attaches it
+ * to every one of these events. `frames` and the byte counters stay per-study
+ * and are summed across flushes exactly as before.
  *
  * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
  * Resource-timing entries are delivered at completion and span the whole
  * request, so a fetch that began several windows ago lands wholly in the window
- * that saw it finish. Measured on production over the 7 days to 2026-09-02:
- * `network_active_ms` already exceeds the 15s interval on 8.2% of flushes
- * (100 of 1,223), topping out at 135s.
+ * that saw it finish. Measured on 2026-09-02, the first day this event reached
+ * both production clusters: `network_active_ms` exceeds the 15s interval on
+ * 8.1% of emitted events (101 of 1,253), topping out at 135s.
  */
 let _windowStartedAt = 0;
 let _hiddenMsThisWindow = 0;
@@ -149,7 +154,8 @@ function recordEntry(entry: PerformanceResourceTiming): void {
  * Wall-clock milliseconds during which at least one network fetch was in flight.
  *
  * The loader runs up to `maxNumRequests.interaction` frames concurrently (100
- * in both deployed configs) multiplexed over a single HTTP/2 connection, so each
+ * in `public/config/default.js`, the config the viewer build actually uses)
+ * multiplexed over a single HTTP/2 connection, so each
  * entry's `duration` spans the same window. Summing them overcounts elapsed time
  * by roughly the concurrency factor and understates throughput by the same
  * factor; the union of the intervals is the actual transfer window.
@@ -214,11 +220,13 @@ function flush(reason: string): void {
         // direct read we have on background timer throttling, measured on real
         // readers' browsers rather than inferred.
         window_ms: Math.round(windowMs),
-        // Identifies the flush. Every event of one flush carries the same value,
-        // so (`$session_id`, `window_started_ms`) is the grouping key the
-        // aggregation rule above requires. Without it a consumer has to
-        // approximate a flush by timestamp, which splits one that straddles a
-        // second boundary.
+        // Identifies the flush WITHIN ONE PAGE LOAD. Every event of one flush
+        // carries the same value, so (`$session_id`, `$window_id`,
+        // `window_started_ms`) is the grouping key the aggregation rule above
+        // requires — `$window_id` because this is a per-document clock, not a
+        // per-session one. Without the key a consumer has to approximate a
+        // flush by timestamp, which splits one that straddles a second
+        // boundary.
         window_started_ms: Math.round(windowStartedAt),
         // Milliseconds of that window during which the tab was hidden.
         // Deliberately an interval measure, not document.visibilityState at
@@ -247,11 +255,26 @@ function flush(reason: string): void {
   // original phase would hand the next 'interval' flush a window SHORTER than
   // FLUSH_INTERVAL_MS. window_ms is documented above as measured-minus-
   // scheduled deferral, so a consumer would read that shortfall as NEGATIVE
-  // deferral — on production traffic 8.4% of interval flushes directly follow a
-  // non-interval one (measured over 7 days to 2026-09-02).
+  // deferral. Deduplicated per page load, 5.6% of interval flushes directly
+  // follow a non-interval one (57 of 1,014 on 2026-09-02); the figure swings
+  // with how "directly follow" is defined, so treat it as an order of
+  // magnitude, not a rate.
+  //
+  // NOT on an 'interval' flush, which is already in phase. Re-phasing there
+  // would restart the timer AFTER the emit loop, adding its cost to every
+  // subsequent window and biasing the deferral reading upward by exactly the
+  // amount this module spends serialising.
+  //
   // Guarded on _flushTimer: stop() clears the timer before its final flush and
   // must not resurrect it.
-  if (_flushTimer !== null) {
+  //
+  // The `reason !== 'interval'` half is NOT pinned by a test and cannot be:
+  // under jest's fake timers a callback costs zero, so re-phasing from inside
+  // the interval schedules the next fire at exactly the instant it would have
+  // fired anyway. A mutant dropping that clause survives the suite. Recorded
+  // here so nobody adds an assertion that cannot fail; the reason it is correct
+  // is the real clock, not the test one.
+  if (_flushTimer !== null && reason !== 'interval') {
     clearInterval(_flushTimer);
     _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
   }
@@ -316,6 +339,11 @@ export function startFrameDownloadTelemetry(): void {
   startLongTaskObserver();
   _windowStartedAt = performance.now();
   _hiddenMsThisWindow = 0;
+  // A bare visibilityState read on purpose, unlike posthog.ts's isHidden():
+  // a prerendering document reports 'hidden', and Chrome deprioritises its
+  // network work, so charging a prerender to hidden_ms is what this field
+  // means. hidden_at_boot answers a different question — "did the reader open
+  // this into a background tab" — where a prerender is a false positive.
   _hiddenSince = document.visibilityState === 'hidden' ? _windowStartedAt : null;
   _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
   document.addEventListener('visibilitychange', onVisibilityChange);
