@@ -28,7 +28,22 @@ if (typeof document !== 'undefined') {
  * first-image timer is ever in flight.
  */
 export function wasHiddenDuringWindow(startedAt: number): boolean {
-  return document.visibilityState !== 'visible' || lastVisibilityChangeAt > startedAt;
+  // `prerendering` excluded: a prerendering page reports visibilityState
+  // 'hidden' throughout while rendering normally, so without it a study painted
+  // during a prerender is flagged as a background-tab sample and dropped from
+  // every percentile tile.
+  //
+  // This covers the paint that COMPLETES during the prerender, and only that.
+  // A window that spans prerender -> activation is still flagged, because the
+  // activation fires visibilitychange and the interval clause below stamps it.
+  // Narrowing that too would mean telling an activation apart from a real
+  // backgrounding, which is more machinery than an unmeasured case is worth —
+  // no speculation rules ship in this repo, so whether the viewer is ever
+  // prerendered at all is unknown.
+  const hiddenNow =
+    document.visibilityState !== 'visible' &&
+    !(document as Document & { prerendering?: boolean }).prerendering;
+  return hiddenNow || lastVisibilityChangeAt > startedAt;
 }
 
 const imageTiming = {

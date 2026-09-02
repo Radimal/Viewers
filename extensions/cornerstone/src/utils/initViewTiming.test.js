@@ -51,6 +51,16 @@ describe('wasHiddenDuringWindow', () => {
     expect(wasHiddenDuringWindow(startedAt)).toBe(true);
   });
 
+  it('keeps a sample from a prerendering page, which reports hidden while rendering', () => {
+    Object.defineProperty(document, 'prerendering', { value: true, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    try {
+      expect(wasHiddenDuringWindow(performance.now())).toBe(false);
+    } finally {
+      delete document.prerendering;
+    }
+  });
+
   it('keeps a sample opened after an earlier hidden stretch ended', async () => {
     setVisibility('hidden');
     setVisibility('visible');
@@ -69,7 +79,7 @@ describe('hidden_during_load on the emitted event', () => {
   // Fresh registry per case: IMAGE_TIMING_KEYS, viewportsWaiting and
   // hasCapturedFirstImageThisPageLoad are all module state, and the module's
   // own visibilitychange listener must be the one under test.
-  const renderWith = async ({ flipVisibility }) => {
+  const renderWith = async ({ flipVisibility, secondRender = false, beforeRender }) => {
     const captured = [];
     let element;
     await jest.isolateModulesAsync(async () => {
@@ -107,12 +117,28 @@ describe('hidden_during_load on the emitted event', () => {
         setVisibility('visible');
       }
       await tick();
+      if (beforeRender) {
+        beforeRender();
+      }
 
       element.dispatchEvent(
         new CustomEvent('IMAGE_RENDERED', {
           detail: { viewportStatus: 'render', element },
         })
       );
+
+      if (secondRender) {
+        // Same module instance, second study: this is what in-app navigation
+        // looks like to the module, and the only way switch_type can read
+        // anything but 'reload'.
+        const second = document.createElement('div');
+        initViewTiming({ element: second });
+        second.dispatchEvent(
+          new CustomEvent('IMAGE_RENDERED', {
+            detail: { viewportStatus: 'render', element: second },
+          })
+        );
+      }
     });
     delete window.__capturePostHogEvent;
     return captured;
@@ -130,5 +156,42 @@ describe('hidden_during_load on the emitted event', () => {
     const captured = await renderWith({ flipVisibility: false });
     expect(captured).toHaveLength(1);
     expect(captured[0][1].hidden_during_load).toBe(false);
+  });
+
+  it('measures ms as exactly first-paint minus study-open', async () => {
+    // Asserted EXACTLY, against a driven clock. A range assertion pins only the
+    // clock source: dropping `- startedAt` (making ms mean "since page load"),
+    // halving it, or adding a constant all stay inside a plausible band and
+    // would keep every tile rendering a confident number for a different
+    // quantity. Measured 2026-09-02: 9 of the 16 saved insights read
+    // properties.ms directly, so that is who reads the wrong number.
+    const real = performance.now.bind(performance);
+    const clock = { t: 5_000 };
+    performance.now = () => clock.t;
+    try {
+      const captured = await renderWith({
+        flipVisibility: false,
+        beforeRender: () => {
+          clock.t = 8_250;
+        },
+      });
+      expect(captured[0][1].ms).toBe(3_250);
+    } finally {
+      performance.now = real;
+    }
+  });
+
+  it('reports switch_type reload for the first study of a page load', async () => {
+    const [[, props]] = await renderWith({ flipVisibility: false });
+    expect(props.switch_type).toBe('reload');
+  });
+
+  it('reports switch_type in_app for a second study in the same page load', async () => {
+    // Reading the latch after setting it would report in_app for every sample,
+    // and the reload/in_app split would read 100% in_app with no error.
+    const captured = await renderWith({ flipVisibility: false, secondRender: true });
+    expect(captured).toHaveLength(2);
+    expect(captured[0][1].switch_type).toBe('reload');
+    expect(captured[1][1].switch_type).toBe('in_app');
   });
 });

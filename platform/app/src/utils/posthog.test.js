@@ -45,6 +45,8 @@ const initFresh = ({
   buildTime,
   hideAfterEval = false,
   visibleAgainBeforeInit = false,
+  prerendering = false,
+  activateIntoBackground = false,
 } = {}) =>
   withEnv(
     {
@@ -57,6 +59,11 @@ const initFresh = ({
         value: visibilityState,
         configurable: true,
       });
+      if (prerendering) {
+        Object.defineProperty(document, 'prerendering', { value: true, configurable: true });
+      } else {
+        delete document.prerendering;
+      }
       const calls = [];
       let mod;
       await jest.isolateModulesAsync(async () => {
@@ -77,6 +84,7 @@ const initFresh = ({
         if (hideAfterEval) {
           setVisibility('hidden');
         }
+
         // Independent of hideAfterEval, so it also composes with
         // visibilityState: 'hidden' — a tab hidden from navigation start that
         // the reader returns to before the App.tsx mount effect.
@@ -84,6 +92,17 @@ const initFresh = ({
           setVisibility('visible');
         }
         mod.initPostHog({ apiKey: KEY, apiHost: HOST });
+        // AFTER init, deliberately. Fired before it, the flush at the end of
+        // posthog's `loaded` re-reads visibility and catches the tab anyway, so
+        // the assertion would pass with no listener registered at all — it would
+        // pin the flush, not the listener under test.
+        if (activateIntoBackground) {
+          Object.defineProperty(document, 'prerendering', {
+            value: false,
+            configurable: true,
+          });
+          document.dispatchEvent(new Event('prerenderingchange'));
+        }
       });
       return { calls, mod };
     }
@@ -107,6 +126,7 @@ describe('_initPostHogUnsafe wiring', () => {
     // jsdom's document is shared file-wide; don't leave it hidden for whatever
     // test gets appended after this suite.
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    delete document.prerendering;
   });
 
   it('has app=viewer registered by the time viewer_loaded is captured', async () => {
@@ -153,6 +173,33 @@ describe('_initPostHogUnsafe wiring', () => {
     expect(viewerLoaded(await initFresh({ visibilityState: 'hidden' }))[1].hidden_at_boot).toBe(
       true
     );
+  });
+
+  it('does not treat a prerendering page as a backgrounded tab', async () => {
+    // A prerendering page reports visibilityState 'hidden' for the whole
+    // prerender while rendering normally, so the bare visibilityState read puts
+    // a page the reader activates and views instantly into the boot-hidden
+    // cohort — the cohort these two signals exist to size.
+    const result = await initFresh({ visibilityState: 'hidden', prerendering: true });
+    expect(viewerLoaded(result)[1].hidden_at_boot).toBe(false);
+    expect(result.calls.filter(c => c[0] === 'viewer_hidden')).toHaveLength(0);
+  });
+
+  it('still catches a prerender activated into a background tab', async () => {
+    // hidden -> hidden fires no visibilitychange, so without the
+    // prerenderingchange listener the guard above converts the old false
+    // positive into a false negative: a genuinely backgrounded tab recorded as
+    // never hidden, which is the cohort viewer_hidden exists to size.
+    const { calls } = await initFresh({
+      visibilityState: 'hidden',
+      prerendering: true,
+      activateIntoBackground: true,
+    });
+    const hidden = calls.filter(c => c[0] === 'viewer_hidden');
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0][1].ms_since_navigation_start).toBeGreaterThanOrEqual(0);
+    // Still not a boot-hidden tab: it was prerendering when the bundle ran.
+    expect(viewerLoaded({ calls })[1].hidden_at_boot).toBe(false);
   });
 
   // Distinguishes the snapshot from a read at capture time and from a latch:
