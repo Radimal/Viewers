@@ -40,6 +40,11 @@ const BUILD_PROPS = {
 // the reader activates and views instantly lands in the boot-hidden cohort
 // these two signals exist to size. web-vitals carries the same guard in its own
 // firstHiddenTime (node_modules/web-vitals/src/lib/getVisibilityWatcher.ts).
+//
+// This predicate is only HALF the pattern. The other half is the
+// prerenderingchange listener registered below — copying the guard without it
+// converts the false positive into a false negative, which is how this was
+// first written. Do not lift one without the other.
 const isHidden = (): boolean =>
   document.visibilityState !== 'visible' &&
   !(document as Document & { prerendering?: boolean }).prerendering;
