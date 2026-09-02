@@ -33,7 +33,18 @@ const BUILD_PROPS = {
 // at t=0. Different events, different questions — do not filter on the wrong one.
 // ponytail: blind to hiding before the bundle evaluates. An inline stamp in
 // index.html would close that, if the numbers ever suggest it matters.
-const HIDDEN_AT_BOOT = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+// One predicate for both the boot snapshot and the live check below, so they
+// cannot drift. `prerendering` is the non-obvious half: a prerendering page
+// reports visibilityState 'hidden' for the whole prerender while rendering
+// normally, and fires visibilitychange on activation. Without the guard, a page
+// the reader activates and views instantly lands in the boot-hidden cohort
+// these two signals exist to size. web-vitals carries the same guard in its own
+// firstHiddenTime (node_modules/web-vitals/src/lib/getVisibilityWatcher.ts).
+const isHidden = (): boolean =>
+  document.visibilityState !== 'visible' &&
+  !(document as Document & { prerendering?: boolean }).prerendering;
+
+const HIDDEN_AT_BOOT = typeof document !== 'undefined' && isHidden();
 
 // The other half of the never-render question. `hidden_at_boot` only catches
 // tabs that were ALREADY hidden; this fires once for a tab backgrounded after
@@ -83,7 +94,7 @@ const captureFirstHide = () => {
   // who backgrounds during bundle download and returns before the App.tsx mount
   // effect would otherwise be lost outright — no further event would ever fire.
   // That stretch is the longest and most throttled part of the load.
-  if (firstHiddenAtMs === null && document.visibilityState !== 'visible') {
+  if (firstHiddenAtMs === null && isHidden()) {
     firstHiddenAtMs = Math.round(performance.now());
   }
   if (firstHiddenAtMs === null || !isReady()) {
@@ -96,6 +107,12 @@ const captureFirstHide = () => {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', captureFirstHide);
+  // A prerendered page activated into a BACKGROUND tab goes hidden -> hidden,
+  // so no visibilitychange fires and the isHidden() guard above would leave it
+  // recorded as never-hidden — a false negative in place of the false positive
+  // the guard removes. prerenderingchange is the only event that observes that
+  // transition; web-vitals registers it for the same reason.
+  document.addEventListener('prerenderingchange', captureFirstHide);
 }
 
 function isReady(): boolean {
