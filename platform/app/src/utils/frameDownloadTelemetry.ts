@@ -66,8 +66,9 @@ const _pending = new Map<string, StudyStats>();
  * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
  * Resource-timing entries are delivered at completion and span the whole
  * request, so a fetch that began several windows ago lands wholly in the window
- * that saw it finish. Measured on production 2026-09-02: `network_active_ms`
- * already exceeds the 15s interval on 13.2% of flushes, topping out at 134s.
+ * that saw it finish. Measured on production over the 7 days to 2026-09-02:
+ * `network_active_ms` already exceeds the 15s interval on 8.2% of flushes
+ * (100 of 1,223), topping out at 135s.
  */
 let _windowStartedAt = 0;
 let _hiddenMsThisWindow = 0;
