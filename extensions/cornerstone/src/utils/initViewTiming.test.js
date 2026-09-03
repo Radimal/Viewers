@@ -10,12 +10,16 @@ jest.mock(
   }),
   { virtual: true }
 );
+// Mutable so a test can make the modality lookup resolve; with both arms
+// hardwired to undefined, `modality` was unobservable and a constant passed.
+const mockCs = { imageId: undefined, modality: undefined };
 jest.mock(
   '@cornerstonejs/core',
   () => ({
     EVENTS: { IMAGE_RENDERED: 'IMAGE_RENDERED' },
-    getEnabledElement: () => undefined,
-    metaData: { get: () => undefined },
+    getEnabledElement: () =>
+      mockCs.imageId ? { viewport: { getCurrentImageId: () => mockCs.imageId } } : undefined,
+    metaData: { get: () => (mockCs.modality ? { modality: mockCs.modality } : undefined) },
   }),
   { virtual: true }
 );
@@ -79,7 +83,12 @@ describe('hidden_during_load on the emitted event', () => {
   // Fresh registry per case: IMAGE_TIMING_KEYS, viewportsWaiting and
   // hasCapturedFirstImageThisPageLoad are all module state, and the module's
   // own visibilitychange listener must be the one under test.
-  const renderWith = async ({ flipVisibility, secondRender = false, beforeRender }) => {
+  const renderWith = async ({
+    flipVisibility,
+    secondRender = false,
+    beforeRender,
+    prerenderThenActivate = false,
+  }) => {
     const captured = [];
     let element;
     await jest.isolateModulesAsync(async () => {
@@ -105,12 +114,27 @@ describe('hidden_during_load on the emitted event', () => {
       setVisibility('visible');
       await tick();
 
+      if (prerenderThenActivate) {
+        // The document is prerendering when the study timer starts: hidden
+        // throughout, but rendering normally.
+        Object.defineProperty(document, 'prerendering', { value: true, configurable: true });
+        Object.defineProperty(document, 'visibilityState', {
+          value: 'hidden',
+          configurable: true,
+        });
+      }
+
       // startedAt must predate the visibility flips below, exactly as a real
       // study-open timer predates the reader switching tabs.
       log.timeStartedAt = { studyToFirstImage: performance.now() };
 
       element = document.createElement('div');
       initViewTiming({ element });
+
+      if (prerenderThenActivate) {
+        Object.defineProperty(document, 'prerendering', { value: false, configurable: true });
+        setVisibility('visible');
+      }
 
       if (flipVisibility) {
         setVisibility('hidden');
@@ -156,6 +180,34 @@ describe('hidden_during_load on the emitted event', () => {
     const captured = await renderWith({ flipVisibility: false });
     expect(captured).toHaveLength(1);
     expect(captured[0][1].hidden_during_load).toBe(false);
+  });
+
+  it('still flags a window that spanned prerender then activation', async () => {
+    // The contract stated in initViewTiming's own comment, previously unpinned:
+    // the guard covers a paint that COMPLETES during the prerender, and a
+    // window spanning prerender -> activation stays flagged because the
+    // activation fires visibilitychange and the interval clause stamps it.
+    // A mutant prerender-guarding that listener survived the whole suite.
+    const captured = await renderWith({ flipVisibility: false, prerenderThenActivate: true });
+    expect(captured).toHaveLength(1);
+    expect(document.visibilityState).toBe('visible');
+    expect(captured[0][1].hidden_during_load).toBe(true);
+  });
+
+  it('reports the rendered modality and the cluster it came from', async () => {
+    // Both were unobservable: the modality mock returned undefined on every
+    // path, so a constant passed, and cluster had no assertion at all. cluster
+    // is what every veg-vs-prod split groups on, including this PR's own.
+    mockCs.imageId = 'wadors:https://example/frames/1';
+    mockCs.modality = 'US';
+    try {
+      const [[, props]] = await renderWith({ flipVisibility: false });
+      expect(props.modality).toBe('US');
+      expect(props.cluster).toBe('localhost');
+    } finally {
+      mockCs.imageId = undefined;
+      mockCs.modality = undefined;
+    }
   });
 
   it('measures ms as exactly first-paint minus study-open', async () => {

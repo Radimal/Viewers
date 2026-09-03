@@ -39,6 +39,11 @@ const withEnv = async (overrides, fn) => {
  * `hideAfterEval` backgrounds the tab AFTER module eval but BEFORE init, which
  * is what separates a bundle-eval snapshot from a read at capture time.
  */
+// performance.now() readings driven by the tests below, so
+// ms_since_navigation_start can be asserted as a value rather than a range.
+const HIDE_AT_MS = 4321;
+const ACTIVATE_AT_MS = 8765;
+
 const initFresh = ({
   visibilityState = 'visible',
   commitHash,
@@ -101,7 +106,13 @@ const initFresh = ({
             value: false,
             configurable: true,
           });
-          document.dispatchEvent(new Event('prerenderingchange'));
+          const realNow = performance.now.bind(performance);
+          performance.now = () => ACTIVATE_AT_MS;
+          try {
+            document.dispatchEvent(new Event('prerenderingchange'));
+          } finally {
+            performance.now = realNow;
+          }
         }
       });
       return { calls, mod };
@@ -197,7 +208,10 @@ describe('_initPostHogUnsafe wiring', () => {
     });
     const hidden = calls.filter(c => c[0] === 'viewer_hidden');
     expect(hidden).toHaveLength(1);
-    expect(hidden[0][1].ms_since_navigation_start).toBeGreaterThanOrEqual(0);
+    // Not `>= 0`: that is the assertion round 6 recorded as unfalsifiable, and
+    // re-adding it here was a regression. The activation runs after init, so
+    // the latch reads the live clock.
+    expect(hidden[0][1].ms_since_navigation_start).toBe(ACTIVATE_AT_MS);
     // Still not a boot-hidden tab: it was prerendering when the bundle ran.
     expect(viewerLoaded({ calls })[1].hidden_at_boot).toBe(false);
   });
@@ -216,20 +230,41 @@ describe('_initPostHogUnsafe wiring', () => {
 
     it('fires once when the tab is first backgrounded, with ms_since_navigation_start', async () => {
       const { calls } = await initFresh();
-      setVisibility('hidden');
+      const realNow = performance.now.bind(performance);
+      performance.now = () => HIDE_AT_MS;
+      try {
+        setVisibility('hidden');
+      } finally {
+        performance.now = realNow;
+      }
       const events = hiddenEvents(calls);
       expect(events).toHaveLength(1);
-      // Bounded on both sides. >= 0 passes for a hardcoded 0; no upper bound
-      // passes for Date.now(), whose ~1.79e12 would put every session on the
-      // "reader gave up" side of the threshold the analysis query uses.
-      expect(events[0][1].ms_since_navigation_start).toBeGreaterThan(0);
-      expect(events[0][1].ms_since_navigation_start).toBeLessThan(60_000);
+      // Asserted EXACTLY against a driven clock. A range does not pin this: a
+      // hardcoded constant, a halved reading and a fixed offset all sit inside
+      // any plausible band, and this value is the sole discriminator between
+      // "throttled background tab" and "reader gave up" -- so a halved reading
+      // silently moves sessions across whatever threshold the analysis picks.
+      // Same defect class as first_image_rendered's ms, pinned the same way.
+      expect(events[0][1].ms_since_navigation_start).toBe(HIDE_AT_MS);
       // Routed through the shared helper, so build identity rides along.
       expect(events[0][1]).toHaveProperty('build_commit');
       // app is a super property; if this event were emitted before register,
       // every dashboard filtering app = viewer would silently drop it — and it
       // would drop it for the background-tab cohort specifically.
       expect(events[0][2]).toBe('viewer');
+    });
+
+    it('does not re-emit on a prerenderingchange after the hide already fired', async () => {
+      // captureFirstHide unsubscribes from visibilitychange but NOT from
+      // prerenderingchange, so the hideReported flag -- not the unsubscribe --
+      // is what makes this one-shot. Without the flag this fires twice.
+      const { calls } = await initFresh({ hideAfterEval: true });
+      expect(hiddenEvents(calls)).toHaveLength(1);
+
+      Object.defineProperty(document, 'prerendering', { value: false, configurable: true });
+      document.dispatchEvent(new Event('prerenderingchange'));
+
+      expect(hiddenEvents(calls)).toHaveLength(1);
     });
 
     it('does not fire when the tab merely becomes visible', async () => {

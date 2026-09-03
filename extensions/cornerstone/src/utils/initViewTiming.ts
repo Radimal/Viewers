@@ -40,6 +40,15 @@ export function wasHiddenDuringWindow(startedAt: number): boolean {
   // backgrounding, which is more machinery than an unmeasured case is worth —
   // no speculation rules ship in this repo, so whether the viewer is ever
   // prerendered at all is unknown.
+  //
+  // posthog.ts says its prerender predicate is half a pattern and must not be
+  // lifted without the prerenderingchange listener. That rule does not carry
+  // here, and the reason is worth stating: it latches a one-shot, this only
+  // stamps a timestamp. No visibility transition occurs DURING a prerender —
+  // the document is hidden from navigation start to activation — so the
+  // listener below cannot fire while prerendering, and guarding it would be
+  // unreachable code. A mutant adding that guard survives the suite for exactly
+  // that reason; it is equivalent, not untested.
   const hiddenNow =
     document.visibilityState !== 'visible' &&
     !(document as Document & { prerendering?: boolean }).prerendering;
