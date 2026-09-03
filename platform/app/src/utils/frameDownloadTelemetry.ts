@@ -181,12 +181,17 @@ function recordEntry(entry: PerformanceResourceTiming): void {
 /**
  * Wall-clock milliseconds during which at least one network fetch was in flight.
  *
- * The loader runs up to `maxNumRequests.interaction` frames concurrently (100
- * in `public/config/default.js`, the config the viewer build actually uses)
- * multiplexed over a single HTTP/2 connection, so each
- * entry's `duration` spans the same window. Summing them overcounts elapsed time
- * by roughly the concurrency factor and understates throughput by the same
- * factor; the union of the intervals is the actual transfer window.
+ * The loader runs up to `maxNumRequests.interaction` frames concurrently — 20 on
+ * both production clusters, read off their live `/app-config.js` on 2026-09-03 —
+ * multiplexed over a single HTTP/2 connection, so each entry's `duration` spans
+ * the same window. Summing them overcounts elapsed time by roughly the
+ * concurrency factor and understates throughput by the same factor; the union of
+ * the intervals is the actual transfer window.
+ *
+ * Do NOT read that cap out of `public/config/*.js`. Those files say 100, and the
+ * container entrypoint rewrites `app-config.js` from `$APP_CONFIG` on start, so
+ * no config file in this repo is what a deployed viewer actually loads. The live
+ * caps diverge on every key: 20 / 10 / 8 against the files' 100 / 75 / 25.
  */
 function activeMs(spans: Array<[number, number]>): number {
   if (!spans.length) {
