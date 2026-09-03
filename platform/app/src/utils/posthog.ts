@@ -68,16 +68,35 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && isHidden();
 // unobservable because the one-shot latch has already fired. And "early" has no
 // settled cut yet — derive it from the deployed distribution, do not invent one.
 //
-// Three query traps: these are three separate events, so it is a session-level
-// anti-join, not an insight filter row; PostHog stores custom booleans as the
-// JSON strings 'true'/'false', so `= true` matches nothing while failing open;
-// and a headless link scanner loads visible and never fires visibilitychange at
-// all, satisfying "never hidden" by construction — the lifetime-render-count
-// cohort filter is mandatory alongside this, not optional.
+// Four query traps: these are three separate events, so it is an anti-join, not
+// an insight filter row; PostHog stores custom booleans as the JSON strings
+// 'true'/'false', so `= true` matches nothing while failing open; and a headless
+// link scanner loads visible and never fires visibilitychange at all,
+// satisfying "never hidden" by construction — the lifetime-render-count cohort
+// filter is mandatory alongside this, not optional.
 //
-// One-shot: only the first backgrounding bears on the question. The latch is a
-// flag rather than just the unsubscribe, so a direct second call cannot
-// double-emit — the property is structural, not positional.
+// The fourth: DO NOT make that anti-join session-level, which an earlier version
+// of this comment prescribed. All three signals are per PAGE LOAD —
+// hidden_at_boot is a module-eval snapshot, viewer_hidden is a module-state
+// latch, first_image_rendered fires per study — while an analytics session
+// survives navigation. Measured 2026-09-02: 35.6% of sessions carrying these
+// events span more than one page load, one of them 72. In a session with five
+// loads where four rendered and one did not, a session-level
+// `viewer_loaded AND NOT first_image_rendered` sees a render and calls the whole
+// session healthy, hiding the never-render load this exists to count.
+//
+// There is no per-page-load key on these events yet, and `$window_id` is NOT
+// one: posthog-js carries a window id forward across a same-tab navigation
+// (`sessionid.js` restores it whenever `primary_window_exists` is absent, the
+// state a normal unload leaves). Until one is added, scope the anti-join to a
+// single load some other way, or accept that it under-counts.
+//
+// One-shot: only the first backgrounding bears on the question. The FLAG is
+// what guarantees that, not the unsubscribe: captureFirstHide removes the
+// visibilitychange listener but never the prerenderingchange one registered
+// below, so a prerender activation after a hide would re-enter. The unsubscribe
+// is cleanup. Dropping either one alone leaves the suite green, which is why the
+// flag now has a test of its own rather than resting on the shared cases.
 //
 // Seeded from HIDDEN_AT_BOOT, where 0 is the truthful value. A tab hidden from
 // navigation start (ctrl-click, "open link in a background tab" — how a case
@@ -117,6 +136,13 @@ if (typeof document !== 'undefined') {
   // recorded as never-hidden — a false negative in place of the false positive
   // the guard removes. prerenderingchange is the only event that observes that
   // transition; web-vitals registers it for the same reason.
+  //
+  // One deliberate divergence from that authority: web-vitals stamps 0 for this
+  // case (`firstHiddenTime = event.type === 'visibilitychange' ? … : 0`),
+  // reasoning that such a tab was always hidden. We stamp the live clock,
+  // because HIDDEN_AT_BOOT is false for a prerendering document and a prerender
+  // is not throttled the way a background tab is — the two are not the same
+  // population. Noted because the block above names web-vitals as the pattern.
   document.addEventListener('prerenderingchange', captureFirstHide);
 }
 
