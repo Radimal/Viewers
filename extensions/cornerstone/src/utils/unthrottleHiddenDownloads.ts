@@ -46,6 +46,13 @@
  * cheap — four `sendRequests` and a small sort each — but it is O(N) where it
  * was O(1), and it is the real cost of this change.
  *
+ * That cost becomes observable once the flush-window telemetry lands: a
+ * companion change adds `long_tasks` and `long_task_ms` per flush window to
+ * `frame_download_stats`, so a hidden window that used to read as "the browser
+ * deferred the work" can instead read as "the main thread was blocked". Same
+ * work, relocated — not a new regression. Said here because it will look like
+ * one on the dashboard.
+ *
  * The synchronous request path (`syncImageCount`, a requestFn returning a
  * non-thenable) is a narrower risk than it looks: `addRequest` is typed
  * `requestFn: () => Promise<IImage | void>`, so it is reached only when a
