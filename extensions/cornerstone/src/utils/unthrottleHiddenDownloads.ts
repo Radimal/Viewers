@@ -6,15 +6,32 @@
  * whenever `grabDelay !== undefined`, and both pools ship with `grabDelay = 0`
  * — which is not `undefined`, so every refill goes through a timer.
  *
- * Chrome clamps timers in a hidden page to at least 1s. The requests themselves
- * are never throttled — only the refill is — so while hidden, one tick refills
- * every free slot and throughput becomes `prefetch` frames per second. Both
+ * Chrome is documented to clamp timers in a hidden page to at least 1s — read
+ * THE CLAMP'S REACH below before treating that as settled for this path. The
+ * requests themselves are never throttled, only the refill, so where the clamp
+ * does engage one tick refills every free slot and throughput falls to about
+ * `prefetch` frames per second for any per-frame latency under 1s. Both
  * production clusters serve `prefetch: 8` (verified on the live
- * `/app-config.js`); the `|| 5` fallback in init.tsx is dead there, and the
- * `prefetch: 25` in `public/config/default.js` — same in `main-prod.js` and
- * `veg-prod.js` — is not what ships either, since the container entrypoint
- * overwrites `app-config.js` from the environment. Live diverges on every cap,
- * not just prefetch: `interaction` is 20 there against 100 in those files.
+ * `/app-config.js` 2026-09-03); the `|| 5` fallback in init.tsx is dead there.
+ * Nothing in `public/config/` is what ships: the container entrypoint rewrites
+ * `app-config.js` from `$APP_CONFIG` on start, so the baked-in file is
+ * overwritten before nginx serves it. Live diverges on every cap, not just
+ * prefetch — 20 / 10 / 8 against those files' 100 / 75 / 25. Do not reach for
+ * `main-prod.js` or `veg-prod.js` as the deployed values either; both open by
+ * declaring themselves local-only benchmarking configs not for deploy, and
+ * `main-prod.js` still carries a `REPLACE_ME` CloudFront host.
+ *
+ * THE CLAMP'S REACH ON THIS PATH IS NOT MEASURED. Chromium sends every
+ * throttleable timer queue in a hidden page to a 1s wake-up budget pool
+ * regardless of nesting, which is what the paragraph above assumes. But a
+ * direct probe in Chrome 151 found an ISOLATED `setTimeout(fn, 0)` in a
+ * genuinely hidden tab firing in 0-1ms across 25 samples, while a chained timer
+ * in the same tab at the same moment clamped to ~1s. Neither experiment is this
+ * code path: a saturated pool schedules refills back to back as frames land, and
+ * nobody has measured whether the clamp engages under that load. Before
+ * defending this change on throughput, run the loaded case — hide the tab, keep
+ * ~20 fetches in flight through the refill, and compare completions per second
+ * with `grabDelay` 0 against `undefined`.
  *
  * NOT once per minute. Chrome's intensive-throttling bucket needs a chain count
  * of five, meaning a setTimeout scheduled from inside a timer callback's own
@@ -24,13 +41,37 @@
  * earlier version of this comment claimed one wake-up per minute and overstated
  * the worst case roughly sixtyfold.
  *
- * SIZE THE WIN HONESTLY. Because a tick refills all free slots, hidden
- * throughput is `slots × min(1/L, 1)` for per-frame latency `L` — so at `L ≥ 1s`
- * the clamp is not the binding constraint and this change does nothing at all.
- * Measured 2026-09-02: 47.6% of flushes report a per-frame p50 at or above 1s,
- * the fleet p50 is 905ms and the p90 is 10.1s. The benefit is real below that
- * and largest for readers who are already fast; it is absent for the slow tail
- * the viewer-latency work is actually about.
+ * SIZE THE WIN HONESTLY. Because a tick refills all free slots, and wake-ups
+ * land on 1s boundaries, a cycle lasts `ceil` of the per-frame latency `L` to
+ * the next whole second. Hidden throughput is therefore `slots / ceil_1s(L)`,
+ * against `slots / L` unthrottled — a ratio of `L / ceil_1s(L)`.
+ *
+ * NOT `slots × min(1/L, 1)`, which an earlier version of this comment used to
+ * conclude the change "does nothing at all" once `L` reaches 1s. The two agree
+ * only where `L` is a whole number of seconds. At `L = 1.01s` the throttled pool
+ * runs at 8/2 against 8/1.01 — about 51% of full speed, not 100% — so the loss
+ * is real through the whole 1-2s band and only decays as `ceil_1s(L)/L` above it.
+ * At the fleet p90 near 10s it is about 1%.
+ *
+ * LABEL THE UNIT ON THE DENOMINATOR. Measured 2026-09-02, n = 2,894 flushes
+ * carrying 63,645 frames:
+ *
+ *   per-frame p50   share of FLUSHES   share of FRAMES
+ *   < 125ms                    8.9%             42.5%
+ *   125ms - 1s                44.6%             44.4%
+ *   >= 1s                     46.5%             13.1%
+ *
+ * Flushes are dominated by small ones — median 5 frames, mean 22 — so the two
+ * columns tell opposite stories, and the frame column is the one that describes
+ * bytes a reader waits on. An earlier version of this comment quoted the flush
+ * column (as 47.6%) and then reasoned about it as though it were traffic,
+ * concluding the benefit is "absent for the slow tail". Weighted by frames the
+ * slow bucket is 13.1%, not 46.5%, and 42.5% of frames sit under 125ms where the
+ * clamp would bind hardest. Fleet per-frame p50 is 868ms and p90 is 9.9s.
+ *
+ * So IF the premise above holds, this helps most of the frames actually
+ * downloaded. What it does not do is fix the slow tail: a reader at 10s per
+ * frame is not waiting on the refill.
  *
  * There is also no production evidence yet that hidden tabs load slower: the
  * `viewer_hidden` event does not exist in the project's taxonomy until the
