@@ -87,7 +87,19 @@ const initFresh = ({
         };
         posthog.capture = (n, p) => calls.push([n, p, posthog.get_property('app')]);
         if (hideAfterEval) {
-          setVisibility('hidden');
+          // Clock pinned so the latched timestamp is an exact value downstream.
+          // Left live, the only thing a test can say about it is a range, and a
+          // range survives a hardcoded constant, a halved reading and a fixed
+          // offset — none of which the pre-init latch may do, since it is the
+          // sole discriminator between a throttled background tab and a reader
+          // who gave up.
+          const realNow = performance.now.bind(performance);
+          performance.now = () => HIDE_AT_MS;
+          try {
+            setVisibility('hidden');
+          } finally {
+            performance.now = realNow;
+          }
         }
 
         // Independent of hideAfterEval, so it also composes with
@@ -293,9 +305,10 @@ describe('_initPostHogUnsafe wiring', () => {
       const { calls } = await initFresh({ hideAfterEval: true, visibleAgainBeforeInit: true });
       const events = hiddenEvents(calls);
       expect(events).toHaveLength(1);
-      // The latched timestamp, not the time of the flush at init.
-      expect(events[0][1].ms_since_navigation_start).toBeGreaterThan(0);
-      expect(events[0][1].ms_since_navigation_start).toBeLessThan(60_000);
+      // The latched timestamp, not the time of the flush at init. Exact, not a
+      // range: the flush happens later than HIDE_AT_MS on any live clock, so a
+      // range wide enough to admit both cannot tell them apart.
+      expect(events[0][1].ms_since_navigation_start).toBe(HIDE_AT_MS);
     });
 
     // A ctrl-clicked / "open in background tab" case link is hidden from
