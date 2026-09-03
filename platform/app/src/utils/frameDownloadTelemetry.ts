@@ -23,11 +23,21 @@ import { capturePostHogEvent } from './posthog';
  *
  * Each event also carries four figures describing the flush WINDOW rather than
  * the study — `window_ms`, `hidden_ms`, `long_tasks`, `long_task_ms` — plus
- * `window_started_ms`, which identifies the window rather than measuring it.
+ * `window_started_at`, which identifies the window rather than measuring it.
  * The four separate "the frames were slow to arrive" from "the tab was
  * backgrounded and the browser deferred the work" from "the main thread was
  * blocked". See the flush-window accounting block below for how they must be
  * aggregated, and why the fifth is needed to do it.
+ *
+ * THAT MIDDLE READING IS BUILD-DEPENDENT. A companion change clears the
+ * cornerstone request pools' `grabDelay` while the tab is hidden, removing the
+ * refill throttle those pools are subject to in a hidden page. On any build
+ * carrying it, `hidden_ms > 0` no longer implies the browser deferred download
+ * work, and `long_task_ms` can RISE in hidden windows precisely BECAUSE of it:
+ * the refill goes synchronous and stops coalescing concurrent completions, so
+ * the cost moves onto the main thread. Check whether the build contains
+ * `unthrottleHiddenDownloads` before reading a hidden window's slowness as
+ * throttling, or its long tasks as the page's own work.
  */
 
 const FRAME_URL_REGEX = /\/dicom-web\/studies\/([^/]+)\/[^?#]*\/frames\//;
@@ -428,8 +438,8 @@ export function stopFrameDownloadTelemetry(): void {
   // documented to mean.
   //
   // Worth knowing before spending more effort here: flush_reason 'stop' has
-  // never fired in production (0 of 3,976 events over the 7 days to
-  // 2026-09-02). This is App.tsx's unmount cleanup, which an SPA effectively
+  // never fired in production (0 of 2,900 events in the seven days to
+  // 2026-09-03). This is App.tsx's unmount cleanup, which an SPA effectively
   // never runs — the page tears down and fires pagehide instead.
   _longTasksObserved = false;
 }
