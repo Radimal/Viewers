@@ -192,8 +192,16 @@ describe('frameDownloadTelemetry', () => {
   });
 
   it('keeps flushing on the interval after a pagehide, as a bfcache restore does', () => {
-    // 53 interval flushes directly followed a pagehide on 2026-09-02, so this
-    // cell fires in production -- unlike flush_reason 'stop', which never has.
+    // Kept for the mechanism, NOT because production shows it. An earlier
+    // version of this comment claimed 53 interval flushes directly followed a
+    // pagehide on 2026-09-02 and used that to contrast the cell with
+    // flush_reason 'stop'. Re-measured 2026-09-03 over the event's whole
+    // production life, keyed per page load: pagehide -> interval is 0, and only
+    // a handful of page loads emit anything at all after a pagehide (6
+    // pagehide -> pagehide). Both cells are at zero, so the contrast never
+    // existed. The test still earns its place — it pins that stop() is what
+    // ends flushing and a pagehide alone does not, which is what makes a
+    // bfcache restore safe — but do not cite it as a live path.
     emit([frameEntry()]);
     advance(3_000);
     window.dispatchEvent(new Event('pagehide'));

@@ -87,9 +87,15 @@ const _pending = new Map<string, StudyStats>();
  * window id FORWARD across a same-tab navigation: `sessionid.js` restores the
  * stored id whenever `primary_window_exists` is absent, which is exactly the
  * state a normal unload leaves behind, and mints a fresh one only for a
- * duplicated tab. Measured 2026-09-02: 516 of 3,125 (session, window) pairs
- * cover more than one page load, one of them 51. An earlier version of this
- * comment asserted the opposite without reading that source.
+ * duplicated tab. Measured across all `app = 'viewer'` events on 2026-09-02,
+ * counting distinct `$initialization_time` per (`$session_id`, `$window_id`):
+ * 517 of 3,162 pairs — 16.4% — cover more than one page load. State that scope
+ * when requoting: the same measurement over `frame_download_stats` alone gives
+ * 282 of 1,478, and the difference is the event set, not a retraction.
+ *
+ * The worst pair held 51 loads that day, and that figure is a FLOOR, not a
+ * property of the system: over 2026-08-27..09-04 the maximum is already 177.
+ * Same ratchet as the 229s below — quote the share, which settles.
  *
  * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
  * Resource-timing entries are delivered at completion and span the whole
@@ -102,6 +108,10 @@ const _pending = new Map<string, StudyStats>();
  * Treat 229s as a FLOOR. An earlier version of this comment quoted 135s and
  * called the maximum "the stable part": it was read mid-day, and a maximum over
  * a growing sample only ever ratchets. The share is the quantity that settles.
+ *
+ * `long_task_ms / window_ms` is not a ratio either, for the same reason — a
+ * longtask entry is delivered at completion and charged in full to the window
+ * that saw it end. See its property comment below.
  */
 let _windowStartedAt = 0;
 let _hiddenMsThisWindow = 0;
@@ -249,9 +259,17 @@ function flush(reason: string): void {
         network_active_ms: Math.round(networkMs),
         // Wall clock actually elapsed since the previous flush. For
         // flush_reason = 'interval' the scheduled span is FLUSH_INTERVAL_MS, so
-        // the excess is how much the browser deferred the timer — the only
-        // direct read we have on background timer throttling, measured on real
+        // the excess is how much the flush was deferred, measured on real
         // readers' browsers rather than inferred.
+        //
+        // DEFERRAL IS NOT THE SAME AS THROTTLING, and this field cannot tell
+        // the two apart on its own. setInterval also cannot fire while the main
+        // thread is busy, so a 30s long task defers the flush by ~30s on a
+        // fully foregrounded tab; and a page frozen for bfcache resumes and
+        // charges the whole frozen span here. Read the excess as background
+        // timer throttling only where long_tasks is near zero AND hidden_ms
+        // accounts for the span. Separating the first two is exactly what
+        // long_tasks was added for, so use it.
         window_ms: Math.round(windowMs),
         // Identifies the flush, globally. Every event of one flush carries the
         // same value, so (`$session_id`, `window_started_at`) is the grouping
@@ -266,7 +284,15 @@ function flush(reason: string): void {
         // four flush reasons regardless of what the window actually contained.
         hidden_ms: Math.round(hiddenMs),
         // Main-thread blocking during the window. null (not 0) where the
-        // browser does not support the longtask entry type.
+        // browser does not support the longtask entry type — which is a browser
+        // class, not a rare edge: Firefox and every WebKit engine report null,
+        // so avg(long_tasks) silently restricts the population to Chromium.
+        //
+        // long_task_ms carries the same overshoot as network_active_ms and for
+        // the same reason: a longtask entry is delivered when the task ENDS and
+        // its duration covers the whole task, so one straddling a flush boundary
+        // is charged in full to the window that saw it finish. That makes
+        // long_task_ms / window_ms not a blocked fraction, and it can exceed 1.
         long_tasks: longTasks,
         long_task_ms: longTaskMs,
       });
@@ -291,10 +317,12 @@ function flush(reason: string): void {
   // original phase would hand the next 'interval' flush a window SHORTER than
   // FLUSH_INTERVAL_MS. window_ms is documented above as measured-minus-
   // scheduled deferral, so a consumer would read that shortfall as NEGATIVE
-  // deferral. Deduplicated per page load, 5.6% of interval flushes directly
-  // follow a non-interval one (57 of 1,014 on 2026-09-02); the figure swings
-  // with how "directly follow" is defined, so treat it as an order of
-  // magnitude, not a rate.
+  // deferral. Measured 2026-09-02, keyed per page load on (`$session_id`,
+  // `$initialization_time`) and collapsing a multi-study flush to one flush:
+  // 51 of 2,311 interval flushes — 2.2% — directly follow a non-interval one,
+  // all 51 after a 'hidden'. An earlier version of this comment said 5.6%
+  // (57 of 1,014); the numerator was close but the denominator counted well
+  // under half the interval flushes that day.
   //
   // NOT on an 'interval' flush, which is already in phase. Re-phasing there
   // would restart the timer AFTER the emit loop, adding its cost to every
@@ -446,5 +474,13 @@ export function stopFrameDownloadTelemetry(): void {
   // never fired in production (0 of 2,900 events in the seven days to
   // 2026-09-03). This is App.tsx's unmount cleanup, which an SPA effectively
   // never runs — the page tears down and fires pagehide instead.
+  //
+  // That is NOT a reason to treat the bfcache path as the live alternative: an
+  // interval flush after a pagehide has also never fired. The two flush cells
+  // that do fire and have no test are 'hidden' and 'pagehide' flushes whose
+  // window already contained a COMPLETED hidden stretch, so hidden_ms > 0 —
+  // 19 and 13 respectively over the event's production life. The invariant
+  // "the window that triggers flush('hidden') is precisely the one that was
+  // visible" holds only for the first hide of a stretch.
   _longTasksObserved = false;
 }
