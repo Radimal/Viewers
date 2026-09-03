@@ -13,6 +13,10 @@ let observeSpy;
 let disconnectSpy;
 let nowMs;
 
+// Fixed so window_started_at, which is timeOrigin + the window offset, can be
+// asserted as an exact value rather than a shape.
+const TIME_ORIGIN = 1_700_000_000_000;
+
 // Callbacks are registered by the entry type passed to observe(), because the
 // module now runs two observers and "the last one constructed" is ambiguous.
 class MockPerformanceObserver {
@@ -78,6 +82,10 @@ describe('frameDownloadTelemetry', () => {
     disconnectSpy = jest.fn();
     nowMs = 1_000_000;
     performance.now = () => nowMs;
+    Object.defineProperty(performance, 'timeOrigin', {
+      value: TIME_ORIGIN,
+      configurable: true,
+    });
     delete MockPerformanceObserver.supportedEntryTypes;
     global.PerformanceObserver = MockPerformanceObserver;
     setVisibility('visible');
@@ -118,6 +126,76 @@ describe('frameDownloadTelemetry', () => {
       p50_ttfb_ms: 40,
       network_bytes: 150000,
     });
+  });
+
+  it('reports each percentile from its own rank, and the cluster it came from', () => {
+    // p50/p90/p95/max were only ever asserted on samples where several of them
+    // coincide, so computing p95 as p90 (or p90 as p50) passed. Ten distinct
+    // durations separate all four.
+    emit(
+      Array.from({ length: 10 }, (_, i) =>
+        frameEntry({
+          name: `${FRAME_BASE}/${i}`,
+          duration: (i + 1) * 10,
+          responseStart: 1000 + (i + 1),
+        })
+      )
+    );
+    flushInterval();
+
+    expect(propsOf(0)).toMatchObject({
+      frames: 10,
+      p50_ms: 50,
+      p90_ms: 90,
+      p95_ms: 100,
+      max_ms: 100,
+      p50_ttfb_ms: 5,
+      max_ttfb_ms: 10,
+      cluster: 'localhost',
+      dropped_samples: 0,
+    });
+  });
+
+  it('counts samples dropped past the per-study cap', () => {
+    // dropped_samples is what says a percentile was computed from a truncated
+    // sample, so a mutant hardcoding 0 makes every percentile look trustworthy.
+    emit(
+      Array.from({ length: 5_002 }, (_, i) => frameEntry({ name: `${FRAME_BASE}/${i}` }))
+    );
+    flushInterval();
+
+    expect(propsOf(0).dropped_samples).toBe(2);
+  });
+
+  it('ignores dicom-web requests that are not frames', () => {
+    // The only negative case was app.js, which fails the /dicom-web/ test too,
+    // so dropping the /frames/ anchor from the regex went unnoticed. A metadata
+    // request would then be counted as a frame and land in every percentile.
+    emit([
+      frameEntry({
+        name: 'https://veg-view.prod-1.radimal.ai/dicom-web/studies/1.2.3/metadata',
+      }),
+      frameEntry({
+        name: 'https://veg-view.prod-1.radimal.ai/dicom-web/studies/1.2.3/series/4.5',
+      }),
+    ]);
+    flushInterval();
+
+    expect(capturePostHogEvent).not.toHaveBeenCalled();
+  });
+
+  it('keeps flushing on the interval after a pagehide, as a bfcache restore does', () => {
+    // 53 interval flushes directly followed a pagehide on 2026-09-02, so this
+    // cell fires in production -- unlike flush_reason 'stop', which never has.
+    emit([frameEntry()]);
+    advance(3_000);
+    window.dispatchEvent(new Event('pagehide'));
+    capturePostHogEvent.mockClear();
+
+    emit([frameEntry()]);
+    flushInterval();
+
+    expect(propsOf(0)).toMatchObject({ flush_reason: 'interval', window_ms: 15_000 });
   });
 
   it('takes the nearest-rank percentile at an even sample count', () => {
@@ -426,7 +504,7 @@ describe('frameDownloadTelemetry', () => {
       expect(propsOf(1).hidden_ms).toBe(0);
     });
 
-    it('stamps every event of one flush with the same window_started_ms', () => {
+    it('stamps every event of one flush with the same window_started_at', () => {
       // The clock must MOVE inside the flush. Pinned, a per-event
       // performance.now() read gives every event the same value too, and the
       // snapshot this invariant actually rests on goes untested.
@@ -440,10 +518,10 @@ describe('frameDownloadTelemetry', () => {
       ]);
       flushInterval();
 
-      expect(propsOf(0).window_started_ms).toBe(propsOf(1).window_started_ms);
+      expect(propsOf(0).window_started_at).toBe(propsOf(1).window_started_at);
     });
 
-    it('advances window_started_ms to the previous flush, so flushes are distinguishable', () => {
+    it('advances window_started_at to the previous flush, so flushes are distinguishable', () => {
       // Without this a consumer cannot separate two flushes of one session, and
       // the aggregation rule above has no key to group by.
       //
@@ -462,9 +540,13 @@ describe('frameDownloadTelemetry', () => {
       // invariant under a uniform one-window shift: stamping the flush INSTANT
       // instead of the window start satisfies it while being off by a whole
       // window, which would mis-join every consumer that uses the key.
-      expect(propsOf(0).window_started_ms).toBe(startedAt);
-      expect(propsOf(0).window_started_ms + propsOf(0).window_ms).toBe(
-        propsOf(1).window_started_ms
+      //
+      // The timeOrigin term is the half that makes the key unique across page
+      // loads: performance.now() restarts at zero in each document, so without
+      // it two documents in one session emit the same offsets.
+      expect(propsOf(0).window_started_at).toBe(TIME_ORIGIN + startedAt);
+      expect(propsOf(0).window_started_at + propsOf(0).window_ms).toBe(
+        propsOf(1).window_started_at
       );
     });
 
