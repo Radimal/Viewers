@@ -79,9 +79,10 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && isHidden();
 // of this comment prescribed. All three signals are per PAGE LOAD —
 // hidden_at_boot is a module-eval snapshot, viewer_hidden is a module-state
 // latch, first_image_rendered fires per study — while an analytics session
-// survives navigation. Measured 2026-09-02: 35.6% of sessions carrying these
-// events span more than one page load, one of them 72. In a session with five
-// loads where four rendered and one did not, a session-level
+// survives navigation. Measured 2026-09-02, counting a page load as one
+// viewer_loaded: 618 of 2,459 sessions carrying these events — 25.1% — span
+// more than one page load, one of them 72. In a session with five loads where
+// four rendered and one did not, a session-level
 // `viewer_loaded AND NOT first_image_rendered` sees a render and calls the whole
 // session healthy, hiding the never-render load this exists to count.
 //
