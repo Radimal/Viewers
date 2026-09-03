@@ -10,9 +10,11 @@
  * are never throttled — only the refill is — so while hidden, one tick refills
  * every free slot and throughput becomes `prefetch` frames per second. Both
  * production clusters serve `prefetch: 8` (verified on the live
- * `/app-config.js`); the `|| 5` fallback in init.tsx is dead there, and the 5 in
- * `public/config/default.js` is not what ships either, since the container
- * entrypoint overwrites `app-config.js` from the environment.
+ * `/app-config.js`); the `|| 5` fallback in init.tsx is dead there, and the
+ * `prefetch: 25` in `public/config/default.js` — same in `main-prod.js` and
+ * `veg-prod.js` — is not what ships either, since the container entrypoint
+ * overwrites `app-config.js` from the environment. Live diverges on every cap,
+ * not just prefetch: `interaction` is 20 there against 100 in those files.
  *
  * NOT once per minute. Chrome's intensive-throttling bucket needs a chain count
  * of five, meaning a setTimeout scheduled from inside a timer callback's own
