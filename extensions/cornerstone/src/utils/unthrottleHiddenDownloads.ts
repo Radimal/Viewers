@@ -6,10 +6,12 @@
  * whenever `grabDelay !== undefined`, and both pools ship with `grabDelay = 0`
  * — which is not `undefined`, so every refill goes through a timer.
  *
- * Chrome is documented to clamp timers in a hidden page to at least 1s — read
- * THE CLAMP'S REACH below before treating that as settled for this path. The
- * requests themselves are never throttled, only the refill, so where the clamp
- * does engage one tick refills every free slot and throughput falls to about
+ * THIS DOES NOTHING. MEASURED — SEE BELOW BEFORE REVIVING IT.
+ *
+ * Chrome clamps timers in a hidden page to at least 1s, but only on the
+ * high-nesting timer queue, and this refill never lands there. The requests
+ * themselves are never throttled, only the refill, so where the clamp does
+ * engage one tick refills every free slot and throughput falls to about
  * `prefetch` frames per second for any per-frame latency under 1s. Both
  * production clusters serve `prefetch: 8` (verified on the live
  * `/app-config.js` 2026-09-03); the `|| 5` fallback in init.tsx is dead there.
@@ -21,17 +23,43 @@
  * declaring themselves local-only benchmarking configs not for deploy, and
  * `main-prod.js` still carries a `REPLACE_ME` CloudFront host.
  *
- * THE CLAMP'S REACH ON THIS PATH IS NOT MEASURED. Chromium sends every
- * throttleable timer queue in a hidden page to a 1s wake-up budget pool
- * regardless of nesting, which is what the paragraph above assumes. But a
- * direct probe in Chrome 151 found an ISOLATED `setTimeout(fn, 0)` in a
- * genuinely hidden tab firing in 0-1ms across 25 samples, while a chained timer
- * in the same tab at the same moment clamped to ~1s. Neither experiment is this
- * code path: a saturated pool schedules refills back to back as frames land, and
- * nobody has measured whether the clamp engages under that load. Before
- * defending this change on throughput, run the loaded case — hide the tab, keep
- * ~20 fetches in flight through the refill, and compare completions per second
- * with `grabDelay` 0 against `undefined`.
+ * THE CLAMP NEVER ENGAGES ON THIS PATH. Measured in Chrome 151 on 2026-09-03,
+ * in a real hidden tab (`visibilityState 'hidden'`, `hasFocus false`), three
+ * probes running concurrently:
+ *
+ *   - The actual code path — `setTimeout(fn, 0)` scheduled from a fetch
+ *     promise's continuation, which is what `requestResult.finally(...)` does —
+ *     fired in 0ms on 25 of 25 iterations. Real fetch latency was median 131ms
+ *     (63-189), inside the band where a 1s clamp would bind, and iterations were
+ *     only ~131ms apart, so this is not the no-recent-wake-up exemption either.
+ *   - Control, same tab, same moment: a pure timer chain clamped to ~1s from
+ *     link 7 on (2, 2, 0, 0, 0, 0, 961, 998, 999, 1000, 1000, 1005, 998, 1000).
+ *     The tab really was throttled; the low-nesting path really was exempt.
+ *   - An isolated timer after >2s of quiet: also 0ms.
+ *
+ * So the 1s clamp is gated on timer NESTING, not on the page being hidden.
+ * `startAgain()`'s timer is scheduled from a microtask of the network task that
+ * resolved the load — chain count 0 — so `grabDelay = 0` is never clamped and
+ * there is nothing here to unthrottle. `0` still being a timer rather than the
+ * synchronous path remains true; it just costs nothing.
+ *
+ * Do NOT revive this from Chromium source. `PageSchedulerImpl::
+ * GetWakeUpBudgetPool` reads as though `ThrottlingType::kBackground` sends every
+ * throttleable queue to a 1s `hidden_wake_up_budget_pool_` regardless of
+ * nesting, with `AllowLowerAlignmentIfNoRecentWakeUp` applied only to the
+ * intensive pool. Reasoning from that predicts a ~500ms mean delay here and is
+ * wrong. The measurement overrules it.
+ *
+ * Limit of the probe: it ran under 5 minutes hidden, so the intensive (1/min)
+ * pool was never exercised. Only the high-nesting queue carries
+ * `SetCanBeIntensivelyThrottled`, so low nesting should never enter it, but that
+ * half is source reading rather than measurement.
+ *
+ * What remains is pure cost: the change removes the `!this.timeoutHandle`
+ * coalescing guard's effect, taking refills from O(1) to O(N) per completion
+ * burst, and it removes the timer that today breaks the synchronous-throw
+ * recursion described below. Everything after this point documents a mechanism
+ * that does not fire.
  *
  * NOT once per minute. Chrome's intensive-throttling bucket needs a chain count
  * of five, meaning a setTimeout scheduled from inside a timer callback's own
@@ -69,13 +97,15 @@
  * slow bucket is 13.1%, not 46.5%, and 42.5% of frames sit under 125ms where the
  * clamp would bind hardest. Fleet per-frame p50 is 868ms and p90 is 9.9s.
  *
- * So IF the premise above holds, this helps most of the frames actually
- * downloaded. What it does not do is fix the slow tail: a reader at 10s per
- * frame is not waiting on the refill.
+ * Kept because the flush-vs-frame inversion is the reusable lesson, not because
+ * it sizes anything: the premise above is measured false, so the win is zero in
+ * every bucket. Had the clamp engaged, the frame column is the one that would
+ * have mattered.
  *
- * There is also no production evidence yet that hidden tabs load slower: the
+ * There was never production evidence that hidden tabs load slower either: the
  * `viewer_hidden` event does not exist in the project's taxonomy until the
- * visibility-telemetry work ships. The case for this change is code reading.
+ * visibility-telemetry work ships. The case for this change was code reading,
+ * and the measurement above is what code reading missed.
  *
  * Setting `grabDelay` to `undefined` makes `startAgain()` call `startGrabbing()`
  * synchronously, so there is no timer left for Chrome to throttle. Applied only
