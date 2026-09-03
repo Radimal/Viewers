@@ -171,8 +171,15 @@ export default async function init({
     [RequestTypes.Compute]: appConfig?.maxNumRequests?.compute || 10,
   };
 
-  // Those slots only get refilled on a timer, which Chrome throttles hard in a
-  // hidden page — see unthrottleHiddenDownloads for the numbers.
+  // Those slots only get refilled on a timer, which Chrome clamps to 1s in a
+  // hidden page — see unthrottleHiddenDownloads for the numbers and for how
+  // narrow the win actually is.
+  //
+  // imageRetrievalPoolManager is included defensively rather than because it is
+  // known to be throttle-limited: OHIF never reconfigures its caps, and its only
+  // producer is already gated by imageLoadPoolManager above, so it should never
+  // saturate and never reach the refill timer. Kept because that is a
+  // code-reading conclusion, not a measurement, and passing it costs nothing.
   unthrottleHiddenDownloads([imageLoadPoolManager, imageRetrievalPoolManager]);
 
   initWADOImageLoader(userAuthenticationService, appConfig, extensionManager);
