@@ -61,26 +61,37 @@ const _pending = new Map<string, StudyStats>();
  * WINDOW — the span since the previous flush — and not the study. A flush with
  * two pending studies emits two events carrying identical window figures, so
  * those four must never be summed across the events of one flush. Group by
- * (`$session_id`, `$window_id`, `window_started_ms`) first — `window_started_ms`
- * is the fifth window-scoped property and exists to make that grouping possible;
- * it is a key, never a quantity to aggregate. All three are
- * required: `window_started_ms` is a `performance.now()` reading, whose origin
- * is the DOCUMENT's navigation start, so two page loads in one analytics
- * session each count from zero and their offsets overlap. Measured 2026-09-02:
- * 17.8% of sessions carrying this event span more than one page load (105 of
- * 591), up to 8. `$window_id` is what separates them, and PostHog attaches it
- * to every one of these events. `frames` and the byte counters stay per-study
+ * (`$session_id`, `window_started_at`) first — `window_started_at` is the fifth
+ * window-scoped property and exists to make that grouping possible; it is a key,
+ * never a quantity to aggregate. `frames` and the byte counters stay per-study
  * and are summed across flushes exactly as before.
+ *
+ * `window_started_at` is EPOCH milliseconds, not a `performance.now()` offset,
+ * and that is the whole point. `performance.now()`'s origin is the document's
+ * navigation start, so every page load counts from zero and two documents in one
+ * analytics session produce colliding offsets. Adding `performance.timeOrigin` —
+ * that same navigation start, in epoch time — makes the value unique per page
+ * load by construction and directly comparable to the event `timestamp`.
+ *
+ * Do NOT reach for `$window_id` to separate page loads. posthog-js carries a
+ * window id FORWARD across a same-tab navigation: `sessionid.js` restores the
+ * stored id whenever `primary_window_exists` is absent, which is exactly the
+ * state a normal unload leaves behind, and mints a fresh one only for a
+ * duplicated tab. Measured 2026-09-02: 516 of 3,125 (session, window) pairs
+ * cover more than one page load, one of them 51. An earlier version of this
+ * comment asserted the opposite without reading that source.
  *
  * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
  * Resource-timing entries are delivered at completion and span the whole
  * request, so a fetch that began several windows ago lands wholly in the window
- * that saw it finish. On 2026-09-02, the first day this event reached both
- * production clusters, `network_active_ms` topped out at 135s — nine intervals
- * of span reported against one window. Roughly a tenth of emitted events exceed
- * the interval; that share is given loosely on purpose, because three
- * measurements through the same still-accumulating day read 8.2%, 8.1% and
- * 10.3%. The maximum is the stable part and the part that matters.
+ * that saw it finish. Over the whole of 2026-09-02, the first day this event
+ * reached both production clusters, 9.3% of emitted events exceeded the 15s
+ * interval and the largest was 229s — fifteen intervals of span reported against
+ * one window.
+ *
+ * Treat 229s as a FLOOR. An earlier version of this comment quoted 135s and
+ * called the maximum "the stable part": it was read mid-day, and a maximum over
+ * a growing sample only ever ratchets. The share is the quantity that settles.
  */
 let _windowStartedAt = 0;
 let _hiddenMsThisWindow = 0;
@@ -227,14 +238,12 @@ function flush(reason: string): void {
         // direct read we have on background timer throttling, measured on real
         // readers' browsers rather than inferred.
         window_ms: Math.round(windowMs),
-        // Identifies the flush WITHIN ONE PAGE LOAD. Every event of one flush
-        // carries the same value, so (`$session_id`, `$window_id`,
-        // `window_started_ms`) is the grouping key the aggregation rule above
-        // requires — `$window_id` because this is a per-document clock, not a
-        // per-session one. Without the key a consumer has to approximate a
-        // flush by timestamp, which splits one that straddles a second
-        // boundary.
-        window_started_ms: Math.round(windowStartedAt),
+        // Identifies the flush, globally. Every event of one flush carries the
+        // same value, so (`$session_id`, `window_started_at`) is the grouping
+        // key the aggregation rule above requires. Epoch ms via
+        // performance.timeOrigin — see that block for why a bare
+        // performance.now() offset collides across page loads.
+        window_started_at: Math.round(performance.timeOrigin + windowStartedAt),
         // Milliseconds of that window during which the tab was hidden.
         // Deliberately an interval measure, not document.visibilityState at
         // emit time: flush('hidden') runs AT the transition and flush('pagehide')
@@ -417,5 +426,10 @@ export function stopFrameDownloadTelemetry(): void {
   // event report long_tasks: null on a browser that had measured them, which
   // reads as "this browser cannot measure long tasks" — the one thing null is
   // documented to mean.
+  //
+  // Worth knowing before spending more effort here: flush_reason 'stop' has
+  // never fired in production (0 of 3,976 events over the 7 days to
+  // 2026-09-02). This is App.tsx's unmount cleanup, which an SPA effectively
+  // never runs — the page tears down and fires pagehide instead.
   _longTasksObserved = false;
 }
