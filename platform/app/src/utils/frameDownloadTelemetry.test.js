@@ -21,11 +21,18 @@ const TIME_ORIGIN = 1_700_000_000_000;
 // module now runs two observers and "the last one constructed" is ambiguous.
 class MockPerformanceObserver {
   constructor(cb) {
+    let observedType;
     this.observe = init => {
+      observedType = init.type;
       observers[init.type] = cb;
       observeSpy(init);
     };
-    this.disconnect = disconnectSpy;
+    // Reports WHICH observer disconnected. A single shared spy cannot: with two
+    // observers running, `toHaveBeenCalled()` is satisfied by either one, so
+    // dropping the long-task disconnect leaves the suite green and the leaked
+    // observer keeps accruing into the next start()'s first window — the exact
+    // thing the unbuffered observe() exists to prevent.
+    this.disconnect = () => disconnectSpy(observedType);
   }
 }
 
@@ -336,7 +343,7 @@ describe('frameDownloadTelemetry', () => {
 
     expect(capturePostHogEvent).toHaveBeenCalledTimes(1);
     expect(capturePostHogEvent.mock.calls[0][1].flush_reason).toBe('stop');
-    expect(disconnectSpy).toHaveBeenCalled();
+    expect(disconnectSpy).toHaveBeenCalledWith('resource');
   });
 
   it('does not resurrect the flush timer on the final flush', () => {
@@ -553,6 +560,19 @@ describe('frameDownloadTelemetry', () => {
     it('reports identical window figures on every study in one flush', () => {
       // These four describe the flush, not the study, so a consumer that sums
       // them across the events of one flush double-counts.
+      //
+      // Two things this setup needs, or both assertions go vacuous. The clock
+      // must MOVE inside the flush — pinned, a per-event performance.now() read
+      // is indistinguishable from the pre-loop snapshot, which is the same trap
+      // already fixed for window_started_at above. And the window must have been
+      // HIDDEN, because on a visible window _hiddenSince is null and hidden_ms
+      // is a constant 0 whether it is read once or per event. The magnitudes are
+      // pinned by the dedicated hidden_ms cases above; this one pins only that
+      // every event of one flush agrees.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      performance.now = () => (nowMs += 1);
+
       emit([
         frameEntry(),
         frameEntry({
@@ -621,6 +641,16 @@ describe('frameDownloadTelemetry', () => {
       withLongTaskSupport();
 
       expect(observeSpy).toHaveBeenCalledWith({ type: 'longtask' });
+    });
+
+    it('disconnects the long-task observer on stop', () => {
+      // Unbuffered observation only excludes boot if the previous observer is
+      // actually gone. A leaked one keeps incrementing _longTasks after stop(),
+      // and the next start() folds that accrual into its first window.
+      withLongTaskSupport();
+      stopFrameDownloadTelemetry();
+
+      expect(disconnectSpy).toHaveBeenCalledWith('longtask');
     });
   });
 });
