@@ -86,6 +86,7 @@ describe('hidden_during_load on the emitted event', () => {
   const renderWith = async ({
     flipVisibility,
     secondRender = false,
+    secondViewportSameStudy = false,
     beforeRender,
     prerenderThenActivate = false,
   }) => {
@@ -102,7 +103,16 @@ describe('hidden_during_load on the emitted event', () => {
         SCRIPT_TO_VIEW: 'scriptToView',
       };
       log.timingKeys = { studyToFirstImage: true };
-      log.timeEnd = () => {};
+      // The real log.timeEnd sets timingKeys[key] = false, which is what stops
+      // a SECOND viewport of the same study from emitting a duplicate. Stubbing
+      // it to a no-op leaves the flag true forever and makes that guard
+      // unobservable -- deleting the guard passed the whole suite. Opt into the
+      // real behaviour where the guard is the thing under test.
+      log.timeEnd = secondViewportSameStudy
+        ? key => {
+            log.timingKeys[key] = false;
+          }
+        : () => {};
 
       const initViewTiming = (await import('./initViewTiming')).default;
       window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
@@ -131,6 +141,17 @@ describe('hidden_during_load on the emitted event', () => {
       element = document.createElement('div');
       initViewTiming({ element });
 
+      // A two-viewport hanging protocol enables BOTH viewports before either
+      // paints, so both attach a listener while the timing keys are still true.
+      // Attaching the second one AFTER the first render instead makes
+      // initViewTiming early-return on IMAGE_TIMING_KEYS and no listener is
+      // ever added -- which tests nothing.
+      let secondViewport;
+      if (secondViewportSameStudy) {
+        secondViewport = document.createElement('div');
+        initViewTiming({ element: secondViewport });
+      }
+
       if (prerenderThenActivate) {
         Object.defineProperty(document, 'prerendering', { value: false, configurable: true });
         setVisibility('visible');
@@ -150,6 +171,19 @@ describe('hidden_during_load on the emitted event', () => {
           detail: { viewportStatus: 'render', element },
         })
       );
+
+      if (secondViewportSameStudy) {
+        // Second viewport of the SAME study paints. Its listener is already
+        // attached, so the only thing standing between this and a duplicate
+        // event is the timingKeys guard in captureFirstImageRendered -- the
+        // per-element removeEventListener cannot help, this is a different
+        // element.
+        secondViewport.dispatchEvent(
+          new CustomEvent('IMAGE_RENDERED', {
+            detail: { viewportStatus: 'render', element: secondViewport },
+          })
+        );
+      }
 
       if (secondRender) {
         // Same module instance, second study: this is what in-app navigation
@@ -172,7 +206,9 @@ describe('hidden_during_load on the emitted event', () => {
     const captured = await renderWith({ flipVisibility: true });
     expect(captured).toHaveLength(1);
     expect(captured[0][0]).toBe('first_image_rendered');
-    expect(document.visibilityState).toBe('visible');
+    // The paint itself was visible -- renderWith ends on setVisibility('visible')
+    // -- so this pins that the flag survives a hidden stretch that already
+    // CLOSED, not merely that the tab is hidden at capture time.
     expect(captured[0][1].hidden_during_load).toBe(true);
   });
 
@@ -187,10 +223,12 @@ describe('hidden_during_load on the emitted event', () => {
     // the guard covers a paint that COMPLETES during the prerender, and a
     // window spanning prerender -> activation stays flagged because the
     // activation fires visibilitychange and the interval clause stamps it.
-    // A mutant prerender-guarding that listener survived the whole suite.
+    // Prerender-guarding the visibilitychange listener still survives this
+    // test -- renderWith clears `prerendering` before the activation, so the
+    // guard is never reached. initViewTiming's own comment says the same. This
+    // case pins the flag, not that mutant; do not read it as killing one.
     const captured = await renderWith({ flipVisibility: false, prerenderThenActivate: true });
     expect(captured).toHaveLength(1);
-    expect(document.visibilityState).toBe('visible');
     expect(captured[0][1].hidden_during_load).toBe(true);
   });
 
@@ -203,6 +241,10 @@ describe('hidden_during_load on the emitted event', () => {
     try {
       const [[, props]] = await renderWith({ flipVisibility: false });
       expect(props.modality).toBe('US');
+      // jsdom's default URL has no port, so host === hostname here and this
+      // cannot catch that specific substitution -- it rules out href/pathname
+      // only. A port would be needed to pin `host`, and setting one in jsdom
+      // moves every other URL-derived assertion in this file.
       expect(props.cluster).toBe('localhost');
     } finally {
       mockCs.imageId = undefined;
@@ -245,5 +287,27 @@ describe('hidden_during_load on the emitted event', () => {
     expect(captured).toHaveLength(2);
     expect(captured[0][1].switch_type).toBe('reload');
     expect(captured[1][1].switch_type).toBe('in_app');
+  });
+
+  it('emits once per study, not once per viewport of that study', async () => {
+    // The timingKeys guard in captureFirstImageRendered is the ONLY thing that
+    // stops this. A second viewport of one study gets its own element and its
+    // own listener, so the per-element removeEventListener is irrelevant here;
+    // it only prevents a repeat on the SAME element. An earlier version of this
+    // test dispatched twice on one element and therefore pinned nothing -- both
+    // guards could be deleted individually with the suite still green.
+    //
+    // Worth pinning because a duplicate would be silent: an extra
+    // first_image_rendered tagged switch_type 'in_app' inflates the in_app
+    // share and double-counts renders in the never-render anti-join.
+    //
+    // Requires the real log.timeEnd semantics; the shared harness stubs it to a
+    // no-op, which is why secondViewportSameStudy opts back in.
+    const captured = await renderWith({
+      flipVisibility: false,
+      secondViewportSameStudy: true,
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0][1].switch_type).toBe('reload');
   });
 });
