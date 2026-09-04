@@ -20,6 +20,21 @@ import { capturePostHogEvent } from './posthog';
  * `opaque_frames`; duration percentiles are unaffected either way.
  *
  * `opaque_frames == frames` is the canary for TAO having been lost again.
+ *
+ * Each event also carries four figures describing the flush WINDOW rather than
+ * the study — `window_ms`, `hidden_ms`, `long_tasks`, `long_task_ms` — plus
+ * `window_started_at`, which identifies the window rather than measuring it.
+ * The four separate "the frames were slow to arrive" from "the tab was
+ * backgrounded and the browser deferred the work" from "the main thread was
+ * blocked". See the flush-window accounting block below for how they must be
+ * aggregated, and why the fifth is needed to do it.
+ *
+ * Nothing in this tree throttles the request pools in a hidden tab: Chrome's
+ * hidden-page 1s timer clamp is gated on timer NESTING, which the pools' refill
+ * does not accumulate. A change to clear a per-pool delay was explored and
+ * dropped as a measured no-op. So `hidden_ms > 0` means the browser deferred
+ * work, with no build-dependent caveat. Revisit only if something starts
+ * touching pool scheduling.
  */
 
 const FRAME_URL_REGEX = /\/dicom-web\/studies\/([^/]+)\/[^?#]*\/frames\//;
@@ -42,8 +57,118 @@ type StudyStats = {
 };
 
 let _observer: PerformanceObserver | null = null;
+let _longTaskObserver: PerformanceObserver | null = null;
 let _flushTimer: ReturnType<typeof setInterval> | null = null;
 const _pending = new Map<string, StudyStats>();
+
+/**
+ * Flush-window accounting.
+ *
+ * `window_ms`, `hidden_ms`, `long_tasks` and `long_task_ms` describe the FLUSH
+ * WINDOW — the span since the previous flush — and not the study. A flush with
+ * two pending studies emits two events carrying identical window figures, so
+ * those four must never be summed across the events of one flush. Group by
+ * (`$session_id`, `window_started_at`) first — `window_started_at` is the fifth
+ * window-scoped property and exists to make that grouping possible; it is a key,
+ * never a quantity to aggregate. `frames` and the byte counters stay per-study
+ * and are summed across flushes exactly as before.
+ *
+ * Two more that are NOT summable, and are the ones most likely to be summed
+ * because this block is where a consumer looks:
+ *   - `network_kbps` is a RATE. Rates from different windows cannot be averaged;
+ *     recompute from summed bytes over summed active-ms. Averaging them has
+ *     already flipped the sign of a result on this event once.
+ *   - `network_active_ms` is a per-study wall-clock UNION. Two studies in one
+ *     flush download over the same pipe in overlapping real time, so summing
+ *     theirs double-counts elapsed time — by a different mechanism than the
+ *     four window figures above, which are byte-identical across one flush's
+ *     events; these overlap in real time instead. Same conclusion, don't sum.
+ *
+ * `window_started_at` is EPOCH milliseconds, not a `performance.now()` offset,
+ * and that is the whole point. `performance.now()`'s origin is the document's
+ * navigation start, so every page load counts from zero and two documents in one
+ * analytics session produce colliding offsets. Adding `performance.timeOrigin` —
+ * that same navigation start, in epoch time — separates page loads and is
+ * directly comparable to the event `timestamp`. Not unique "by construction":
+ * two documents whose navigation starts round to the same millisecond collide,
+ * which two tabs opened in one gesture can do. It degrades to a session-level
+ * grouping rather than to a wrong answer, but do not assume uniqueness.
+ *
+ * Do NOT reach for `$window_id` to separate page loads. posthog-js carries a
+ * window id FORWARD across a same-tab navigation: `sessionid.js` restores the
+ * stored id whenever `primary_window_exists` is absent, which is exactly the
+ * state a normal unload leaves behind, and mints a fresh one only for a
+ * duplicated tab. A meaningful share of (`$session_id`, `$window_id`) pairs
+ * cover more than one page load, and the worst pair holds dozens. Figures and
+ * their scope live in the PR, not here: they are sample statistics, they move
+ * daily, and every attempt to keep them current in this comment has drifted.
+ *
+ * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
+ * Resource-timing entries are delivered at completion and span the whole
+ * request, so a fetch that began several windows ago lands wholly in the window
+ * that saw it finish.
+ *
+ * A worked case, reachable today and verified against this code: a 6s fetch
+ * completing 1s into a window that goes hidden 2s later reports
+ * network_active_ms 6000 against window_ms 2000 — ratio 3.0. `activeMs` unions
+ * absolute [startTime, startTime+duration] spans and never clips them to the
+ * window, which is the whole mechanism.
+ *
+ * NO PERCENTAGE IS QUOTED HERE ON PURPOSE. Three attempts to size this share
+ * were each wrong in a different way: `window_ms` does not exist in production
+ * yet, so every attempt substituted the nominal 15s interval for the real
+ * window, and a window routinely runs past 15s (timer deferral, a long task, a
+ * bfcache freeze charged in full). A 45s window holding 20s of activity has a
+ * ratio of 0.44 and was counted every time. The last attempt narrowed the
+ * numerator to interval flushes while leaving the denominator at all reasons,
+ * producing a "bound" that the correctly scoped figure exceeds.
+ *
+ * Measure it once `window_ms` is live, against the real window, per flush
+ * reason. Until then the mechanism above is the claim, and it needs no share.
+ *
+ * `long_task_ms / window_ms` is not a ratio either, for the same reason — a
+ * longtask entry is delivered at completion and charged in full to the window
+ * that saw it end. See its property comment below.
+ */
+let _windowStartedAt = 0;
+let _hiddenMsThisWindow = 0;
+// Non-null while the tab is hidden, holding the moment it went hidden. Seeded
+// at start() rather than only on transitions: a tab opened in the background
+// (ctrl-click, "open link in a background tab") fires NO visibilitychange, and
+// would otherwise read as visible for its entire first window — which is the
+// case hidden_ms most needs to catch.
+let _hiddenSince: number | null = null;
+let _longTasks = 0;
+let _longTaskMs = 0;
+// Separates "measured zero long tasks" (0) from "long tasks were not measured"
+// (null), so a consumer cannot read an unsupported browser as a quiet main
+// thread.
+//
+// THE NULL DOES NOT SURVIVE THE WIRE, so that separation is not queryable the
+// obvious way. PostHog stores a null-valued property as ABSENT, not as a
+// present null. Measured on p50_ttfb_ms, which has used this same
+// `x.length ? ... : null` idiom since #9: across every production event of its
+// life (it first reached prod 2026-09-02), roughly 88% carry the key and ZERO
+// are present-but-null. The ZERO is the load-bearing part and it is structural,
+// not a sample property; the counts grow daily and are deliberately not quoted.
+//
+// So `long_tasks IS NULL` matches the unsupported browsers AND every event
+// predating this branch AND anything served from a stale bundle -- it fails
+// open, in exactly the way this null was meant to prevent.
+//
+// To size the unsupported-browser cohort, gate on presence AND on events that
+// could have carried the key at all:
+//   JSONHas(properties, 'long_tasks') = 0 AND timestamp >= '<deploy + rollover>'
+// -- project timezone is America/New_York, so a bare literal is TZ-sensitive,
+// and clients on a cached bundle keep emitting without the key for a while
+// after deploy, so leave room past the deploy instant or they read as
+// unsupported browsers.
+// Do NOT reach for build_commit: that property comes from the viewer
+// visibility-telemetry branch, not this one, and no event this branch emits
+// carries it — the query would return 0 rows and read as "every browser
+// measures long tasks", the same fail-open in a new costume.
+// Reading `long_tasks = 0` for "quiet main thread" is unaffected.
+let _longTasksObserved = false;
 
 function newStudyStats(): StudyStats {
   return {
@@ -108,11 +233,17 @@ function recordEntry(entry: PerformanceResourceTiming): void {
 /**
  * Wall-clock milliseconds during which at least one network fetch was in flight.
  *
- * The loader runs up to `maxNumRequests.interaction` frames concurrently (20 in
- * the deployed config) multiplexed over a single HTTP/2 connection, so each
- * entry's `duration` spans the same window. Summing them overcounts elapsed time
- * by roughly the concurrency factor and understates throughput by the same
- * factor; the union of the intervals is the actual transfer window.
+ * The loader runs up to `maxNumRequests.interaction` frames concurrently,
+ * multiplexed over a single HTTP/2 connection, so each entry's `duration` spans
+ * the same window. Summing them overcounts elapsed time by roughly the
+ * concurrency factor and understates throughput by the same factor; the union of
+ * the intervals is the actual transfer window.
+ *
+ * DO NOT read that cap out of `public/config/*.js`. The container entrypoint
+ * rewrites `app-config.js` from `$APP_CONFIG` on start, so no config file in
+ * this repo is what a deployed viewer actually loads, and the two have been
+ * observed to diverge on every key -- by multiples, not margins. Curl a
+ * cluster's live `/app-config.js` when the number matters.
  */
 function activeMs(spans: Array<[number, number]>): number {
   if (!spans.length) {
@@ -134,6 +265,15 @@ function activeMs(spans: Array<[number, number]>): number {
 }
 
 function flush(reason: string): void {
+  const now = performance.now();
+  // An in-progress hidden stretch counts up to now; it is re-based below rather
+  // than closed, since the tab is still hidden when the next window opens.
+  const hiddenMs = _hiddenMsThisWindow + (_hiddenSince !== null ? now - _hiddenSince : 0);
+  const windowStartedAt = _windowStartedAt;
+  const windowMs = now - _windowStartedAt;
+  const longTasks = _longTasksObserved ? _longTasks : null;
+  const longTaskMs = _longTasksObserved ? Math.round(_longTaskMs) : null;
+
   _pending.forEach((stats, studyInstanceUid) => {
     try {
       const durations = stats.durations.slice().sort((a, b) => a - b);
@@ -159,17 +299,124 @@ function flush(reason: string): void {
         // the pipe, not one request's share of it. See activeMs().
         network_kbps: networkMs > 0 ? Math.round((stats.networkBytes * 8) / networkMs) : null,
         network_active_ms: Math.round(networkMs),
+        // Wall clock actually elapsed since the previous flush. For
+        // flush_reason = 'interval' the scheduled span is FLUSH_INTERVAL_MS, so
+        // the excess is how much the flush was deferred, measured on real
+        // readers' browsers rather than inferred.
+        //
+        // DEFERRAL IS NOT THE SAME AS THROTTLING, and this field cannot tell
+        // the two apart on its own. setInterval also cannot fire while the main
+        // thread is busy, so a 30s long task defers the flush by ~30s on a
+        // fully foregrounded tab; and a page frozen for bfcache resumes and
+        // charges the whole frozen span here. Read the excess as background
+        // timer throttling only where long_tasks is near zero AND hidden_ms
+        // accounts for the span. Separating the first two is exactly what
+        // long_tasks was added for, so use it.
+        window_ms: Math.round(windowMs),
+        // Identifies the flush, globally. Every event of one flush carries the
+        // same value, so (`$session_id`, `window_started_at`) is the grouping
+        // key the aggregation rule above requires.
+        //
+        // Rounding direction on this and the other three integral properties is
+        // deliberately unpinned: Math.round -> Math.floor survives on all four.
+        // For the three clock-derived ones that is because the test clock is
+        // integral; long_task_ms is NOT clock-derived and survives only by
+        // coincidence — the fixture's durations sum to 185.4, where floor and
+        // round agree. Math.ceil there kills two tests. Change that fixture and
+        // the property becomes rounding-sensitive. The cost is at most 1ms
+        // per property, so it is not worth four tests. One consequence to know:
+        // `window_started_at` and `window_ms` are rounded independently from a
+        // sub-ms clock, so `start + window == next start` can be off by one in
+        // production. Chain windows by ordering, not by exact equality. Epoch ms via
+        // performance.timeOrigin — see that block for why a bare
+        // performance.now() offset collides across page loads.
+        window_started_at: Math.round(performance.timeOrigin + windowStartedAt),
+        // Milliseconds of that window during which the tab was hidden.
+        // Deliberately an interval measure, not document.visibilityState at
+        // emit time: flush('hidden') runs AT the transition and flush('pagehide')
+        // at teardown, so an instantaneous read reports 'hidden' for two of the
+        // four flush reasons regardless of what the window actually contained.
+        hidden_ms: Math.round(hiddenMs),
+        // Main-thread blocking during the window. null (not 0) where the
+        // browser does not support the longtask entry type — which is a browser
+        // class, not a rare edge: Firefox and every WebKit engine report null,
+        // so avg(long_tasks) silently restricts the population to Chromium.
+        //
+        // long_task_ms carries the same overshoot as network_active_ms and for
+        // the same reason: a longtask entry is delivered when the task ENDS and
+        // its duration covers the whole task, so one straddling a flush boundary
+        // is charged in full to the window that saw it finish. That makes
+        // long_task_ms / window_ms not a blocked fraction, and it can exceed 1.
+        long_tasks: longTasks,
+        long_task_ms: longTaskMs,
       });
     } catch (e) {
       console.warn('[PostHog] frame_download_stats capture failed', e);
     }
   });
   _pending.clear();
+
+  // Reset unconditionally, including on a flush that emitted nothing: these
+  // describe the span since the previous flush, not since the last event. Were
+  // they only reset when _pending was non-empty, an idle stretch would be
+  // charged to the next window that happened to have frames in it.
+  _windowStartedAt = now;
+  _hiddenMsThisWindow = 0;
+  _hiddenSince = _hiddenSince !== null ? now : null;
+  _longTasks = 0;
+  _longTaskMs = 0;
+
+  // Re-phase the interval to the window it measures. A 'hidden' / 'pagehide'
+  // flush rebases _windowStartedAt mid-interval; leaving the timer on its
+  // original phase would hand the next 'interval' flush a window SHORTER than
+  // FLUSH_INTERVAL_MS. window_ms is documented above as measured-minus-
+  // scheduled deferral, so a consumer would read that shortfall as NEGATIVE
+  // deferral. Measured 2026-09-02, keyed per page load on (`$session_id`,
+  // `$initialization_time`) and collapsing a multi-study flush to one flush:
+  // A small but real share of interval flushes directly follow a non-interval
+  // one, all of them after a 'hidden'. Measured share is in the PR; it is a
+  // floor besides, since a flush with nothing pending emits no event while
+  // still rebasing the window.
+  //
+  // NOT on an 'interval' flush, which is already in phase. Re-phasing there
+  // would restart the timer AFTER the emit loop, adding its cost to every
+  // subsequent window and biasing the deferral reading upward by exactly the
+  // amount this module spends serialising.
+  //
+  // Guarded on _flushTimer: stop() clears the timer before its final flush and
+  // must not resurrect it.
+  //
+  // Two different mutants here, with different coverage — do not conflate them.
+  //
+  // DROPPING the `reason !== 'interval'` clause (re-phasing on every flush) is
+  // NOT pinned and cannot be: under jest's fake timers a callback costs zero, so
+  // re-phasing from inside the interval schedules the next fire at exactly the
+  // instant it would have fired anyway. Verified still surviving. Recorded so
+  // nobody adds an assertion that cannot fail; the reason the clause is correct
+  // is the real clock, not the test one.
+  //
+  // NARROWING it to `reason === 'hidden'` — dropping the pagehide re-phase — IS
+  // pinned, by the bfcache case. It was not until the test helper's clock was
+  // stepped rather than jumped; before that the flush read the end-of-advance
+  // clock whichever phase it fired on, and both reported the same window_ms.
+  if (_flushTimer !== null && reason !== 'interval') {
+    clearInterval(_flushTimer);
+    _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
+  }
 }
 
 function onVisibilityChange(): void {
   if (document.visibilityState === 'hidden') {
+    // Flush first, then latch. The two orderings turn out to be equivalent --
+    // the clock does not move between them, so this window's hidden_ms rounds
+    // to 0 either way, and a mutation swapping them survives the suite. Written
+    // this way because it matches what the window means, not because it changes
+    // the number.
     flush('hidden');
+    _hiddenSince = performance.now();
+  } else if (_hiddenSince !== null) {
+    _hiddenMsThisWindow += performance.now() - _hiddenSince;
+    _hiddenSince = null;
   }
 }
 
@@ -210,9 +457,50 @@ export function startFrameDownloadTelemetry(): void {
     _observer = null;
     return;
   }
+  startLongTaskObserver();
+  _windowStartedAt = performance.now();
+  _hiddenMsThisWindow = 0;
+  // A bare visibilityState read on purpose, and deliberately NOT the
+  // prerender-aware check the visibility-telemetry branch adds to posthog.ts
+  // (not on this branch -- do not assume it is importable):
+  // a prerendering document reports 'hidden', and Chrome deprioritises its
+  // network work, so charging a prerender to hidden_ms is what this field
+  // means. hidden_at_boot answers a different question — "did the reader open
+  // this into a background tab" — where a prerender is a false positive.
+  _hiddenSince = document.visibilityState === 'hidden' ? _windowStartedAt : null;
   _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('pagehide', onPageHide);
+}
+
+/**
+ * Counts main-thread long tasks per flush window, so a study whose frames
+ * arrived promptly but rendered late can be told apart from one that was
+ * waiting on the network. Not buffered: tasks from before this call belong to
+ * application boot, which is a different question.
+ */
+function startLongTaskObserver(): void {
+  if (!PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+    return;
+  }
+  try {
+    _longTaskObserver = new PerformanceObserver(list => {
+      try {
+        list.getEntries().forEach(entry => {
+          _longTasks += 1;
+          _longTaskMs += entry.duration;
+        });
+      } catch (e) {
+        console.warn('[PostHog] long task observer callback failed', e);
+      }
+    });
+    _longTaskObserver.observe({ type: 'longtask' });
+    _longTasksObserved = true;
+  } catch (e) {
+    console.warn('[PostHog] long task observer failed to start', e);
+    _longTaskObserver = null;
+    _longTasksObserved = false;
+  }
 }
 
 export function stopFrameDownloadTelemetry(): void {
@@ -225,6 +513,14 @@ export function stopFrameDownloadTelemetry(): void {
     console.warn('[PostHog] frame download observer disconnect failed', e);
   }
   _observer = null;
+  if (_longTaskObserver) {
+    try {
+      _longTaskObserver.disconnect();
+    } catch (e) {
+      console.warn('[PostHog] long task observer disconnect failed', e);
+    }
+    _longTaskObserver = null;
+  }
   if (_flushTimer !== null) {
     clearInterval(_flushTimer);
     _flushTimer = null;
@@ -232,4 +528,45 @@ export function stopFrameDownloadTelemetry(): void {
   document.removeEventListener('visibilitychange', onVisibilityChange);
   window.removeEventListener('pagehide', onPageHide);
   flush('stop');
+  // AFTER the final flush. Clearing it first made every flush_reason = 'stop'
+  // event report long_tasks: null on a browser that had measured them, which
+  // reads as "this browser cannot measure long tasks" — the one thing null is
+  // documented to mean.
+  //
+  // Worth knowing before spending more effort here: flush_reason 'stop' has
+  // has NEVER fired in production, across every event of its life. Zero is the
+  // durable part and it is structural, not a sample artefact: this is App.tsx's
+  // unmount cleanup, which an SPA effectively never runs — the page tears down
+  // and fires pagehide instead. Re-check with a COUNT, not against a
+  // remembered total.
+  //
+  // That is NOT a reason to treat the bfcache path as the live alternative
+  // either: pagehide -> interval was 0 through 2026-09-03, and 1 by 2026-09-04.
+  // It fires, barely.
+  //
+  // Three cells report hidden_ms > 0, not two: hidden -> interval (the largest,
+  // tested), hidden -> pagehide (tested), and hidden -> hidden (still untested).
+  // All three keep growing; none is negligible.
+  //
+  // DO NOT WRITE THEIR COUNTS HERE. They are monotonic, they moved materially
+  // within a day of being written, and two successive attempts to keep them
+  // current in this comment were both wrong -- once by quoting a stale pair,
+  // once by converting them to a per-day rate with the arithmetic rounded in
+  // the flattering direction. Count them when you need them.
+  //
+  // Any such count is also a FLOOR by construction: a flush whose _pending is
+  // empty emits no event while still rebasing the window and re-phasing the
+  // timer, so a sequence is only observable where both flushes emitted.
+  //
+  // The two cells are NOT the same shape, despite sharing a sentence here.
+  // For hidden -> hidden, hidden_ms comes from _hiddenMsThisWindow: a genuinely
+  // COMPLETED stretch. hidden -> pagehide covers BOTH shapes, which is why one
+  // sentence cannot describe it: on the ordinary tab-close (hide, then close)
+  // the stretch is still OPEN and hidden_ms comes from the in-flight
+  // (now - _hiddenSince) term, but a return to visible does not flush, so
+  // hide -> back -> close lands in the same cell with _hiddenSince null and
+  // hidden_ms entirely accumulated. The invariant "the window that triggers
+  // flush('hidden') is precisely the one that was visible" holds only for the
+  // first hide of a stretch.
+  _longTasksObserved = false;
 }

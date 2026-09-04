@@ -8,16 +8,43 @@ jest.mock('./posthog', () => ({
 const FRAME_BASE =
   'https://veg-view.prod-1.radimal.ai/dicom-web/studies/1.2.3/series/4.5/instances/6.7/frames';
 
-let observerCallback;
+let observers;
 let observeSpy;
 let disconnectSpy;
+let nowMs;
 
+// Fixed so window_started_at, which is timeOrigin + the window offset, can be
+// asserted as an exact value rather than a shape.
+const TIME_ORIGIN = 1_700_000_000_000;
+
+// Callbacks are registered by the entry type passed to observe(), because the
+// module now runs two observers and "the last one constructed" is ambiguous.
 class MockPerformanceObserver {
   constructor(cb) {
-    observerCallback = cb;
-    this.observe = observeSpy;
-    this.disconnect = disconnectSpy;
+    let observedType;
+    this.observe = init => {
+      observedType = init.type;
+      observers[init.type] = cb;
+      observeSpy(init);
+    };
+    // Reports WHICH observer disconnected. A single shared spy cannot: with two
+    // observers running, `toHaveBeenCalled()` is satisfied by either one, so
+    // dropping the long-task disconnect leaves the suite green and the leaked
+    // observer keeps accruing into the next start()'s first window — the exact
+    // thing the unbuffered observe() exists to prevent.
+    this.disconnect = () => disconnectSpy(observedType);
   }
+}
+
+function setVisibility(state) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => state,
+  });
+}
+
+function fireVisibilityChange() {
+  document.dispatchEvent(new Event('visibilitychange'));
 }
 
 const frameEntry = (overrides = {}) => ({
@@ -29,16 +56,64 @@ const frameEntry = (overrides = {}) => ({
   ...overrides,
 });
 
-const emit = entries => observerCallback({ getEntries: () => entries });
+const emit = entries => observers.resource({ getEntries: () => entries });
 
-const flushInterval = () => jest.advanceTimersByTime(15000);
+const emitLongTasks = durations =>
+  observers.longtask({ getEntries: () => durations.map(duration => ({ duration })) });
+
+// performance.now() is driven explicitly rather than relying on fake timers to
+// fake it, so window_ms and hidden_ms assertions are exact rather than
+// approximate. Wall clock must advance before the timer fires, since the flush
+// reads the clock from inside the interval callback.
+// Stepped, not jumped. Bumping nowMs by the whole span before running the
+// timers made every callback read the END of the advance regardless of when it
+// actually fired, which hid any change to WHEN a timer is scheduled: a mutant
+// re-phasing on 'hidden' but not 'pagehide' moved the tick from 18000 to 15000
+// and both still reported window_ms 15000.
+//
+// Slicing BOUNDS that error at one step rather than eliminating it: nowMs is
+// bumped before the timers within each slice, so a flush still reads the clock
+// at its slice's END, up to 249ms late. Enough to separate a 15000 tick from an
+// 18000 one; not exact. A test written as advance(N) around an event that is
+// not 250ms-aligned pins a value up to 249ms late — split the advance at the
+// boundary you care about (see the 5_999 / 1 pair below) instead of trusting
+// the granularity.
+const advance = (ms, step = 250) => {
+  let remaining = ms;
+  while (remaining > 0) {
+    const slice = Math.min(step, remaining);
+    nowMs += slice;
+    jest.advanceTimersByTime(slice);
+    remaining -= slice;
+  }
+};
+
+const flushInterval = () => advance(15000);
+
+/** Restarts the module so a test can change what the environment supports. */
+const restart = () => {
+  stopFrameDownloadTelemetry();
+  capturePostHogEvent.mockClear();
+  startFrameDownloadTelemetry();
+};
+
+const propsOf = index => capturePostHogEvent.mock.calls[index][1];
 
 describe('frameDownloadTelemetry', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    observers = {};
     observeSpy = jest.fn();
     disconnectSpy = jest.fn();
+    nowMs = 1_000_000;
+    performance.now = () => nowMs;
+    Object.defineProperty(performance, 'timeOrigin', {
+      value: TIME_ORIGIN,
+      configurable: true,
+    });
+    delete MockPerformanceObserver.supportedEntryTypes;
     global.PerformanceObserver = MockPerformanceObserver;
+    setVisibility('visible');
     capturePostHogEvent.mockClear();
     startFrameDownloadTelemetry();
   });
@@ -47,6 +122,7 @@ describe('frameDownloadTelemetry', () => {
     stopFrameDownloadTelemetry();
     jest.useRealTimers();
     delete global.PerformanceObserver;
+    setVisibility('visible');
   });
 
   it('observes buffered resource entries', () => {
@@ -74,6 +150,141 @@ describe('frameDownloadTelemetry', () => {
       max_ms: 1000,
       p50_ttfb_ms: 40,
       network_bytes: 150000,
+    });
+  });
+
+  it('reports each percentile from its own rank, and the cluster it came from', () => {
+    // p50/p90/p95/max were only ever asserted on samples where several of them
+    // coincide, so computing p95 as p90 (or p90 as p50) passed. Ten distinct
+    // durations separate all four.
+    emit(
+      Array.from({ length: 10 }, (_, i) =>
+        frameEntry({
+          name: `${FRAME_BASE}/${i}`,
+          duration: (i + 1) * 10,
+          responseStart: 1000 + (i + 1),
+        })
+      )
+    );
+    flushInterval();
+
+    expect(propsOf(0)).toMatchObject({
+      frames: 10,
+      p50_ms: 50,
+      p90_ms: 90,
+      p95_ms: 100,
+      max_ms: 100,
+      p50_ttfb_ms: 5,
+      max_ttfb_ms: 10,
+      cluster: 'localhost',
+      dropped_samples: 0,
+    });
+  });
+
+  it('counts samples dropped past the per-study cap', () => {
+    // dropped_samples is what says a percentile was computed from a truncated
+    // sample, so a mutant hardcoding 0 makes every percentile look trustworthy.
+    emit(
+      Array.from({ length: 5_002 }, (_, i) => frameEntry({ name: `${FRAME_BASE}/${i}` }))
+    );
+    flushInterval();
+
+    expect(propsOf(0).dropped_samples).toBe(2);
+  });
+
+  it('ignores dicom-web requests that are not frames', () => {
+    // The only negative case was app.js, which fails the /dicom-web/ test too,
+    // so dropping the /frames/ anchor from the regex went unnoticed. A metadata
+    // request would then be counted as a frame and land in every percentile.
+    emit([
+      frameEntry({
+        name: 'https://veg-view.prod-1.radimal.ai/dicom-web/studies/1.2.3/metadata',
+      }),
+      frameEntry({
+        name: 'https://veg-view.prod-1.radimal.ai/dicom-web/studies/1.2.3/series/4.5',
+      }),
+    ]);
+    flushInterval();
+
+    expect(capturePostHogEvent).not.toHaveBeenCalled();
+  });
+
+  it('keeps flushing on the interval after a pagehide, as a bfcache restore does', () => {
+    // Kept for the mechanism, NOT because production shows it. An earlier
+    // version of this comment claimed 53 interval flushes directly followed a
+    // pagehide on 2026-09-02 and used that to contrast the cell with
+    // flush_reason 'stop'. Re-measured 2026-09-03 over the event's whole
+    // production life, keyed per page load: pagehide -> interval was 0 then --
+    // it is 1 as of 2026-09-04, and the source comment is the copy kept current
+    // -- and only a handful of page loads emit anything at all after a pagehide.
+    // So the contrast that justified testing this cell over 'stop' never
+    // existed. The test still earns its place — it pins that stop() is what
+    // ends flushing and a pagehide alone does not, which is what makes a
+    // bfcache restore safe — but do not cite it as a live path.
+    emit([frameEntry()]);
+    advance(3_000);
+    window.dispatchEvent(new Event('pagehide'));
+    capturePostHogEvent.mockClear();
+
+    emit([frameEntry()]);
+    flushInterval();
+
+    expect(propsOf(0)).toMatchObject({ flush_reason: 'interval', window_ms: 15_000 });
+  });
+
+  it('takes the nearest-rank percentile at an even sample count', () => {
+    // Three samples make ceil(q*n)-1 and floor(q*n) agree, so every other
+    // percentile assertion here is blind to which one is implemented.
+    emit([
+      frameEntry({ duration: 50 }),
+      frameEntry({ name: `${FRAME_BASE}/2`, duration: 150 }),
+      frameEntry({ name: `${FRAME_BASE}/3`, duration: 1000 }),
+      frameEntry({ name: `${FRAME_BASE}/4`, duration: 2000 }),
+    ]);
+    flushInterval();
+
+    expect(propsOf(0)).toMatchObject({ frames: 4, p50_ms: 150, max_ms: 2000 });
+  });
+
+  it('flushes pending stats on pagehide', () => {
+    // The only flush a window gets when the page is frozen without a preceding
+    // hide (bfcache, the `unload` fallback path).
+    emit([frameEntry()]);
+    advance(3_000);
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(propsOf(0)).toMatchObject({ flush_reason: 'pagehide', window_ms: 3_000 });
+  });
+
+  it('charges an OPEN hidden stretch to the pagehide flush, the ordinary tab close', () => {
+    // visibilitychange -> hidden, then pagehide, is what every browser does when
+    // a tab is closed, and it had no coverage until now. It is not the largest
+    // such cell -- hidden -> hidden is roughly double it -- so do not requote it
+    // as "most-executed"; see the rate note in the source.
+    //
+    // It is NOT the same shape as hidden -> hidden, though the source comment
+    // once described both in one sentence: here the hidden stretch is still
+    // OPEN at flush time, so hidden_ms comes from the in-flight
+    // (now - _hiddenSince) term rather than from _hiddenMsThisWindow. This pins
+    // that the open stretch is charged in full rather than dropped.
+    emit([frameEntry()]);
+    advance(5_000);
+    setVisibility('hidden');
+    fireVisibilityChange();
+    // A frame must land AFTER the hidden flush or the pagehide flush emits
+    // nothing at all -- an empty flush still rebases the window and re-phases
+    // the timer but produces no event, which is why every sequence figure in
+    // the source is a floor rather than a rate.
+    emit([frameEntry()]);
+    advance(3_000);
+    window.dispatchEvent(new Event('pagehide'));
+
+    // Flush 0 is the 'hidden' flush at 5s; flush 1 is the pagehide 3s later,
+    // every millisecond of which the tab was hidden.
+    expect(propsOf(1)).toMatchObject({
+      flush_reason: 'pagehide',
+      window_ms: 3_000,
+      hidden_ms: 3_000,
     });
   });
 
@@ -191,6 +402,317 @@ describe('frameDownloadTelemetry', () => {
 
     expect(capturePostHogEvent).toHaveBeenCalledTimes(1);
     expect(capturePostHogEvent.mock.calls[0][1].flush_reason).toBe('stop');
-    expect(disconnectSpy).toHaveBeenCalled();
+    expect(disconnectSpy).toHaveBeenCalledWith('resource');
+  });
+
+  it('does not resurrect the flush timer on the final flush', () => {
+    // flush() re-phases the interval, and stop() flushes after clearing it, so
+    // an unguarded re-phase leaves a live timer behind on a stopped module.
+    //
+    // Asserted on the timer, not on emitted events: stop() clears _pending, so
+    // the resurrected interval flushes an empty map and captures nothing. The
+    // event count cannot see this bug at all.
+    emit([frameEntry()]);
+    stopFrameDownloadTelemetry();
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  describe('flush-window accounting', () => {
+    // One test per reachable cell of
+    // {flush reason} x {visibility during the window} x {visibility at emit}.
+
+    it('reports the wall clock actually elapsed, not the scheduled interval', () => {
+      // A deferred timer is the only direct read available on background timer
+      // throttling: the interval is scheduled for 15s, so anything longer is
+      // time the browser withheld.
+      emit([frameEntry()]);
+      nowMs += 45_000;
+      jest.advanceTimersByTime(15_000);
+
+      expect(propsOf(0).window_ms).toBe(45_000);
+    });
+
+    it('reports hidden_ms 0 for a window that stayed visible', () => {
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0).hidden_ms).toBe(0);
+    });
+
+    it('reports hidden_ms 0 on the flush triggered BY the hide', () => {
+      // The window that just ended was the visible one. Reading
+      // document.visibilityState at emit time would call this window hidden,
+      // because the hide is what triggered the flush.
+      emit([frameEntry()]);
+      advance(6_000);
+      setVisibility('hidden');
+      fireVisibilityChange();
+
+      expect(propsOf(0).flush_reason).toBe('hidden');
+      expect(propsOf(0).hidden_ms).toBe(0);
+      expect(propsOf(0).window_ms).toBe(6_000);
+    });
+
+    it('charges a fully hidden window entirely to hidden_ms', () => {
+      setVisibility('hidden');
+      fireVisibilityChange();
+      capturePostHogEvent.mockClear();
+
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ hidden_ms: 15_000, window_ms: 15_000 });
+    });
+
+    it('keeps charging hidden_ms across consecutive flushes in one hidden stretch', () => {
+      // The stretch outlives the window. A flush that closed it instead of
+      // re-basing it would report the first window hidden and every window
+      // after it visible -- wrong in exactly the long-backgrounded case this
+      // field exists for.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      capturePostHogEvent.mockClear();
+
+      emit([frameEntry()]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ hidden_ms: 15_000, window_ms: 15_000 });
+      expect(propsOf(1)).toMatchObject({ hidden_ms: 15_000, window_ms: 15_000 });
+    });
+
+    it('accumulates a hidden stretch that ended inside the window', () => {
+      // The flush at the hide clears the window, so the measured stretch is
+      // hidden -> visible -> flush.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      advance(4_000);
+      setVisibility('visible');
+      fireVisibilityChange();
+      advance(1_000);
+      emit([frameEntry()]);
+      capturePostHogEvent.mockClear();
+      advance(10_000);
+      jest.advanceTimersByTime(0);
+
+      expect(propsOf(0)).toMatchObject({ hidden_ms: 4_000, window_ms: 15_000 });
+    });
+
+    it('charges a tab that booted hidden without ever firing visibilitychange', () => {
+      // ctrl-click / "open link in a background tab" fires no transition at
+      // all, so a listener-only implementation reads this window as visible --
+      // the case hidden_ms most needs to catch.
+      stopFrameDownloadTelemetry();
+      setVisibility('hidden');
+      capturePostHogEvent.mockClear();
+      startFrameDownloadTelemetry();
+
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0).hidden_ms).toBe(15_000);
+    });
+
+    it('resets the window on a flush that emitted nothing', () => {
+      flushInterval(); // nothing pending
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(capturePostHogEvent).toHaveBeenCalledTimes(1);
+      expect(propsOf(0).window_ms).toBe(15_000);
+    });
+
+    it('re-phases the flush interval to the window it measures', () => {
+      // A 'hidden' flush rebases the window mid-interval. On the original phase
+      // the next 'interval' flush would cover 9s of a 15s schedule, and
+      // window_ms is read as measured-minus-scheduled deferral -- so a consumer
+      // would compute -6000ms of deferral on a completely unthrottled clock.
+      emit([frameEntry()]);
+      advance(6_000);
+      setVisibility('hidden');
+      fireVisibilityChange();
+      setVisibility('visible');
+      fireVisibilityChange();
+      capturePostHogEvent.mockClear();
+
+      emit([frameEntry()]);
+      advance(9_000); // where the original, un-rephased tick would have landed
+      expect(capturePostHogEvent).not.toHaveBeenCalled();
+
+      // Stepped to the boundary rather than jumped past it. Verified by
+      // narrowing the re-phase setInterval period: with this split in place,
+      // 10_000 / 14_500 / 14_750 / 14_900 / 14_999 / 15_001 / 15_250 are ALL
+      // caught -- the period is pinned to the millisecond in both directions.
+      // Collapse this into one advance(6_000) and periods near 15_000 start
+      // surviving, because advance() slices at 250ms and a flush reads the
+      // clock at its slice's end. Keep the split.
+      advance(5_999);
+      expect(capturePostHogEvent).not.toHaveBeenCalled();
+
+      advance(1);
+      expect(propsOf(0)).toMatchObject({ flush_reason: 'interval', window_ms: 15_000 });
+    });
+
+    it('does not re-charge a hidden stretch to the window after it', () => {
+      // The mirror of the consecutive-flush case: a stretch that ENDED must not
+      // keep being charged, or one 4s backgrounding reads as 4s hidden in every
+      // window for the rest of the session.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      advance(4_000);
+      setVisibility('visible');
+      fireVisibilityChange();
+      emit([frameEntry()]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0).hidden_ms).toBe(4_000);
+      expect(propsOf(1).hidden_ms).toBe(0);
+    });
+
+    it('stamps every event of one flush with the same window_started_at', () => {
+      // The clock must MOVE inside the flush. Pinned, a per-event
+      // performance.now() read gives every event the same value too, and the
+      // snapshot this invariant actually rests on goes untested.
+      performance.now = () => (nowMs += 1);
+
+      emit([
+        frameEntry(),
+        frameEntry({
+          name: FRAME_BASE.replace('/studies/1.2.3/', '/studies/9.9.9/') + '/1',
+        }),
+      ]);
+      flushInterval();
+
+      expect(propsOf(0).window_started_at).toBe(propsOf(1).window_started_at);
+    });
+
+    it('advances window_started_at to the previous flush, so flushes are distinguishable', () => {
+      // Without this a consumer cannot separate two flushes of one session, and
+      // the aggregation rule above has no key to group by.
+      //
+      // Asserted as the identity `start + window = next start` rather than as a
+      // difference: a difference alone also holds if the field stamps the flush
+      // INSTANT instead of the window start, which is off by one whole window
+      // and would silently mis-join the two.
+      const startedAt = nowMs; // the clock reading start() saw, in beforeEach
+
+      emit([frameEntry()]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      // Anchored absolutely, because `start + window = next start` alone is
+      // invariant under a uniform one-window shift: stamping the flush INSTANT
+      // instead of the window start satisfies it while being off by a whole
+      // window, which would mis-join every consumer that uses the key.
+      //
+      // The timeOrigin term is the half that makes the key unique across page
+      // loads: performance.now() restarts at zero in each document, so without
+      // it two documents in one session emit the same offsets.
+      expect(propsOf(0).window_started_at).toBe(TIME_ORIGIN + startedAt);
+      expect(propsOf(0).window_started_at + propsOf(0).window_ms).toBe(
+        propsOf(1).window_started_at
+      );
+    });
+
+    it('reports identical window figures on every study in one flush', () => {
+      // These four describe the flush, not the study, so a consumer that sums
+      // them across the events of one flush double-counts.
+      //
+      // Two things this setup needs, or both assertions go vacuous. The clock
+      // must MOVE inside the flush — pinned, a per-event performance.now() read
+      // is indistinguishable from the pre-loop snapshot, which is the same trap
+      // already fixed for window_started_at above. And the window must have been
+      // HIDDEN, because on a visible window _hiddenSince is null and hidden_ms
+      // is a constant 0 whether it is read once or per event. The magnitudes are
+      // pinned by the dedicated hidden_ms cases above; this one pins only that
+      // every event of one flush agrees.
+      setVisibility('hidden');
+      fireVisibilityChange();
+      performance.now = () => (nowMs += 1);
+
+      emit([
+        frameEntry(),
+        frameEntry({
+          name: FRAME_BASE.replace('/studies/1.2.3/', '/studies/9.9.9/') + '/1',
+        }),
+      ]);
+      flushInterval();
+
+      expect(capturePostHogEvent).toHaveBeenCalledTimes(2);
+      expect(propsOf(0).window_ms).toBe(propsOf(1).window_ms);
+      expect(propsOf(0).hidden_ms).toBe(propsOf(1).hidden_ms);
+    });
+  });
+
+  describe('long tasks', () => {
+    const withLongTaskSupport = () => {
+      MockPerformanceObserver.supportedEntryTypes = ['longtask'];
+      restart();
+    };
+
+    it('counts long tasks and their duration within the window', () => {
+      withLongTaskSupport();
+      emit([frameEntry()]);
+      emitLongTasks([120, 65.4]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ long_tasks: 2, long_task_ms: 185 });
+    });
+
+    it('resets the long-task counters per window', () => {
+      withLongTaskSupport();
+      emit([frameEntry()]);
+      emitLongTasks([120]);
+      flushInterval();
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(1)).toMatchObject({ long_tasks: 0, long_task_ms: 0 });
+    });
+
+    it('reports null, not zero, where the browser cannot measure long tasks', () => {
+      // Zero would read as a quiet main thread on a browser that never looked.
+      emit([frameEntry()]);
+      flushInterval();
+
+      expect(propsOf(0)).toMatchObject({ long_tasks: null, long_task_ms: null });
+    });
+
+    it('reports the long tasks it measured on the final flush', () => {
+      // long_tasks: null is documented to mean "this browser cannot measure
+      // them". Emitting null here would say that about a browser that just did.
+      withLongTaskSupport();
+      emit([frameEntry()]);
+      emitLongTasks([120, 65.4]);
+      capturePostHogEvent.mockClear();
+      stopFrameDownloadTelemetry();
+
+      expect(propsOf(0)).toMatchObject({
+        flush_reason: 'stop',
+        long_tasks: 2,
+        long_task_ms: 185,
+      });
+    });
+
+    it('observes long tasks unbuffered, so application boot is excluded', () => {
+      withLongTaskSupport();
+
+      expect(observeSpy).toHaveBeenCalledWith({ type: 'longtask' });
+    });
+
+    it('disconnects the long-task observer on stop', () => {
+      // Unbuffered observation only excludes boot if the previous observer is
+      // actually gone. A leaked one keeps incrementing _longTasks after stop(),
+      // and the next start() folds that accrual into its first window.
+      withLongTaskSupport();
+      stopFrameDownloadTelemetry();
+
+      expect(disconnectSpy).toHaveBeenCalledWith('longtask');
+    });
   });
 });
