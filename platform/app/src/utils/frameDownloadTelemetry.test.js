@@ -65,9 +65,27 @@ const emitLongTasks = durations =>
 // fake it, so window_ms and hidden_ms assertions are exact rather than
 // approximate. Wall clock must advance before the timer fires, since the flush
 // reads the clock from inside the interval callback.
-const advance = ms => {
-  nowMs += ms;
-  jest.advanceTimersByTime(ms);
+// Stepped, not jumped. Bumping nowMs by the whole span before running the
+// timers made every callback read the END of the advance regardless of when it
+// actually fired, which hid any change to WHEN a timer is scheduled: a mutant
+// re-phasing on 'hidden' but not 'pagehide' moved the tick from 18000 to 15000
+// and both still reported window_ms 15000.
+//
+// Slicing BOUNDS that error at one step rather than eliminating it: nowMs is
+// bumped before the timers within each slice, so a flush still reads the clock
+// at its slice's END, up to 249ms late. Enough to separate a 15000 tick from an
+// 18000 one; not exact. A test written as advance(N) around an event that is
+// not 250ms-aligned pins a value up to 249ms late — split the advance at the
+// boundary you care about (see the 5_999 / 1 pair below) instead of trusting
+// the granularity.
+const advance = (ms, step = 250) => {
+  let remaining = ms;
+  while (remaining > 0) {
+    const slice = Math.min(step, remaining);
+    nowMs += slice;
+    jest.advanceTimersByTime(slice);
+    remaining -= slice;
+  }
 };
 
 const flushInterval = () => advance(15000);
@@ -196,9 +214,10 @@ describe('frameDownloadTelemetry', () => {
     // version of this comment claimed 53 interval flushes directly followed a
     // pagehide on 2026-09-02 and used that to contrast the cell with
     // flush_reason 'stop'. Re-measured 2026-09-03 over the event's whole
-    // production life, keyed per page load: pagehide -> interval is 0, and only
-    // a handful of page loads emit anything at all after a pagehide (6
-    // pagehide -> pagehide). Both cells are at zero, so the contrast never
+    // production life, keyed per page load: pagehide -> interval was 0 then --
+    // it is 1 as of 2026-09-04, and the source comment is the copy kept current
+    // -- and only a handful of page loads emit anything at all after a pagehide.
+    // So the contrast that justified testing this cell over 'stop' never
     // existed. The test still earns its place — it pins that stop() is what
     // ends flushing and a pagehide alone does not, which is what makes a
     // bfcache restore safe — but do not cite it as a live path.
@@ -235,6 +254,38 @@ describe('frameDownloadTelemetry', () => {
     window.dispatchEvent(new Event('pagehide'));
 
     expect(propsOf(0)).toMatchObject({ flush_reason: 'pagehide', window_ms: 3_000 });
+  });
+
+  it('charges an OPEN hidden stretch to the pagehide flush, the ordinary tab close', () => {
+    // visibilitychange -> hidden, then pagehide, is what every browser does when
+    // a tab is closed, and it had no coverage until now. It is not the largest
+    // such cell -- hidden -> hidden is roughly double it -- so do not requote it
+    // as "most-executed"; see the rate note in the source.
+    //
+    // It is NOT the same shape as hidden -> hidden, though the source comment
+    // once described both in one sentence: here the hidden stretch is still
+    // OPEN at flush time, so hidden_ms comes from the in-flight
+    // (now - _hiddenSince) term rather than from _hiddenMsThisWindow. This pins
+    // that the open stretch is charged in full rather than dropped.
+    emit([frameEntry()]);
+    advance(5_000);
+    setVisibility('hidden');
+    fireVisibilityChange();
+    // A frame must land AFTER the hidden flush or the pagehide flush emits
+    // nothing at all -- an empty flush still rebases the window and re-phases
+    // the timer but produces no event, which is why every sequence figure in
+    // the source is a floor rather than a rate.
+    emit([frameEntry()]);
+    advance(3_000);
+    window.dispatchEvent(new Event('pagehide'));
+
+    // Flush 0 is the 'hidden' flush at 5s; flush 1 is the pagehide 3s later,
+    // every millisecond of which the tab was hidden.
+    expect(propsOf(1)).toMatchObject({
+      flush_reason: 'pagehide',
+      window_ms: 3_000,
+      hidden_ms: 3_000,
+    });
   });
 
   it('ignores resources that are not dicom-web frame requests', () => {
@@ -490,10 +541,13 @@ describe('frameDownloadTelemetry', () => {
       advance(9_000); // where the original, un-rephased tick would have landed
       expect(capturePostHogEvent).not.toHaveBeenCalled();
 
-      // Stepped to the boundary rather than jumped past it: advance() moves the
-      // clock in bulk, so a single advance(6_000) reads window_ms as 15_000 for
-      // any re-phase period in (14_000, 15_000] and cannot see a period that is
-      // merely close.
+      // Stepped to the boundary rather than jumped past it. Verified by
+      // narrowing the re-phase setInterval period: with this split in place,
+      // 10_000 / 14_500 / 14_750 / 14_900 / 14_999 / 15_001 / 15_250 are ALL
+      // caught -- the period is pinned to the millisecond in both directions.
+      // Collapse this into one advance(6_000) and periods near 15_000 start
+      // surviving, because advance() slices at 250ms and a flush reads the
+      // clock at its slice's end. Keep the split.
       advance(5_999);
       expect(capturePostHogEvent).not.toHaveBeenCalled();
 
