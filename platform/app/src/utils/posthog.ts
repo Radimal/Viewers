@@ -9,10 +9,19 @@ export type PostHogConfig = {
 let _identifiedFromUrl = false;
 
 // Build identity of THIS bundle, baked in by DefinePlugin (.webpack/webpack.base.js).
-// Per-event, NOT a PostHog super property: super properties live in localStorage,
-// shared across every tab on the origin, so the last tab to init would relabel
-// events emitted by the others — and two windows on different builds is a case
-// ./updateDetection exists to handle.
+// Per-event, NOT a PostHog super property. The reason is narrower than an
+// earlier version of this comment claimed: super properties do live in shared
+// localStorage, but posthog-js loads persistence into memory in the
+// PostHogPersistence constructor only, so another tab's register() does NOT
+// relabel an already-initialised tab's events. What it does affect is the NEXT
+// tab to init, which reads whatever the last writer left. Keeping build
+// identity per-event sidesteps that entirely, and two windows on different
+// builds is a case ./updateDetection exists to handle.
+//
+// page_load_id below IS a super property despite being per-document. It is
+// registered inside `loaded`, before this document captures anything, and the
+// no-clock branch UNREGISTERS rather than omitting -- otherwise the previous
+// load's value would survive in localStorage and be attributed to this one.
 // normalizeCommit because webpack.base.js reads commit.txt untrimmed.
 const BUILD_PROPS = {
   build_commit: isLocalCommit(process.env.COMMIT_HASH)
@@ -51,6 +60,29 @@ const isHidden = (): boolean =>
 
 const HIDDEN_AT_BOOT = typeof document !== 'undefined' && isHidden();
 
+// Identifies THIS page load, so the per-load anti-join below has a key. Epoch
+// ms of navigation start: constant for the life of a document, different for
+// the next load. The flush-window telemetry branch derives its own window key
+// the same way, so the two will group consistently IF both ship -- that
+// property is not in production today, so do not write a join against it yet.
+//
+// Not unique "by construction": two documents whose navigation starts round to
+// the same millisecond collide, which two tabs opened in one gesture can do.
+// Rare, and it degrades to today's behaviour (a session-level join) rather than
+// to a wrong answer, but do not write queries that assume uniqueness.
+//
+// NULL, NEVER 0, when the clock is unavailable (Safari < 15, some webviews).
+// A 0 would register as a real value that JSONHas() reports present, so every
+// such load in a session would share the key and the anti-join would silently
+// collapse them into one group -- reporting the session healthy because one of
+// them painted, which is the exact under-count this property exists to fix.
+// Absent is the honest encoding: the presence guard then excludes the cohort
+// instead of mis-grouping it. See the query note below.
+const PAGE_LOAD_ID: number | null =
+  typeof performance !== 'undefined' && performance.timeOrigin
+    ? Math.round(performance.timeOrigin)
+    : null;
+
 // The other half of the never-render question. `hidden_at_boot` only catches
 // tabs that were ALREADY hidden; this fires once for a tab backgrounded after
 // that, which a point sample structurally cannot see.
@@ -79,25 +111,36 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && isHidden();
 // of this comment prescribed. All three signals are per PAGE LOAD —
 // hidden_at_boot is a module-eval snapshot, viewer_hidden is a module-state
 // latch, first_image_rendered fires per study — while an analytics session
-// survives navigation. Measured 2026-09-02, counting a page load as one
-// viewer_loaded: 618 of 2,459 sessions carrying these events — 25.1% — span
-// more than one page load, one of them 72. In a session with five loads where
+// survives navigation. Measured with one query over one population — sessions
+// carrying any of viewer_loaded / viewer_hidden / first_image_rendered,
+// counting a page load as one distinct $initialization_time, project-local:
+//   2026-09-02 (one day):      619 of 2,459 = 25.2%, max 72 loads
+//   2026-08-26..09-02 (7 days): 4,111 of 16,686 = 24.6%, max 177
+// The SHARE is what settles; the counts and the max only ratchet. Both lines
+// must come from the same population or they are not comparable — an earlier
+// version of this comment mixed two, and a ±1 discrepancy against a differently
+// scoped run is expected, so state the population when requoting.
+// In a session with five loads where
 // four rendered and one did not, a session-level
 // `viewer_loaded AND NOT first_image_rendered` sees a render and calls the whole
 // session healthy, hiding the never-render load this exists to count.
 //
-// There is no per-page-load key on these events yet, and `$window_id` is NOT
-// one: posthog-js carries a window id forward across a same-tab navigation
-// (`sessionid.js` restores it whenever `primary_window_exists` is absent, the
-// state a normal unload leaves). Until one is added, scope the anti-join to a
-// single load some other way, or accept that it under-counts.
+// Scope the anti-join on (`$session_id`, `page_load_id`), the super property
+// registered at init below. `$window_id` is NOT a substitute: posthog-js carries
+// a window id forward across a same-tab navigation (`sessionid.js` restores it
+// whenever `primary_window_exists` is absent, the state a normal unload leaves).
+// Events captured before init — there are none today — would carry no
+// page_load_id at all, so guard with JSONHas rather than assuming presence.
 //
 // One-shot: only the first backgrounding bears on the question. The FLAG is
 // what guarantees that, not the unsubscribe: captureFirstHide removes the
 // visibilitychange listener but never the prerenderingchange one registered
 // below, so a prerender activation after a hide would re-enter. The unsubscribe
-// is cleanup. Dropping either one alone leaves the suite green, which is why the
-// flag now has a test of its own rather than resting on the shared cases.
+// is cleanup. Measured, not assumed: deleting the flag fails one test (the
+// prerenderingchange re-entry case); deleting the unsubscribe fails none, so
+// the cleanup half is the uncovered one. Both are kept — the flag because it
+// carries the guarantee, the unsubscribe because leaking a listener is its own
+// defect — but only the flag is currently pinned by a test.
 //
 // Seeded from HIDDEN_AT_BOOT, where 0 is the truthful value. A tab hidden from
 // navigation start (ctrl-click, "open link in a background tab" — how a case
@@ -205,6 +248,17 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
       // the one-shot sessions the never-render cohort is made of.
       try {
         ph.register({ app: 'viewer' });
+        // Register or UNREGISTER, never merely omit. Super properties persist
+        // in localStorage across page loads, so omitting the key on a load with
+        // no usable clock leaves the PREVIOUS load's page_load_id in place --
+        // strictly worse than absent, because the anti-join then groups two
+        // real loads as one while JSONHas() reports the key present. An
+        // explicit null would persist as a registered key for the same reason.
+        if (PAGE_LOAD_ID !== null) {
+          ph.register({ page_load_id: PAGE_LOAD_ID });
+        } else {
+          ph.unregister('page_load_id');
+        }
       } catch (e) {
         console.warn('[PostHog] register super properties failed', e);
       }
