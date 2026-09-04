@@ -135,16 +135,46 @@ function captureFirstImageRendered(evt) {
       //
       // THE EXISTING INSIGHTS ARE NOT ALREADY CLEAN. Measured 2026-09-01: 16
       // saved insights reference first_image_rendered and NONE of them exclude
-      // hidden samples. An upper `secs` bound does not do it either — over 14
-      // days it dropped 349 of 43,954 samples while RETAINING 1,565 above 10s,
-      // 331 of those over a full minute.
+      // hidden samples. Some already carry a hand-rolled parked-tab heuristic
+      // (their SQL labels it as such), which is not the same thing and does not
+      // make them clean.
+      //
+      // An upper `secs` bound is not a substitute either: over a rolling 14 days
+      // to 2026-09-01 a 600s bound dropped roughly 350 of ~44,000 samples while
+      // RETAINING over 1,500 above 10s, several hundred of those past a minute.
+      // Deliberately rounded -- a rolling window does not reproduce to the digit
+      // and precise-looking figures here have gone stale twice. Re-measure if
+      // the exact numbers matter; the magnitude is the argument.
       //
       // So every percentile and rate tile needs
       // `properties.hidden_during_load != 'true'` added explicitly — the
-      // string, since PostHog stores custom booleans as JSON strings and
-      // `= true` matches nothing while failing open. `!= 'true'` is safe on
-      // pre-deploy history: HogQL evaluates NULL != 'true' to 1, so old events
-      // are kept rather than silently dropped (verified, not assumed).
+      // string, since PostHog stores custom booleans as JSON strings.
+      //
+      // THAT FILTER FAILS OPEN, AND MUST BE PAIRED WITH A PRESENCE GUARD.
+      // Measured on this project: over 3 days of first_image_rendered, with the
+      // property absent, `!= 'true'` retained 10,006 of 10,006 rows — HogQL
+      // wraps it in ifNull(..., 1). That is what makes it safe on pre-deploy
+      // history, and it is the same reason it silently reverts every tile to
+      // the polluted numbers if this branch is rolled back, the property is
+      // renamed, or capture regresses. A tile cannot tell that from "no hidden
+      // samples today". Gate on
+      // `JSONHas(properties, 'hidden_during_load') AND properties.hidden_during_load != 'true'`
+      // wherever the tile must fail closed, exactly as the anti-join in
+      // posthog.ts is gated on lifetime render count.
+      //
+      // That gate has its own cost, so choose per tile rather than applying it
+      // blindly: this branch has NOT deployed, so JSONHas currently matches zero
+      // first_image_rendered rows, and a 30- or 90-day tile gated on it renders
+      // NOTHING for every pre-deploy day -- visually identical to an outage.
+      // Failing closed is the point; knowing which failure you bought is the
+      // requirement. (No row count quoted: it only means "everything before the
+      // deploy", and every attempt to pin it to a fixed number has drifted.)
+      //
+      // Do NOT import the "`= true` fails open" warning from that block. There
+      // it describes an anti-join subquery, where matching nothing satisfies
+      // NOT EXISTS for everyone. In an inclusion filter on a percentile tile,
+      // `= true` matching nothing yields zero rows — fail-CLOSED and visibly
+      // broken. The direction inverts with the query shape.
       hidden_during_load: wasHiddenDuringWindow(startedAt),
     });
   } catch {
