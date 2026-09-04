@@ -98,15 +98,10 @@ const _pending = new Map<string, StudyStats>();
  * window id FORWARD across a same-tab navigation: `sessionid.js` restores the
  * stored id whenever `primary_window_exists` is absent, which is exactly the
  * state a normal unload leaves behind, and mints a fresh one only for a
- * duplicated tab. Measured across all `app = 'viewer'` events on 2026-09-02,
- * counting distinct `$initialization_time` per (`$session_id`, `$window_id`):
- * 517 of 3,162 pairs — 16.4% — cover more than one page load. State that scope
- * when requoting: the same measurement over `frame_download_stats` alone gives
- * 282 of 1,478, and the difference is the event set, not a retraction.
- *
- * The worst pair held 51 loads that day, and that figure is a FLOOR, not a
- * property of the system: over 2026-08-27..09-04 the maximum is already 177.
- * Same ratchet as the 229s below — quote the share, which settles.
+ * duplicated tab. A meaningful share of (`$session_id`, `$window_id`) pairs
+ * cover more than one page load, and the worst pair holds dozens. Figures and
+ * their scope live in the PR, not here: they are sample statistics, they move
+ * daily, and every attempt to keep them current in this comment has drifted.
  *
  * `network_active_ms / window_ms` is NOT a utilisation ratio and can exceed 1.
  * Resource-timing entries are delivered at completion and span the whole
@@ -155,9 +150,11 @@ let _longTaskMs = 0;
 // `x.length ? ... : null` idiom since #9: across every production event of its
 // life (it first reached prod 2026-09-02), roughly 88% carry the key and ZERO
 // are present-but-null. The ZERO is the load-bearing part and it is structural,
-// not a sample property; the counts grow daily and are deliberately not quoted. So `long_tasks IS NULL` matches the unsupported browsers
-// AND every event predating this branch AND anything served from a stale
-// bundle -- it fails open, in exactly the way this null was meant to prevent.
+// not a sample property; the counts grow daily and are deliberately not quoted.
+//
+// So `long_tasks IS NULL` matches the unsupported browsers AND every event
+// predating this branch AND anything served from a stale bundle -- it fails
+// open, in exactly the way this null was meant to prevent.
 //
 // To size the unsupported-browser cohort, gate on presence AND on events that
 // could have carried the key at all:
@@ -236,17 +233,17 @@ function recordEntry(entry: PerformanceResourceTiming): void {
 /**
  * Wall-clock milliseconds during which at least one network fetch was in flight.
  *
- * The loader runs up to `maxNumRequests.interaction` frames concurrently — 20 on
- * both production clusters, read off their live `/app-config.js` on 2026-09-03 —
+ * The loader runs up to `maxNumRequests.interaction` frames concurrently,
  * multiplexed over a single HTTP/2 connection, so each entry's `duration` spans
  * the same window. Summing them overcounts elapsed time by roughly the
  * concurrency factor and understates throughput by the same factor; the union of
  * the intervals is the actual transfer window.
  *
- * Do NOT read that cap out of `public/config/*.js`. Those files say 100, and the
- * container entrypoint rewrites `app-config.js` from `$APP_CONFIG` on start, so
- * no config file in this repo is what a deployed viewer actually loads. The live
- * caps diverge on every key: 20 / 10 / 8 against the files' 100 / 75 / 25.
+ * DO NOT read that cap out of `public/config/*.js`. The container entrypoint
+ * rewrites `app-config.js` from `$APP_CONFIG` on start, so no config file in
+ * this repo is what a deployed viewer actually loads, and the two have been
+ * observed to diverge on every key -- by multiples, not margins. Curl a
+ * cluster's live `/app-config.js` when the number matters.
  */
 function activeMs(spans: Array<[number, number]>): number {
   if (!spans.length) {
@@ -376,10 +373,10 @@ function flush(reason: string): void {
   // scheduled deferral, so a consumer would read that shortfall as NEGATIVE
   // deferral. Measured 2026-09-02, keyed per page load on (`$session_id`,
   // `$initialization_time`) and collapsing a multi-study flush to one flush:
-  // 51 of 2,311 interval flushes — 2.2% — directly follow a non-interval one,
-  // all 51 after a 'hidden'. An earlier version of this comment said 5.6%
-  // (57 of 1,014); the numerator was close but the denominator counted well
-  // under half the interval flushes that day.
+  // A small but real share of interval flushes directly follow a non-interval
+  // one, all of them after a 'hidden'. Measured share is in the PR; it is a
+  // floor besides, since a flush with nothing pending emits no event while
+  // still rebasing the window.
   //
   // NOT on an 'interval' flush, which is already in phase. Re-phasing there
   // would restart the timer AFTER the emit loop, adding its cost to every
@@ -463,7 +460,9 @@ export function startFrameDownloadTelemetry(): void {
   startLongTaskObserver();
   _windowStartedAt = performance.now();
   _hiddenMsThisWindow = 0;
-  // A bare visibilityState read on purpose, unlike posthog.ts's isHidden():
+  // A bare visibilityState read on purpose, and deliberately NOT the
+  // prerender-aware check the visibility-telemetry branch adds to posthog.ts
+  // (not on this branch -- do not assume it is importable):
   // a prerendering document reports 'hidden', and Chrome deprioritises its
   // network work, so charging a prerender to hidden_ms is what this field
   // means. hidden_at_boot answers a different question — "did the reader open
@@ -535,33 +534,29 @@ export function stopFrameDownloadTelemetry(): void {
   // documented to mean.
   //
   // Worth knowing before spending more effort here: flush_reason 'stop' has
-  // never fired in production: 0 of 2,900 events, counted over the event's whole
-  // life to 2026-09-03 — which was days, not a full seven, since it reached both
-  // prod clusters mid-afternoon on 09-02. (That is why 2,900 sits so close to
-  // the 2,894 single-day figure above; they are nearly the same events, and an
-  // earlier "seven days" framing implied a much larger sample than exists.)
-  // Still absent as of 2026-09-04. This is App.tsx's unmount cleanup, which an SPA effectively
-  // never runs — the page tears down and fires pagehide instead.
+  // has NEVER fired in production, across every event of its life. Zero is the
+  // durable part and it is structural, not a sample artefact: this is App.tsx's
+  // unmount cleanup, which an SPA effectively never runs — the page tears down
+  // and fires pagehide instead. Re-check with a COUNT, not against a
+  // remembered total.
   //
   // That is NOT a reason to treat the bfcache path as the live alternative
   // either: pagehide -> interval was 0 through 2026-09-03, and 1 by 2026-09-04.
   // It fires, barely.
   //
-  // Three cells report hidden_ms > 0, not two: hidden -> interval is the largest
-  // at ~160 and is tested; hidden -> pagehide (~18) now has a test too;
-  // hidden -> hidden (~32) still does not. QUOTE THESE
-  // AS A RATE, NOT A COUNT: they are monotonic and this comment has already
-  // been wrong once. hidden -> hidden and hidden -> pagehide were 19 and 13 when
-  // written on 2026-09-03 and were 32 and 18 the next day. That is a difference
-  // of two cumulative snapshots taken at unstated times, over a population whose
-  // own daily volume was rising, so do not convert it into a per-day rate --
-  // an earlier version did, and got the arithmetic wrong in the flattering
-  // direction. The point is only that both cells keep growing.
+  // Three cells report hidden_ms > 0, not two: hidden -> interval (the largest,
+  // tested), hidden -> pagehide (tested), and hidden -> hidden (still untested).
+  // All three keep growing; none is negligible.
   //
-  // Every count in this block is also a FLOOR by construction: a flush whose
-  // _pending is empty emits no event while still rebasing the window and
-  // re-phasing the timer, so the sequence is only observable where both flushes
-  // emitted. The true populations are larger by an unmeasured amount.
+  // DO NOT WRITE THEIR COUNTS HERE. They are monotonic, they moved materially
+  // within a day of being written, and two successive attempts to keep them
+  // current in this comment were both wrong -- once by quoting a stale pair,
+  // once by converting them to a per-day rate with the arithmetic rounded in
+  // the flattering direction. Count them when you need them.
+  //
+  // Any such count is also a FLOOR by construction: a flush whose _pending is
+  // empty emits no event while still rebasing the window and re-phasing the
+  // timer, so a sequence is only observable where both flushes emitted.
   //
   // The two cells are NOT the same shape, despite sharing a sentence here.
   // For hidden -> hidden, hidden_ms comes from _hiddenMsThisWindow: a genuinely
