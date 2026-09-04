@@ -52,6 +52,7 @@ const initFresh = ({
   visibleAgainBeforeInit = false,
   prerendering = false,
   activateIntoBackground = false,
+  noTimeOrigin = false,
 } = {}) =>
   withEnv(
     {
@@ -64,6 +65,15 @@ const initFresh = ({
         value: visibilityState,
         configurable: true,
       });
+      // Safari < 15 and some webviews expose no usable timeOrigin. jsdom's is a
+      // configurable prototype getter, so the branch is reachable in test.
+      const realTimeOrigin = Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(performance),
+        'timeOrigin'
+      );
+      if (noTimeOrigin) {
+        Object.defineProperty(performance, 'timeOrigin', { value: 0, configurable: true });
+      }
       if (prerendering) {
         Object.defineProperty(document, 'prerendering', { value: true, configurable: true });
       } else {
@@ -80,6 +90,11 @@ const initFresh = ({
         // would then reach the REAL posthog.capture — XHRs and retry timers
         // inside unrelated tests. With nothing to restore they stay stubbed and
         // push into their own orphaned calls array, which is harmless.
+        const realUnregister = posthog.unregister.bind(posthog);
+        posthog.unregister = prop => {
+          calls.push(['unregister', prop]);
+          return realUnregister(prop);
+        };
         const realRegister = posthog.register.bind(posthog);
         posthog.register = p => {
           calls.push(['register', p]);
@@ -127,6 +142,10 @@ const initFresh = ({
           }
         }
       });
+      if (noTimeOrigin && realTimeOrigin) {
+        Object.defineProperty(Object.getPrototypeOf(performance), 'timeOrigin', realTimeOrigin);
+        delete performance.timeOrigin;
+      }
       return { calls, mod };
     }
   );
@@ -156,6 +175,40 @@ describe('_initPostHogUnsafe wiring', () => {
     const event = viewerLoaded(await initFresh());
     expect(event).toBeDefined();
     expect(event[2]).toBe('viewer');
+  });
+
+  it('registers a page_load_id that scopes the per-load anti-join', async () => {
+    // The anti-join documented in posthog.ts counts loads that never painted.
+    // It is per PAGE LOAD, but $session_id survives navigation (25% of sessions
+    // carry more than one load, one of them 72) and $window_id is carried
+    // forward across a same-tab navigation, so neither can key it. Registering
+    // this as a super property is what puts the key on all three events.
+    const { calls } = await initFresh();
+    // posthog-js registers $initialization_time itself, so match on OUR payloads
+    // rather than taking the first register call. app and page_load_id are two
+    // separate register calls because the no-clock case must unregister.
+    const appCall = calls.find(c => c[0] === 'register' && c[1] && 'app' in c[1]);
+    const idCall = calls.find(c => c[0] === 'register' && c[1] && 'page_load_id' in c[1]);
+    expect(appCall).toBeDefined();
+    expect(appCall[1].app).toBe('viewer');
+    expect(idCall).toBeDefined();
+    expect(typeof idCall[1].page_load_id).toBe('number');
+    const register = idCall;
+    // Epoch ms, not a performance.now() offset -- a bare offset restarts near
+    // zero every load, so two loads in one session would collide. Anything at
+    // epoch scale is past 2001; a now()-relative value would be a few thousand.
+    expect(register[1].page_load_id).toBeGreaterThan(1_000_000_000_000);
+  });
+
+  it('unregisters page_load_id when there is no usable clock, rather than omitting it', async () => {
+    // Omitting is not neutral. Super properties persist in localStorage, so a
+    // load with no timeOrigin that merely skips the key inherits the PREVIOUS
+    // load's page_load_id and the anti-join silently merges two real loads --
+    // worse than having no key, because JSONHas() still reports it present.
+    const { calls } = await initFresh({ noTimeOrigin: true });
+    const idCall = calls.find(c => c[0] === 'register' && c[1] && 'page_load_id' in c[1]);
+    expect(idCall).toBeUndefined();
+    expect(calls).toContainEqual(['unregister', 'page_load_id']);
   });
 
   it('attaches build identity to every event through the shared helper', async () => {
