@@ -1,0 +1,12 @@
+# Toolchain versions for this repo. mise reads this; see CLAUDE.md > Requirements.
+#
+# node 20.18.1 is not a preference: Dockerfile builds with node:20.18.1-slim and the
+# final stage is nginx, so there is no node at runtime -- the build node IS the
+# production node. The patch version is load-bearing (20.9.0 fails orthancUtils.test.js).
+#
+# yarn MUST stay on 1.x. This repo has a v1 lockfile and uses workspaces.nohoist,
+# which is Yarn 1 only. Yarn 4 does not error on it -- it silently rewrites yarn.lock
+# to Berry format and switches from node_modules to PnP.
+[tools]
+node = "20.18.1"
+yarn = "1.22.22"

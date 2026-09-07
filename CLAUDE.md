@@ -356,10 +356,17 @@ Mode activation (via routing)
 
 - **Node.js**: 20.18.1 (what `Dockerfile` builds production with)
 - **Yarn**: 1.22.22 — **must be Yarn 1.** Yarn 4 does not error on this repo's v1
-  lockfile, it silently rewrites it to Berry format and switches to PnP. The `volta` key
-  in `package.json` is the only thing enforcing this; do not remove it. Check with
-  `yarn --version`.
+  lockfile, it silently rewrites it to Berry format and switches to PnP.
+- **Toolchain manager**: [mise](https://mise.jdx.dev). Both versions above are pinned in
+  **`mise.toml`**; do not remove it. With mise installed and activated, `cd` into the repo
+  and you get the right versions. Verify with `node --version` and `yarn --version`, or
+  `mise ls --current`.
 - **Git**: For version control
+
+> Without mise you get whatever `node`/`yarn` are on your PATH, and nothing in the repo
+> will stop Yarn 4 from migrating `yarn.lock` — `engines` says `yarn >=1.20.0`, which 4.x
+> satisfies numerically. If you use a different manager, note that `.node-version` (20.18.1)
+> is read by mise, fnm, nodenv and asdf but **not** by volta, and no shared file pins yarn.
 
 ### Initial Setup
 
