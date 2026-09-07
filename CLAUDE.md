@@ -357,10 +357,12 @@ Mode activation (via routing)
 - **Node.js**: 20.18.1 (what `Dockerfile` builds production with)
 - **Yarn**: 1.22.22 — **must be Yarn 1.** Yarn 4 does not error on this repo's v1
   lockfile, it silently rewrites it to Berry format and switches to PnP.
-- **Toolchain manager**: [mise](https://mise.jdx.dev). Both versions above are pinned in
-  **`mise.toml`**; do not remove it. With mise installed and activated, `cd` into the repo
-  and you get the right versions. Verify with `node --version` and `yarn --version`, or
-  `mise ls --current`.
+- **Toolchain manager**: [mise](https://mise.jdx.dev/getting-started.html) (`brew install mise`,
+  then activate it in your shell). Both versions above are pinned in **`mise.toml`**; do not
+  remove it. With mise installed and activated, `cd` into the repo and you get the right
+  versions. Verify with `node --version` and `yarn --version`, or `mise ls --current`.
+  Recommended, not required: `.node-version` pins the same node for nvm and fnm users. Nothing
+  pins the Yarn major for them, so on any other manager check `yarn --version` by hand.
 - **Git**: For version control
 
 > Without mise you get whatever `node`/`yarn` are on your PATH, and nothing in the repo

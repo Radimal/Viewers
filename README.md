@@ -135,8 +135,12 @@ Here is a schematic representation of our development workflow:
 
 ### Requirements
 
-- [Yarn 1.17.3+](https://yarnpkg.com/en/docs/install)
-- [Node 18+](https://nodejs.org/en/)
+- [Node 20.18.1](https://nodejs.org/en/) and [Yarn 1.22.22](https://yarnpkg.com/en/docs/install),
+  both pinned in `mise.toml`. The node patch is load-bearing and Yarn must stay on 1.x — see
+  CLAUDE.md > Requirements for why.
+- Optional but recommended: [mise](https://mise.jdx.dev/getting-started.html) reads `mise.toml` and
+  switches both for you on `cd`. If you prefer nvm or fnm, `.node-version` pins the same node; note
+  that nothing pins your Yarn major, so check `yarn --version` reports 1.x.
 - Yarn Workspaces should be enabled on your machine:
   - `yarn config set workspaces-experimental true`
 
