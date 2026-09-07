@@ -80,9 +80,10 @@ const initFresh = ({
         delete document.prerendering;
       }
       const calls = [];
-      let mod;
+      let mod, getProperty;
       await jest.isolateModulesAsync(async () => {
         const posthog = (await import('posthog-js')).default;
+        getProperty = prop => posthog.get_property(prop);
         mod = await import('./posthog');
         // Plain assignment rather than jest.spyOn: restoreAllMocks would re-arm
         // the discarded instances from earlier cases, whose visibilitychange
@@ -146,7 +147,7 @@ const initFresh = ({
         Object.defineProperty(Object.getPrototypeOf(performance), 'timeOrigin', realTimeOrigin);
         delete performance.timeOrigin;
       }
-      return { calls, mod };
+      return { calls, mod, getProperty };
     }
   );
 
@@ -177,38 +178,56 @@ describe('_initPostHogUnsafe wiring', () => {
     expect(event[2]).toBe('viewer');
   });
 
-  it('registers a page_load_id that scopes the per-load anti-join', async () => {
+  it('registers a page_load_started_at that scopes the per-load anti-join', async () => {
     // The anti-join documented in posthog.ts counts loads that never painted.
     // It is per PAGE LOAD, but $session_id survives navigation (25% of sessions
     // carry more than one load, one of them 72) and $window_id is carried
     // forward across a same-tab navigation, so neither can key it. Registering
     // this as a super property is what puts the key on all three events.
     const { calls } = await initFresh();
-    // posthog-js registers $initialization_time itself, so match on OUR payloads
-    // rather than taking the first register call. app and page_load_id are two
-    // separate register calls because the no-clock case must unregister.
+    // posthog-js registers $initialization_time itself, so match on OUR
+    // payloads rather than taking the first register call. app and
+    // page_load_started_at are two separate register calls because the no-clock
+    // case must unregister.
     const appCall = calls.find(c => c[0] === 'register' && c[1] && 'app' in c[1]);
-    const idCall = calls.find(c => c[0] === 'register' && c[1] && 'page_load_id' in c[1]);
+    const idCall = calls.find(c => c[0] === 'register' && c[1] && 'page_load_started_at' in c[1]);
     expect(appCall).toBeDefined();
     expect(appCall[1].app).toBe('viewer');
     expect(idCall).toBeDefined();
-    expect(typeof idCall[1].page_load_id).toBe('number');
+    expect(typeof idCall[1].page_load_started_at).toBe('number');
     const register = idCall;
     // Epoch ms, not a performance.now() offset -- a bare offset restarts near
     // zero every load, so two loads in one session would collide. Anything at
     // epoch scale is past 2001; a now()-relative value would be a few thousand.
-    expect(register[1].page_load_id).toBeGreaterThan(1_000_000_000_000);
+    expect(register[1].page_load_started_at).toBeGreaterThan(1_000_000_000_000);
   });
 
-  it('unregisters page_load_id when there is no usable clock, rather than omitting it', async () => {
+  it('unregisters page_load_started_at when there is no usable clock, rather than omitting it', async () => {
     // Omitting is not neutral. Super properties persist in localStorage, so a
     // load with no timeOrigin that merely skips the key inherits the PREVIOUS
-    // load's page_load_id and the anti-join silently merges two real loads --
-    // worse than having no key, because JSONHas() still reports it present.
-    const { calls } = await initFresh({ noTimeOrigin: true });
-    const idCall = calls.find(c => c[0] === 'register' && c[1] && 'page_load_id' in c[1]);
+    // load's page_load_started_at and the anti-join silently merges two real
+    // loads -- worse than having no key, because JSONHas() still reports it
+    // present.
+    //
+    // This needs TWO loads sharing one localStorage (beforeEach clears it per
+    // CASE, not per init). One no-clock load cannot see the bug: nothing ever
+    // registered the key, so get_property is undefined whether unregister
+    // works or not, and the assertion pins nothing. Mutating persistence to a
+    // no-op leaves the single-load version green -- verified, not assumed.
+    const first = await initFresh({});
+    const registered = first.calls.find(
+      c => c[0] === 'register' && c[1] && 'page_load_started_at' in c[1]
+    );
+    expect(typeof registered[1].page_load_started_at).toBe('number');
+    expect(first.getProperty('page_load_started_at')).toBe(registered[1].page_load_started_at);
+
+    const { calls, getProperty } = await initFresh({ noTimeOrigin: true });
+    const idCall = calls.find(c => c[0] === 'register' && c[1] && 'page_load_started_at' in c[1]);
     expect(idCall).toBeUndefined();
-    expect(calls).toContainEqual(['unregister', 'page_load_id']);
+    expect(calls).toContainEqual(['unregister', 'page_load_started_at']);
+    // The EFFECT, not just the call: load 1's persisted value must be GONE,
+    // not inherited. This is the assertion the defect above actually trips.
+    expect(getProperty('page_load_started_at')).toBeUndefined();
   });
 
   it('attaches build identity to every event through the shared helper', async () => {
@@ -273,9 +292,10 @@ describe('_initPostHogUnsafe wiring', () => {
     });
     const hidden = calls.filter(c => c[0] === 'viewer_hidden');
     expect(hidden).toHaveLength(1);
-    // Not `>= 0`: that is the assertion round 6 recorded as unfalsifiable, and
-    // re-adding it here was a regression. The activation runs after init, so
-    // the latch reads the live clock.
+    // Not `>= 0`: an earlier round recorded that assertion as unfalsifiable --
+    // ms_since_navigation_start is never negative, so the bound cannot fail --
+    // and re-adding it here was a regression. The activation runs after init,
+    // so the latch reads the live clock.
     expect(hidden[0][1].ms_since_navigation_start).toBe(ACTIVATE_AT_MS);
     // Still not a boot-hidden tab: it was prerendering when the bundle ran.
     expect(viewerLoaded({ calls })[1].hidden_at_boot).toBe(false);

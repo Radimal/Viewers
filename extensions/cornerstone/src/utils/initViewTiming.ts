@@ -37,9 +37,14 @@ export function wasHiddenDuringWindow(startedAt: number): boolean {
   // A window that spans prerender -> activation is still flagged, because the
   // activation fires visibilitychange and the interval clause below stamps it.
   // Narrowing that too would mean telling an activation apart from a real
-  // backgrounding, which is more machinery than an unmeasured case is worth —
-  // no speculation rules ship in this repo, so whether the viewer is ever
-  // prerendered at all is unknown.
+  // backgrounding, which is more machinery than an unreachable case is worth:
+  // nothing prerenders this viewer. Checked 2026-09-07 — no speculation rules
+  // and no rel=prerender in this repo or in radimal-vet, every entry point into
+  // the viewer is window.open or a pasted share link, and the nginx config that
+  // ships in this image sends no Supports-Loading-Mode opt-in for what is a
+  // cross-origin navigation. The prerendering guard below is kept regardless:
+  // it costs nothing, and an empty cohort is an infra fact with no test behind
+  // it. posthog.ts carries the full check and the condition to re-check under.
   //
   // posthog.ts says its prerender predicate is half a pattern and must not be
   // lifted without the prerenderingchange listener. That rule does not carry
@@ -151,13 +156,14 @@ function captureFirstImageRendered(evt) {
       // string, since PostHog stores custom booleans as JSON strings.
       //
       // THAT FILTER FAILS OPEN, AND MUST BE PAIRED WITH A PRESENCE GUARD.
-      // Measured on this project: over 3 days of first_image_rendered, with the
-      // property absent, `!= 'true'` retained 10,006 of 10,006 rows — HogQL
-      // wraps it in ifNull(..., 1). That is what makes it safe on pre-deploy
-      // history, and it is the same reason it silently reverts every tile to
-      // the polluted numbers if this branch is rolled back, the property is
-      // renamed, or capture regresses. A tile cannot tell that from "no hidden
-      // samples today". Gate on
+      // With the property absent, `!= 'true'` retains EVERY row -- HogQL wraps
+      // it in ifNull(..., 1). That is a structural ratio, not a sample, so no
+      // row count is quoted: re-check it with a count over your own window
+      // rather than against a number here. That is what makes it safe on
+      // pre-deploy history, and it is the same reason it silently reverts every
+      // tile to the polluted numbers if this branch is rolled back, the
+      // property is renamed, or capture regresses. A tile cannot tell that from
+      // "no hidden samples today". Gate on
       // `JSONHas(properties, 'hidden_during_load') AND properties.hidden_during_load != 'true'`
       // wherever the tile must fail closed, exactly as the anti-join in
       // posthog.ts is gated on lifetime render count.

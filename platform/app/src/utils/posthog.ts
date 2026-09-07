@@ -18,10 +18,11 @@ let _identifiedFromUrl = false;
 // identity per-event sidesteps that entirely, and two windows on different
 // builds is a case ./updateDetection exists to handle.
 //
-// page_load_id below IS a super property despite being per-document. It is
-// registered inside `loaded`, before this document captures anything, and the
-// no-clock branch UNREGISTERS rather than omitting -- otherwise the previous
-// load's value would survive in localStorage and be attributed to this one.
+// page_load_started_at below IS a super property despite being per-document. It
+// is registered inside `loaded`, before this document captures anything, and
+// the no-clock branch UNREGISTERS rather than omitting -- otherwise the
+// previous load's value would survive in localStorage and be attributed to this
+// one.
 // normalizeCommit because webpack.base.js reads commit.txt untrimmed.
 const BUILD_PROPS = {
   build_commit: isLocalCommit(process.env.COMMIT_HASH)
@@ -78,7 +79,7 @@ const HIDDEN_AT_BOOT = typeof document !== 'undefined' && isHidden();
 // them painted, which is the exact under-count this property exists to fix.
 // Absent is the honest encoding: the presence guard then excludes the cohort
 // instead of mis-grouping it. See the query note below.
-const PAGE_LOAD_ID: number | null =
+const PAGE_LOAD_STARTED_AT: number | null =
   typeof performance !== 'undefined' && performance.timeOrigin
     ? Math.round(performance.timeOrigin)
     : null;
@@ -100,6 +101,24 @@ const PAGE_LOAD_ID: number | null =
 // unobservable because the one-shot latch has already fired. And "early" has no
 // settled cut yet — derive it from the deployed distribution, do not invent one.
 //
+// That rule assumes the clock starts when the READER asked for the page. On a
+// prerendered document it does not: timeOrigin is the PRERENDER's navigation
+// start and nothing here subtracts `activationStart`, so a page prerendered 30s
+// then activated into a background tab reports ~30000 and the threshold files
+// it under "gave up" — the inverse of the truth. Excluded by construction, not
+// by luck, checked 2026-09-07: no speculation rules and no rel=prerender exist
+// in this repo or in radimal-vet; every entry point into the viewer is
+// window.open (radimal-vet src/services/ohif.ts plus three modal and dropdown
+// callers) or a share link copied to the clipboard, and neither is ever a
+// prerender target; and the viewer is cross-origin from the app while the nginx
+// config that ships in this image (.docker/Viewer-v3.x/*.conf.template) sends
+// no Supports-Loading-Mode: credentialed-prerender, so Chrome would reject a
+// same-site prerender even if a trigger appeared. Browser-initiated omnibox
+// prerender activates into the foreground tab the reader is looking at, which
+// is not the failing shape. RE-CHECK, and subtract activationStart, if either a
+// speculation-rules trigger or that response header lands: three infra facts
+// hold this exclusion up and no test pins any of them, so it can rot silently.
+//
 // Four query traps: these are three separate events, so it is an anti-join, not
 // an insight filter row; PostHog stores custom booleans as the JSON strings
 // 'true'/'false', so `= true` matches nothing while failing open; and a headless
@@ -111,26 +130,23 @@ const PAGE_LOAD_ID: number | null =
 // of this comment prescribed. All three signals are per PAGE LOAD —
 // hidden_at_boot is a module-eval snapshot, viewer_hidden is a module-state
 // latch, first_image_rendered fires per study — while an analytics session
-// survives navigation. Measured with one query over one population — sessions
-// carrying any of viewer_loaded / viewer_hidden / first_image_rendered,
-// counting a page load as one distinct $initialization_time, project-local:
-//   2026-09-02 (one day):      619 of 2,459 = 25.2%, max 72 loads
-//   2026-08-26..09-02 (7 days): 4,111 of 16,686 = 24.6%, max 177
-// The SHARE is what settles; the counts and the max only ratchet. Both lines
-// must come from the same population or they are not comparable — an earlier
-// version of this comment mixed two, and a ±1 discrepancy against a differently
-// scoped run is expected, so state the population when requoting.
-// In a session with five loads where
-// four rendered and one did not, a session-level
-// `viewer_loaded AND NOT first_image_rendered` sees a render and calls the whole
-// session healthy, hiding the never-render load this exists to count.
+// survives navigation. Whether that gap is wide today is measurable, so measure
+// it rather than trusting a figure in a comment: the population is sessions
+// carrying any of viewer_loaded / viewer_hidden / first_image_rendered, counting
+// a page load as one distinct $initialization_time, and both ends of any
+// comparison must come from that same population or they are not comparable.
+// The structural case needs no number to stand. In a session with five loads
+// where four rendered and one did not, a session-level `viewer_loaded AND NOT
+// first_image_rendered` sees a render and calls the whole session healthy,
+// hiding the never-render load this exists to count.
 //
-// Scope the anti-join on (`$session_id`, `page_load_id`), the super property
-// registered at init below. `$window_id` is NOT a substitute: posthog-js carries
-// a window id forward across a same-tab navigation (`sessionid.js` restores it
-// whenever `primary_window_exists` is absent, the state a normal unload leaves).
-// Events captured before init — there are none today — would carry no
-// page_load_id at all, so guard with JSONHas rather than assuming presence.
+// Scope the anti-join on (`$session_id`, `page_load_started_at`), the super
+// property registered at init below. `$window_id` is NOT a substitute:
+// posthog-js carries a window id forward across a same-tab navigation
+// (`sessionid.js` restores it whenever `primary_window_exists` is absent, the
+// state a normal unload leaves). Events captured before init — there are none
+// today — would carry no page_load_started_at at all, so guard with JSONHas
+// rather than assuming presence.
 //
 // One-shot: only the first backgrounding bears on the question. The FLAG is
 // what guarantees that, not the unsubscribe: captureFirstHide removes the
@@ -187,6 +203,9 @@ if (typeof document !== 'undefined') {
   // because HIDDEN_AT_BOOT is false for a prerendering document and a prerender
   // is not throttled the way a background tab is — the two are not the same
   // population. Noted because the block above names web-vitals as the pattern.
+  //
+  // Empty cohort today — see the prerender exclusion above — and kept anyway,
+  // because it costs nothing and turns load-bearing the moment one lands.
   document.addEventListener('prerenderingchange', captureFirstHide);
 }
 
@@ -250,14 +269,15 @@ function _initPostHogUnsafe(config?: PostHogConfig): void {
         ph.register({ app: 'viewer' });
         // Register or UNREGISTER, never merely omit. Super properties persist
         // in localStorage across page loads, so omitting the key on a load with
-        // no usable clock leaves the PREVIOUS load's page_load_id in place --
-        // strictly worse than absent, because the anti-join then groups two
-        // real loads as one while JSONHas() reports the key present. An
-        // explicit null would persist as a registered key for the same reason.
-        if (PAGE_LOAD_ID !== null) {
-          ph.register({ page_load_id: PAGE_LOAD_ID });
+        // no usable clock leaves the PREVIOUS load's page_load_started_at in
+        // place -- strictly worse than absent, because the anti-join then
+        // groups two real loads as one while JSONHas() reports the key present.
+        // An explicit null would persist as a registered key for the same
+        // reason.
+        if (PAGE_LOAD_STARTED_AT !== null) {
+          ph.register({ page_load_started_at: PAGE_LOAD_STARTED_AT });
         } else {
-          ph.unregister('page_load_id');
+          ph.unregister('page_load_started_at');
         }
       } catch (e) {
         console.warn('[PostHog] register super properties failed', e);
