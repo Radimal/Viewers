@@ -214,12 +214,12 @@ describe('frameDownloadTelemetry', () => {
     // version of this comment claimed 53 interval flushes directly followed a
     // pagehide on 2026-09-02 and used that to contrast the cell with
     // flush_reason 'stop'. Re-measured 2026-09-03 over the event's whole
-    // production life, keyed per page load: pagehide -> interval was 0 then --
-    // it is 1 as of 2026-09-04, and the source comment is the copy kept current
-    // -- and only a handful of page loads emit anything at all after a pagehide.
-    // So the contrast that justified testing this cell over 'stop' never
-    // existed. The test still earns its place — it pins that stop() is what
-    // ends flushing and a pagehide alone does not, which is what makes a
+    // production life, keyed per page load: pagehide -> interval was 0 then,
+    // and only a handful of page loads emit anything at all after a pagehide.
+    // The source comment is the only copy kept current; do not restate its
+    // count here. So the contrast that justified testing this cell over 'stop'
+    // never existed. The test still earns its place — it pins that stop() is
+    // what ends flushing and a pagehide alone does not, which is what makes a
     // bfcache restore safe — but do not cite it as a live path.
     emit([frameEntry()]);
     advance(3_000);
@@ -259,8 +259,13 @@ describe('frameDownloadTelemetry', () => {
   it('charges an OPEN hidden stretch to the pagehide flush, the ordinary tab close', () => {
     // visibilitychange -> hidden, then pagehide, is what every browser does when
     // a tab is closed, and it had no coverage until now. It is not the largest
-    // such cell -- hidden -> hidden is roughly double it -- so do not requote it
-    // as "most-executed"; see the rate note in the source.
+    // such cell -- the source comment names that one -- so do not requote this
+    // as "most-executed". Do not size these cells from a raw lagInFrame over
+    // events either: a multi-study flush emits several events in the same
+    // second, manufacturing spurious same-reason pairs, which inflated an
+    // earlier version of this comment several-fold. Collapse to one flush per
+    // (`$session_id`, `$initialization_time`, reason, second) first, as the
+    // source comment's grouping note says.
     //
     // It is NOT the same shape as hidden -> hidden, though the source comment
     // once described both in one sentence: here the hidden stretch is still

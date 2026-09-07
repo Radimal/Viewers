@@ -99,7 +99,7 @@ const _pending = new Map<string, StudyStats>();
  * stored id whenever `primary_window_exists` is absent, which is exactly the
  * state a normal unload leaves behind, and mints a fresh one only for a
  * duplicated tab. A meaningful share of (`$session_id`, `$window_id`) pairs
- * cover more than one page load, and the worst pair holds dozens. Figures and
+ * cover more than one page load, and the worst holds far more. Figures and
  * their scope live in the PR, not here: they are sample statistics, they move
  * daily, and every attempt to keep them current in this comment has drifted.
  *
@@ -109,10 +109,10 @@ const _pending = new Map<string, StudyStats>();
  * that saw it finish.
  *
  * A worked case, reachable today and verified against this code: a 6s fetch
- * completing 1s into a window that goes hidden 2s later reports
- * network_active_ms 6000 against window_ms 2000 — ratio 3.0. `activeMs` unions
- * absolute [startTime, startTime+duration] spans and never clips them to the
- * window, which is the whole mechanism.
+ * completing 1s into a window that a hide flushes 2s after the window OPENED
+ * reports network_active_ms 6000 against window_ms 2000 — ratio 3.0. `activeMs`
+ * unions absolute [startTime, startTime+duration] spans and never clips them to
+ * the window, which is the whole mechanism.
  *
  * NO PERCENTAGE IS QUOTED HERE ON PURPOSE. Three attempts to size this share
  * were each wrong in a different way: `window_ms` does not exist in production
@@ -148,9 +148,10 @@ let _longTaskMs = 0;
 // obvious way. PostHog stores a null-valued property as ABSENT, not as a
 // present null. Measured on p50_ttfb_ms, which has used this same
 // `x.length ? ... : null` idiom since #9: across every production event of its
-// life (it first reached prod 2026-09-02), roughly 88% carry the key and ZERO
-// are present-but-null. The ZERO is the load-bearing part and it is structural,
-// not a sample property; the counts grow daily and are deliberately not quoted.
+// life (it first reached prod 2026-09-01), MOST carry the key and ZERO are
+// present-but-null. The ZERO is the load-bearing part and it is structural,
+// not a sample property; the share and the counts both move daily and are
+// deliberately not quoted -- count them if you need them.
 //
 // So `long_tasks IS NULL` matches the unsupported browsers AND every event
 // predating this branch AND anything served from a stale bundle -- it fails
@@ -327,9 +328,11 @@ function flush(reason: string): void {
         // per property, so it is not worth four tests. One consequence to know:
         // `window_started_at` and `window_ms` are rounded independently from a
         // sub-ms clock, so `start + window == next start` can be off by one in
-        // production. Chain windows by ordering, not by exact equality. Epoch ms via
-        // performance.timeOrigin — see that block for why a bare
-        // performance.now() offset collides across page loads.
+        // production. Chain windows by ordering, not by exact equality.
+        //
+        // `window_started_at` is epoch ms via performance.timeOrigin — see that
+        // block for why a bare performance.now() offset collides across page
+        // loads.
         window_started_at: Math.round(performance.timeOrigin + windowStartedAt),
         // Milliseconds of that window during which the tab was hidden.
         // Deliberately an interval measure, not document.visibilityState at
@@ -534,15 +537,15 @@ export function stopFrameDownloadTelemetry(): void {
   // documented to mean.
   //
   // Worth knowing before spending more effort here: flush_reason 'stop' has
-  // has NEVER fired in production, across every event of its life. Zero is the
+  // NEVER fired in production, across every event of its life. Zero is the
   // durable part and it is structural, not a sample artefact: this is App.tsx's
   // unmount cleanup, which an SPA effectively never runs — the page tears down
   // and fires pagehide instead. Re-check with a COUNT, not against a
   // remembered total.
   //
   // That is NOT a reason to treat the bfcache path as the live alternative
-  // either: pagehide -> interval was 0 through 2026-09-03, and 1 by 2026-09-04.
-  // It fires, barely.
+  // either: pagehide -> interval fires, but barely -- it was still at zero for
+  // days after the event shipped. Count it if you need the number.
   //
   // Three cells report hidden_ms > 0, not two: hidden -> interval (the largest,
   // tested), hidden -> pagehide (tested), and hidden -> hidden (still untested).
@@ -558,15 +561,15 @@ export function stopFrameDownloadTelemetry(): void {
   // empty emits no event while still rebasing the window and re-phasing the
   // timer, so a sequence is only observable where both flushes emitted.
   //
-  // The two cells are NOT the same shape, despite sharing a sentence here.
-  // For hidden -> hidden, hidden_ms comes from _hiddenMsThisWindow: a genuinely
-  // COMPLETED stretch. hidden -> pagehide covers BOTH shapes, which is why one
-  // sentence cannot describe it: on the ordinary tab-close (hide, then close)
-  // the stretch is still OPEN and hidden_ms comes from the in-flight
-  // (now - _hiddenSince) term, but a return to visible does not flush, so
-  // hide -> back -> close lands in the same cell with _hiddenSince null and
-  // hidden_ms entirely accumulated. The invariant "the window that triggers
-  // flush('hidden') is precisely the one that was visible" holds only for the
-  // first hide of a stretch.
+  // hidden -> hidden and hidden -> pagehide are NOT the same shape, despite
+  // sharing a sentence here. For hidden -> hidden, hidden_ms comes from
+  // _hiddenMsThisWindow: a genuinely COMPLETED stretch. hidden -> pagehide
+  // covers BOTH shapes, which is why one sentence cannot describe it: on the
+  // ordinary tab-close (hide, then close) the stretch is still OPEN and
+  // hidden_ms comes from the in-flight (now - _hiddenSince) term, but a return
+  // to visible does not flush, so hide -> back -> close lands in the same cell
+  // with _hiddenSince null and hidden_ms entirely accumulated. The invariant
+  // "the window that triggers flush('hidden') is precisely the one that was
+  // visible" holds only for the first hide of a stretch.
   _longTasksObserved = false;
 }
