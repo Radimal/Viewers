@@ -61,6 +61,12 @@ let _longTaskObserver: PerformanceObserver | null = null;
 let _flushTimer: ReturnType<typeof setInterval> | null = null;
 const _pending = new Map<string, StudyStats>();
 
+// One scheduler for both callers -- the start path and the re-phase below --
+// so the interval and the flush reason cannot drift apart between them.
+function scheduleFlushTimer(): void {
+  _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
+}
+
 /**
  * Flush-window accounting.
  *
@@ -404,7 +410,7 @@ function flush(reason: string): void {
   // clock whichever phase it fired on, and both reported the same window_ms.
   if (_flushTimer !== null && reason !== 'interval') {
     clearInterval(_flushTimer);
-    _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
+    scheduleFlushTimer();
   }
 }
 
@@ -431,6 +437,20 @@ function onPageHide(): void {
  * Starts observing frame downloads. Idempotent; safe to call before PostHog
  * finishes loading (events for a not-yet-loaded PostHog are dropped by
  * capturePostHogEvent, and the first flush happens 15s in).
+ *
+ * START-ONCE, not restartable. `buffered: true` below replays the WHOLE
+ * resource-timing buffer, so a start() after a stop() re-records every entry
+ * the first pass already flushed and double-reports each study. Harmless today
+ * because the app starts this at boot and stops it only on teardown -- the
+ * `restart()` in the test file is the sole caller of that sequence, and it
+ * feeds synthetic entries rather than a real buffer.
+ *
+ * ponytail: not guarded, because every guard needs module-global state that
+ * outlives stop() -- a replay floor or a once-flag -- and that state makes the
+ * suite's own `buffered: true` assertion pass on test ORDER rather than on
+ * behaviour, plus a test-only reset export. If a real restart path ever lands,
+ * pass `buffered: false` on the second and later starts and reset the flag from
+ * that hatch; do not reach for it before then.
  */
 export function startFrameDownloadTelemetry(): void {
   if (typeof window === 'undefined' || typeof PerformanceObserver === 'undefined') {
@@ -471,7 +491,7 @@ export function startFrameDownloadTelemetry(): void {
   // means. hidden_at_boot answers a different question — "did the reader open
   // this into a background tab" — where a prerender is a false positive.
   _hiddenSince = document.visibilityState === 'hidden' ? _windowStartedAt : null;
-  _flushTimer = setInterval(() => flush('interval'), FLUSH_INTERVAL_MS);
+  scheduleFlushTimer();
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('pagehide', onPageHide);
 }
