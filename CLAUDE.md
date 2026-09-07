@@ -354,8 +354,11 @@ Mode activation (via routing)
 
 ### Requirements
 
-- **Node.js**: >=18 (specified in `package.json` engines)
-- **Yarn**: >=1.20.0 (preferably 1.22.22)
+- **Node.js**: 20.18.1 (what `Dockerfile` builds production with)
+- **Yarn**: 1.22.22 — **must be Yarn 1.** Yarn 4 does not error on this repo's v1
+  lockfile, it silently rewrites it to Berry format and switches to PnP. The `volta` key
+  in `package.json` is the only thing enforcing this; do not remove it. Check with
+  `yarn --version`.
 - **Git**: For version control
 
 ### Initial Setup
