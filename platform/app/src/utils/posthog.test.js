@@ -241,6 +241,42 @@ describe('_initPostHogUnsafe wiring', () => {
     });
   });
 
+  // The case above pins ONE event on the helper's own path. This one pins the
+  // whole surface: every event this module emits during a real boot, plus a hide
+  // and an extension event, must carry the baked commit.
+  //
+  // Two defects the per-event cases cannot catch, which is why this exists:
+  //
+  // A future event added with a direct posthog.capture() instead of
+  // capturePostHogEvent would carry no build identity at all, and no per-event
+  // case would exist for it -- the suite stays green precisely because nobody
+  // wrote the assertion. Here the untagged event shows up in the failure list
+  // without anyone touching this test.
+  //
+  // Asserted by VALUE, not with toHaveProperty: `{ build_commit: undefined }`
+  // satisfies toHaveProperty, and undefined is exactly what a broken
+  // DefinePlugin substitution produces. Presence-only assertions passed
+  // throughout the branch's history for that reason.
+  it('tags EVERY captured event with the baked build commit, not just the helper path', async () => {
+    const { mod, calls } = await initFresh({ commitHash: 'abc123def' });
+    setVisibility('hidden');
+    mod.capturePostHogEvent('some_extension_event');
+
+    // register/unregister are super-property writes, not captures.
+    const captured = calls.filter(c => c[0] !== 'register' && c[0] !== 'unregister');
+    // Guards against the assertion below passing vacuously on an empty list.
+    expect(captured.map(c => c[0]).sort()).toEqual([
+      'some_extension_event',
+      'viewer_hidden',
+      'viewer_loaded',
+    ]);
+    // Names the offending events on failure, rather than a forEach that reports
+    // only the first one.
+    expect(
+      captured.filter(([, props]) => props?.build_commit !== 'abc123def').map(c => c[0])
+    ).toEqual([]);
+  });
+
   // webpack.base.js reads commit.txt without trimming, unlike webpack.pwa.js,
   // so /version.json and the bundle would otherwise disagree by a newline.
   it('reports the baked build time when one is present', async () => {
@@ -331,8 +367,12 @@ describe('_initPostHogUnsafe wiring', () => {
       // silently moves sessions across whatever threshold the analysis picks.
       // Same defect class as first_image_rendered's ms, pinned the same way.
       expect(events[0][1].ms_since_navigation_start).toBe(HIDE_AT_MS);
-      // Routed through the shared helper, so build identity rides along.
-      expect(events[0][1]).toHaveProperty('build_commit');
+      // Routed through the shared helper, so build identity rides along. By
+      // value, not toHaveProperty: that passes on `build_commit: undefined`,
+      // which is what an absent DefinePlugin substitution leaves behind. The
+      // default initFresh() bakes no COMMIT_HASH, so 'local' is the expected
+      // bucket here.
+      expect(events[0][1].build_commit).toBe('local');
       // app is a super property; if this event were emitted before register,
       // every dashboard filtering app = viewer would silently drop it — and it
       // would drop it for the background-tab cohort specifically.
