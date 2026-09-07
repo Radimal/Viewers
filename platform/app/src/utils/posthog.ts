@@ -120,11 +120,38 @@ const PAGE_LOAD_STARTED_AT: number | null =
 // hold this exclusion up and no test pins any of them, so it can rot silently.
 //
 // Four query traps: these are three separate events, so it is an anti-join, not
-// an insight filter row; PostHog stores custom booleans as the JSON strings
-// 'true'/'false', so `= true` matches nothing while failing open; and a headless
-// link scanner loads visible and never fires visibilitychange at all,
-// satisfying "never hidden" by construction — the lifetime-render-count cohort
-// filter is mandatory alongside this, not optional.
+// an insight filter row; every filter reading a property below needs a PRESENCE
+// GATE, because the negative form fails OPEN on the pre-deploy history (see
+// below); and a headless link scanner loads visible and never fires
+// visibilitychange at all, satisfying "never hidden" by construction — the
+// lifetime-render-count cohort filter is mandatory alongside this, not optional.
+//
+// THE PRESENCE GATE, measured 2026-09-07 rather than reasoned about. An earlier
+// version of this comment claimed PostHog stores custom booleans as the JSON
+// strings 'true'/'false' and that `= true` therefore "matches nothing while
+// failing open". Both halves were wrong: client-sent booleans store as JSON
+// Bool (JSONType reports Bool, not String), HogQL coerces so `= true` and
+// `= 'true'` match identically, and `= true` fails CLOSED, not open.
+//
+// The real asymmetry, over 30777 viewer_loaded events none of which carry
+// hidden_at_boot yet:
+//
+//   hidden_at_boot != true    -> matches all 30777   FAILS OPEN
+//   hidden_at_boot != 'true'  -> matches all 30777   FAILS OPEN
+//   hidden_at_boot = false    -> matches 0           fails closed
+//   JSONHas(properties, 'hidden_at_boot') -> 0       correct gate
+//
+// So the dangerous filter is the one that reads as prudent: "exclude the
+// boot-hidden loads" written as `!= true` silently counts every load emitted
+// before this ships as a healthy foreground load, inflating the denominator
+// with no empty tile to notice. The positive form is safe by accident -- it
+// returns zero, which looks broken and gets fixed.
+//
+// Gate every such filter on JSONHas of the property it reads. Do NOT gate on
+// build_commit as a proxy for "new enough build": it is present on every event
+// from a new build, but page_load_started_at is deliberately NULL where there
+// is no usable clock (Safari < 15, some webviews), so the two absences mean
+// different things and one gate cannot stand in for the other.
 //
 // The fourth: DO NOT make that anti-join session-level, which an earlier version
 // of this comment prescribed. All three signals are per PAGE LOAD —
