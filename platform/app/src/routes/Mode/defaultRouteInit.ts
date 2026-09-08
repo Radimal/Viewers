@@ -333,6 +333,14 @@ function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) 
           if (!known || !(NumberOfSeriesRelatedInstances <= known)) {
             fetched.push(`${SeriesInstanceUID} (${known} -> ${NumberOfSeriesRelatedInstances})`);
             seriesPromise.start().catch(error => {
+              // Orthanc answers 409 when the series is being written at that instant; the next
+              // tick still sees the count mismatch and retries, so this is expected, not a failure.
+              if (error?.status === 409) {
+                console.info(
+                  `[LiveStudyPoll] ${SeriesInstanceUID} mid-write (409), retrying next tick`
+                );
+                return;
+              }
               console.warn('[LiveStudyPoll] series metadata fetch failed', error);
             });
           }
