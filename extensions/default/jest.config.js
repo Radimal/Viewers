@@ -7,7 +7,8 @@ module.exports = {
   displayName: pkg.name,
   moduleNameMapper: {
     ...base.moduleNameMapper,
-    '@ohif/(.*)': '<rootDir>/../../platform/$1/src',
+    '^@ohif/([^/]+)/src/(.*)$': '<rootDir>/../../platform/$1/src/$2',
+    '^@ohif/([^/]+)$': '<rootDir>/../../platform/$1/src',
   },
   // rootDir: "../.."
   // testMatch: [

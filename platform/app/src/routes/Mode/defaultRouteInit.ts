@@ -281,5 +281,66 @@ export async function defaultRouteInit(
     applyHangingProtocol();
   });
 
+  const pollMs = appConfig?.liveStudyPollIntervalMs ?? 10000;
+  if (pollMs > 0) {
+    unsubscriptions.push(startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }));
+  }
+
   return unsubscriptions;
+}
+
+/**
+ * Re-queries the study's series list on an interval so images stored in Orthanc after the
+ * study was opened show up without a reload. Series metadata is only re-fetched for series
+ * that are new or whose QIDO NumberOfSeriesRelatedInstances exceeds what the store holds;
+ * DicomMetadataStore.addInstances dedupes by SOPInstanceUID, and the stack SOP class handler's
+ * addInstances grows the existing display set so the open viewport refreshes in place.
+ *
+ * @returns a function that stops the poll
+ */
+function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) {
+  let inFlight = false;
+
+  async function poll() {
+    if (inFlight || document.hidden) {
+      return;
+    }
+    inFlight = true;
+    try {
+      for (const StudyInstanceUID of studyInstanceUIDs) {
+        // The data source caches the study metadata promise; drop it so this is a real re-query.
+        dataSource.deleteStudyMetadataPromise?.(StudyInstanceUID);
+        const seriesPromises = await dataSource.retrieve.series.metadata({
+          StudyInstanceUID,
+          filters,
+          returnPromises: true,
+        });
+        // Non-lazy data sources store everything themselves and return a summary object.
+        if (!Array.isArray(seriesPromises)) {
+          continue;
+        }
+        for (const seriesPromise of seriesPromises) {
+          const { SeriesInstanceUID, NumberOfSeriesRelatedInstances } =
+            seriesPromise.metadata ?? {};
+          const known =
+            DicomMetadataStore.getSeries(StudyInstanceUID, SeriesInstanceUID)?.instances.length ??
+            0;
+          // ponytail: if the server omits NumberOfSeriesRelatedInstances we re-fetch every series
+          // each poll; switch to QIDO instance search if that ever costs too much.
+          if (!known || !(NumberOfSeriesRelatedInstances <= known)) {
+            seriesPromise.start().catch(error => {
+              console.warn('Live study poll: series metadata fetch failed', error);
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Live study poll failed', error);
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  const timer = setInterval(poll, pollMs);
+  return () => clearInterval(timer);
 }
