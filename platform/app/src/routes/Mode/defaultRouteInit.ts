@@ -300,6 +300,7 @@ export async function defaultRouteInit(
  */
 function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) {
   let inFlight = false;
+  console.info(`[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms`);
 
   async function poll() {
     if (inFlight || document.hidden) {
@@ -317,8 +318,10 @@ function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) 
         });
         // Non-lazy data sources store everything themselves and return a summary object.
         if (!Array.isArray(seriesPromises)) {
+          console.info(`[LiveStudyPoll] ${StudyInstanceUID}: non-lazy data source, full re-fetch`);
           continue;
         }
+        const fetched = [];
         for (const seriesPromise of seriesPromises) {
           const { SeriesInstanceUID, NumberOfSeriesRelatedInstances } =
             seriesPromise.metadata ?? {};
@@ -328,14 +331,19 @@ function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) 
           // ponytail: if the server omits NumberOfSeriesRelatedInstances we re-fetch every series
           // each poll; switch to QIDO instance search if that ever costs too much.
           if (!known || !(NumberOfSeriesRelatedInstances <= known)) {
+            fetched.push(`${SeriesInstanceUID} (${known} -> ${NumberOfSeriesRelatedInstances})`);
             seriesPromise.start().catch(error => {
-              console.warn('Live study poll: series metadata fetch failed', error);
+              console.warn('[LiveStudyPoll] series metadata fetch failed', error);
             });
           }
         }
+        console.info(
+          `[LiveStudyPoll] ${StudyInstanceUID}: ${seriesPromises.length} series, ${fetched.length} new/grown`,
+          fetched
+        );
       }
     } catch (error) {
-      console.warn('Live study poll failed', error);
+      console.warn('[LiveStudyPoll] poll failed', error);
     } finally {
       inFlight = false;
     }

@@ -199,6 +199,7 @@ function modeFactory({ modeConfiguration }) {
 
             return [...defaultUnsubscriptions, ...subscriptions];
           }
+          return defaultUnsubscriptions;
         },
         layoutTemplate: () => {
           return {
