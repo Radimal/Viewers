@@ -76,7 +76,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
 
-          for BUCKET in s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1 s3://radimal-viewer-assets-veg-prod-1; do
+          for BUCKET in s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1 s3://radimal-viewer-assets-veg-prod-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1; do
             # Flat copy at bucket root for serving via CloudFront
             # Source maps stay in the docker image for debugging but are not
             # served publicly.
