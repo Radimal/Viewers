@@ -204,6 +204,10 @@ export async function defaultRouteInit(
     displaySetFromUrl = true;
   }
 
+  // Every series metadata request started by the initial load, so the live poll can wait for them
+  // instead of re-requesting series that are still downloading.
+  const initialSeriesLoads = [];
+
   await Promise.allSettled(allRetrieves).then(async promises => {
     log.timeEnd(Enums.TimingEnum.STUDY_TO_DISPLAY_SETS);
     log.time(Enums.TimingEnum.DISPLAY_SETS_TO_FIRST_IMAGE);
@@ -215,7 +219,9 @@ export async function defaultRouteInit(
     function startRemainingPromises(remainingPromises) {
       remainingPromises.forEach(p =>
         p.forEach(p => {
-          p.start().catch(error => {
+          const started = p.start();
+          initialSeriesLoads.push(started);
+          started.catch(error => {
             console.error('Remaining series metadata fetch failed:', error);
           });
         })
@@ -235,6 +241,7 @@ export async function defaultRouteInit(
           return p;
         });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
+        initialSeriesLoads.push(...requiredSeriesPromises);
       } else {
         const { requiredSeries, remaining } = hangingProtocolService.filterSeriesRequiredForRun(
           hangingProtocolId,
@@ -246,6 +253,7 @@ export async function defaultRouteInit(
           return p;
         });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
+        initialSeriesLoads.push(...requiredSeriesPromises);
         remainingPromises.push(remaining);
       }
     });
@@ -288,7 +296,15 @@ export async function defaultRouteInit(
 
   const pollMs = appConfig?.liveStudyPollIntervalMs ?? 10000;
   if (pollMs > 0) {
-    unsubscriptions.push(startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }));
+    unsubscriptions.push(
+      startLiveStudyPoll({
+        studyInstanceUIDs,
+        dataSource,
+        filters,
+        pollMs,
+        ready: Promise.allSettled(initialSeriesLoads),
+      })
+    );
     unsubscriptions.push(fillEmptyViewportsOnArrival({ displaySetService, viewportGridService }));
   }
 
@@ -331,12 +347,17 @@ function fillEmptyViewportsOnArrival({ displaySetService, viewportGridService })
  *
  * @returns a function that stops the poll
  */
-function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) {
+function startLiveStudyPoll({
+  studyInstanceUIDs,
+  dataSource,
+  filters,
+  pollMs,
+  ready = Promise.resolve(),
+}) {
   let inFlight = false;
   // Series whose metadata fetch is still pending; Orthanc can take minutes to answer while it is
   // ingesting, and stacking duplicate requests for the same series only makes that worse.
   const pendingSeries = new Set<string>();
-  console.info(`[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms`);
 
   async function poll() {
     if (inFlight || document.hidden) {
@@ -400,6 +421,21 @@ function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) 
     }
   }
 
-  const timer = setInterval(poll, pollMs);
-  return () => clearInterval(timer);
+  let timer;
+  let stopped = false;
+  // Don't compete with the initial load: the first tick waits until every series metadata request
+  // from study open has settled, so the viewer starts exactly as fast as it did without polling.
+  ready.then(() => {
+    if (stopped) {
+      return;
+    }
+    console.info(
+      `[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms`
+    );
+    timer = setInterval(poll, pollMs);
+  });
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }
