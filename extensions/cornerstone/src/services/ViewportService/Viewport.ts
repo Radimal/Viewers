@@ -225,20 +225,13 @@ class ViewportInfo {
     // Todo: currently this does not work for non image & referenceImage displaySets.
     // Since SEG and other derived displaySets are loaded in a different way, and not
     // via cornerstoneViewportService
-    let viewportData = this.getViewportData();
-
-    if (
-      viewportData.viewportType === Enums.ViewportType.ORTHOGRAPHIC ||
-      viewportData.viewportType === Enums.ViewportType.VOLUME_3D
-    ) {
-      viewportData = viewportData as VolumeViewportData;
-      return viewportData.data.some(
-        ({ displaySetInstanceUID: dsUID }) => dsUID === displaySetInstanceUID
-      );
+    const viewportData = this.getViewportData();
+    if (!viewportData?.data) {
+      return false;
     }
-
-    viewportData = viewportData as StackViewportData;
-    return viewportData.data.displaySetInstanceUID === displaySetInstanceUID;
+    // Stack and volume data are both arrays (see StackViewportData); tolerate a bare object too.
+    const data = Array.isArray(viewportData.data) ? viewportData.data : [viewportData.data];
+    return data.some(({ displaySetInstanceUID: dsUID }) => dsUID === displaySetInstanceUID);
   }
 
   /**

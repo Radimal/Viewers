@@ -994,6 +994,7 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     const viewportInfo = this.getViewportInfo(viewportId);
     const viewport = this.getCornerstoneViewport(viewportId);
     const viewportCamera = viewport.getCamera();
+    viewportInfo.setViewportData(viewportData);
 
     let displaySetPromise;
 
