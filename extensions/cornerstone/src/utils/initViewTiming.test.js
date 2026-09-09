@@ -270,6 +270,10 @@ describe('hidden_during_load on the emitted event', () => {
         },
       });
       expect(captured[0][1].ms).toBe(3_250);
+      // Same driven clock, no subtraction: monotonic ms since navigation start.
+      // Exact so that `- startedAt` (which would make it equal ms) or a
+      // Date.now()-based value (wall clock, skew-prone) both fail.
+      expect(captured[0][1].ms_since_navigation_start).toBe(8_250);
     } finally {
       performance.now = real;
     }
