@@ -99,8 +99,13 @@ export async function defaultRouteInit(
   hangingProtocolId,
   stageIndex
 ) {
-  const { displaySetService, hangingProtocolService, uiNotificationService, customizationService } =
-    servicesManager.services;
+  const {
+    displaySetService,
+    hangingProtocolService,
+    uiNotificationService,
+    customizationService,
+    viewportGridService,
+  } = servicesManager.services;
   /**
    * Function to apply the hanging protocol when the minimum number of display sets were
    * received or all display sets retrieval were completed
@@ -284,9 +289,37 @@ export async function defaultRouteInit(
   const pollMs = appConfig?.liveStudyPollIntervalMs ?? 10000;
   if (pollMs > 0) {
     unsubscriptions.push(startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }));
+    unsubscriptions.push(fillEmptyViewportsOnArrival({ displaySetService, viewportGridService }));
   }
 
   return unsubscriptions;
+}
+
+/**
+ * Once the initial hang is done, drop each newly created image display set into the first empty
+ * viewport, so a specialist sitting in a 2x2 layout sees arriving images without re-picking the
+ * layout. Non-image display sets (SR, SEG, unsupported) are left to the panels.
+ *
+ * @returns a function that stops listening
+ */
+function fillEmptyViewportsOnArrival({ displaySetService, viewportGridService }) {
+  const { unsubscribe } = displaySetService.subscribe(
+    displaySetService.EVENTS.DISPLAY_SETS_ADDED,
+    ({ displaySetsAdded }) => {
+      const { viewports } = viewportGridService.getState();
+      const empty = [...viewports.values()].filter(v => !v.displaySetInstanceUIDs?.length);
+      const images = displaySetsAdded.filter(ds => !ds.unsupported && ds.numImageFrames > 0);
+      const assignments = images.slice(0, empty.length).map((ds, i) => ({
+        viewportId: empty[i].viewportId,
+        displaySetInstanceUIDs: [ds.displaySetInstanceUID],
+      }));
+      if (assignments.length) {
+        console.info('[LiveStudyPoll] filling empty viewports', assignments);
+        viewportGridService.setDisplaySetsForViewports(assignments);
+      }
+    }
+  );
+  return unsubscribe;
 }
 
 /**
