@@ -106,7 +106,6 @@ const OHIFCornerstoneViewport = React.memo(
     } = props;
     const viewportId = viewportOptions.viewportId;
 
-
     if (!viewportId) {
       throw new Error('Viewport ID is required');
     }
@@ -362,6 +361,7 @@ const OHIFCornerstoneViewport = React.memo(
         async ({
           displaySetInstanceUID: invalidatedDisplaySetInstanceUID,
           invalidateData,
+          appendedOnly = false,
         }: Types.DisplaySetSeriesMetadataInvalidatedEvent) => {
           if (!invalidateData) {
             return;
@@ -371,12 +371,26 @@ const OHIFCornerstoneViewport = React.memo(
 
           if (viewportInfo.hasDisplaySet(invalidatedDisplaySetInstanceUID)) {
             const viewportData = viewportInfo.getViewportData();
+            const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            const currentImageId = (csViewport as csTypes.IStackViewport)?.getCurrentImageId?.();
             const newViewportData = await cornerstoneCacheService.invalidateViewportData(
               viewportData,
               invalidatedDisplaySetInstanceUID,
               dataSource,
-              displaySetService
+              displaySetService,
+              { purgeImageCache: !appendedOnly }
             );
+
+            // Stay on the image the user is looking at, by id rather than index, since newly
+            // appended slices can sort in ahead of it.
+            const stackData = newViewportData.data?.[0] as {
+              imageIds?: string[];
+              initialImageIndex?: number;
+            };
+            const currentIndex = stackData?.imageIds?.indexOf(currentImageId) ?? -1;
+            if (currentIndex >= 0) {
+              stackData.initialImageIndex = currentIndex;
+            }
 
             const keepCamera = true;
             cornerstoneViewportService.updateViewport(viewportId, newViewportData, keepCamera);
@@ -980,9 +994,9 @@ const OHIFCornerstoneViewport = React.memo(
         <div className="viewport-wrapper">
           <div
             className="cornerstone-viewport-element"
-            style={{ 
-              height: '100%', 
-              width: '100%'
+            style={{
+              height: '100%',
+              width: '100%',
             }}
             onContextMenu={e => e.preventDefault()}
             onMouseDown={e => e.preventDefault()}

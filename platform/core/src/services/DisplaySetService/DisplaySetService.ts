@@ -139,7 +139,8 @@ export default class DisplaySetService extends PubSubService {
 
   public setDisplaySetMetadataInvalidated(
     displaySetInstanceUID: string,
-    invalidateData = true
+    invalidateData = true,
+    appendedOnly = false
   ): void {
     const displaySet = this.getDisplaySetByUID(displaySetInstanceUID);
 
@@ -151,6 +152,7 @@ export default class DisplaySetService extends PubSubService {
     this._broadcastEvent(EVENTS.DISPLAY_SET_SERIES_METADATA_INVALIDATED, {
       displaySetInstanceUID,
       invalidateData,
+      appendedOnly,
     });
   }
 
@@ -338,7 +340,8 @@ export default class DisplaySetService extends PubSubService {
               this.activeDisplaySetsChanged = true;
               instances = filterInstances(instances, [addedDs]);
               this._addActiveDisplaySets([addedDs]);
-              this.setDisplaySetMetadataInvalidated(addedDs.displaySetInstanceUID);
+              // Existing images are untouched; only new instances were appended.
+              this.setDisplaySetMetadataInvalidated(addedDs.displaySetInstanceUID, true, true);
             }
             // This means that all instances already existed or got added to
             // existing display sets, and had an invalidated event fired
