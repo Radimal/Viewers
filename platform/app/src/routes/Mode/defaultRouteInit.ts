@@ -333,6 +333,9 @@ function fillEmptyViewportsOnArrival({ displaySetService, viewportGridService })
  */
 function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) {
   let inFlight = false;
+  // Series whose metadata fetch is still pending; Orthanc can take minutes to answer while it is
+  // ingesting, and stacking duplicate requests for the same series only makes that worse.
+  const pendingSeries = new Set<string>();
   console.info(`[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms`);
 
   async function poll() {
@@ -363,19 +366,26 @@ function startLiveStudyPoll({ studyInstanceUIDs, dataSource, filters, pollMs }) 
             0;
           // ponytail: if the server omits NumberOfSeriesRelatedInstances we re-fetch every series
           // each poll; switch to QIDO instance search if that ever costs too much.
+          if (pendingSeries.has(SeriesInstanceUID)) {
+            continue;
+          }
           if (!known || !(NumberOfSeriesRelatedInstances <= known)) {
             fetched.push(`${SeriesInstanceUID} (${known} -> ${NumberOfSeriesRelatedInstances})`);
-            seriesPromise.start().catch(error => {
-              // Orthanc answers 409 when the series is being written at that instant; the next
-              // tick still sees the count mismatch and retries, so this is expected, not a failure.
-              if (error?.status === 409) {
-                console.info(
-                  `[LiveStudyPoll] ${SeriesInstanceUID} mid-write (409), retrying next tick`
-                );
-                return;
-              }
-              console.warn('[LiveStudyPoll] series metadata fetch failed', error);
-            });
+            pendingSeries.add(SeriesInstanceUID);
+            seriesPromise
+              .start()
+              .catch(error => {
+                // Orthanc answers 409 when the series is being written at that instant; the next
+                // tick still sees the count mismatch and retries, so this is expected, not a failure.
+                if (error?.status === 409) {
+                  console.info(
+                    `[LiveStudyPoll] ${SeriesInstanceUID} mid-write (409), retrying next tick`
+                  );
+                  return;
+                }
+                console.warn('[LiveStudyPoll] series metadata fetch failed', error);
+              })
+              .finally(() => pendingSeries.delete(SeriesInstanceUID));
           }
         }
         console.info(
