@@ -2,6 +2,7 @@ import {
   isValidOrthancStudyId,
   generateOrthancStudyUUID,
   resolveDownloadStudyId,
+  renderedThumbnailUrlFor,
 } from './orthancUtils';
 
 // jsdom provides neither WebCrypto nor TextEncoder, and the real SHA-1 digest is the point of
@@ -160,5 +161,45 @@ describe('resolveDownloadStudyId', () => {
     Object.defineProperty(globalThis, 'crypto', { value: realCrypto, configurable: true });
     // Cannot verify, so the supplied id stands rather than the download failing outright.
     expect(result).toEqual({ studyId: OTHER_ID });
+  });
+});
+
+describe('renderedThumbnailUrlFor', () => {
+  const FRAME_ID =
+    'wadors:https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1';
+
+  it('swaps the frame path for a downscaled /rendered request', () => {
+    expect(renderedThumbnailUrlFor(FRAME_ID)).toBe(
+      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/rendered?viewport=256,256'
+    );
+  });
+
+  it('keeps the instance path and drops only the frame segment', () => {
+    // The whole point is that the origin renders the instance; a surviving /frames/ segment would
+    // mean we asked for the full frame under a different name.
+    expect(renderedThumbnailUrlFor(FRAME_ID)).not.toContain('/frames/');
+    expect(renderedThumbnailUrlFor(FRAME_ID)).toContain('/instances/7.8.9/rendered');
+  });
+
+  it('honours a caller-supplied size', () => {
+    expect(renderedThumbnailUrlFor(FRAME_ID, 128)).toContain('viewport=128,128');
+  });
+
+  it('rewrites multi-digit frame numbers', () => {
+    const multiframe = FRAME_ID.replace('/frames/1', '/frames/42');
+    expect(renderedThumbnailUrlFor(multiframe)).toBe(renderedThumbnailUrlFor(FRAME_ID));
+  });
+
+  // Fail closed: every one of these must keep the caller on the existing full-frame path rather
+  // than inventing a URL the origin will 404.
+  it.each([
+    ['a wadouri imageId', 'dicomweb:https://cdn.example.com/wado?requestType=WADO&objectUID=7.8.9'],
+    ['an instance-level wadors imageId', 'wadors:https://cdn.example.com/dicom-web/instances/7.8.9'],
+    ['a frame segment that is not numeric', `${FRAME_ID.replace('/frames/1', '/frames/first')}`],
+    ['a trailing slash after the frame number', `${FRAME_ID}/`],
+    ['an empty string', ''],
+    ['a non-string', undefined],
+  ])('returns null for %s', (_label, input) => {
+    expect(renderedThumbnailUrlFor(input)).toBeNull();
   });
 });

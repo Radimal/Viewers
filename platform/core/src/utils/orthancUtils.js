@@ -211,3 +211,40 @@ export async function downloadStudyByDICOMIds(patientId, studyInstanceUID, baseU
   const orthancUUID = await generateOrthancStudyUUID(patientId, studyInstanceUID);
   return downloadOrthancStudy(orthancUUID, baseUrl);
 }
+
+/**
+ * DICOMweb `/rendered` URL for the thumbnail of a WADO-RS frame imageId.
+ *
+ * The study browser's thumbnail imageId is the *same* full-resolution frame as the displayed
+ * image, because `thumbnailRendering: 'wadors'` resolves through `getWADORSImageId`. Cornerstone
+ * then downloads and decodes that whole frame and only shrinks the canvas afterwards, so a study
+ * pays (one full frame x number of display sets) to draw its rail. `/rendered?viewport=` asks the
+ * origin for an already-downscaled JPEG instead.
+ *
+ * Fails closed: anything that is not a `wadors:` imageId ending in `/frames/<n>` returns null and
+ * the caller keeps the existing full-frame path, rather than this guessing at a URL shape.
+ *
+ * Separate from `extensions/default`'s `createRenderedRetrieve`, which builds the same endpoint
+ * from an instance object for bulkdata retrieval and has no `viewport` — that is what makes this a
+ * thumbnail rather than a full-size server render. Kept in core so both study-browser panels can
+ * reach it.
+ *
+ * @param {string} imageId - e.g. `wadors:https://host/dicom-web/studies/S/series/E/instances/I/frames/1`
+ * @param {number} [size=256] - Longest edge of the viewport box; aspect ratio is preserved and the
+ *   result letterboxed to a square, matching the canvas the thumbnail path already renders into.
+ * @returns {string|null} The `/rendered` URL, or null when the imageId is not a WADO-RS frame.
+ */
+export function renderedThumbnailUrlFor(imageId, size = 256) {
+  if (typeof imageId !== 'string' || !imageId.startsWith('wadors:')) {
+    return null;
+  }
+
+  const uri = imageId.slice('wadors:'.length);
+  const instanceUri = uri.replace(/\/frames\/\d+$/, '');
+
+  if (instanceUri === uri || !instanceUri) {
+    return null;
+  }
+
+  return `${instanceUri}/rendered?viewport=${size},${size}`;
+}
