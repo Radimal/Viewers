@@ -376,6 +376,21 @@ export function identifyPostHogUser(
   }
 }
 
+/**
+ * The single capture path for viewer telemetry, including events emitted from
+ * extensions through `window.__capturePostHogEvent`.
+ *
+ * Every event carries `ms_since_navigation_start`, so any two events in a page
+ * load can be subtracted to get a leg duration. That subtraction has to stay on
+ * ONE clock. `page_load_started_at` and `$initialization_time` are client wall
+ * clocks; PostHog's `timestamp` is server-corrected, so mixing them absorbs the
+ * reader's machine-clock skew instead of measuring latency. Enough readers carry
+ * real skew for that to dominate the tail rather than round out of it.
+ * `performance.now()` is monotonic from navigation start, which for a
+ * window.open'd viewer is the study click.
+ *
+ * Applied here rather than per event so a new event cannot be added without it.
+ */
 export function capturePostHogEvent(name: string, properties?: Record<string, unknown>): void {
   if (!isReady()) {
     if (isProductionBuild()) {
@@ -384,7 +399,14 @@ export function capturePostHogEvent(name: string, properties?: Record<string, un
     return;
   }
   try {
-    posthog.capture(name, { ...BUILD_PROPS, ...properties });
+    posthog.capture(name, {
+      ...BUILD_PROPS,
+      ms_since_navigation_start: Math.round(performance.now()),
+      // Spread LAST so a caller can override it. `viewer_hidden` does: it reports
+      // the instant the tab was hidden, not the instant the event was captured,
+      // and those differ by however long PostHog took to become ready.
+      ...properties,
+    });
   } catch (e) {
     console.warn(`PostHog capture failed for "${name}"`, e);
   }
