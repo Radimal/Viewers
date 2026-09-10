@@ -130,6 +130,15 @@ function captureFirstImageRendered(evt) {
     hasCapturedFirstImageThisPageLoad = true;
     (window as any).__capturePostHogEvent?.('first_image_rendered', {
       ms: Math.round(performance.now() - startedAt),
+      // Study-selection -> first paint, as the clinician experiences it. `ms`
+      // starts at defaultRouteInit, AFTER the tab opened, the bundle loaded and
+      // the app booted, so it under-reports by the whole boot. performance.now()
+      // is monotonic from navigation start, which for a window.open'd viewer is
+      // the click. Deriving this from page_load_started_at vs the event
+      // timestamp mixes the client wall clock with PostHog's server-corrected
+      // one; measured 2026-09-09 that skew put one clinic at a 113s "median"
+      // with a 2s spread. Same name and clock source as viewer_hidden's field.
+      ms_since_navigation_start: Math.round(performance.now()),
       modality: getRenderedModality(evt),
       cluster: window.location.host,
       switch_type,
