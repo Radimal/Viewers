@@ -994,7 +994,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     const viewportInfo = this.getViewportInfo(viewportId);
     const viewport = this.getCornerstoneViewport(viewportId);
     const viewportCamera = viewport.getCamera();
-    viewportInfo.setViewportData(viewportData);
 
     let displaySetPromise;
 
@@ -1008,15 +1007,7 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
     }
 
     if (viewport instanceof StackViewport) {
-      // setStack resets zoom/pan and re-derives window level; keep what the user had.
-      const viewportProperties = keepCamera ? viewport.getProperties() : undefined;
-      displaySetPromise = this._setStackViewport(viewport, viewportData, viewportInfo).then(() => {
-        if (keepCamera) {
-          viewport.setProperties(viewportProperties);
-          viewport.setCamera(viewportCamera);
-          viewport.render();
-        }
-      });
+      displaySetPromise = this._setStackViewport(viewport, viewportData, viewportInfo);
     }
 
     displaySetPromise.then(() => {
@@ -1025,7 +1016,6 @@ class CornerstoneViewportService extends PubSubService implements IViewportServi
         viewportId,
       });
     });
-    return displaySetPromise;
   }
 
   _setDisplaySets(

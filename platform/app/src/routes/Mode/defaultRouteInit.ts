@@ -99,13 +99,8 @@ export async function defaultRouteInit(
   hangingProtocolId,
   stageIndex
 ) {
-  const {
-    displaySetService,
-    hangingProtocolService,
-    uiNotificationService,
-    customizationService,
-    viewportGridService,
-  } = servicesManager.services;
+  const { displaySetService, hangingProtocolService, uiNotificationService, customizationService } =
+    servicesManager.services;
   /**
    * Function to apply the hanging protocol when the minimum number of display sets were
    * received or all display sets retrieval were completed
@@ -204,10 +199,6 @@ export async function defaultRouteInit(
     displaySetFromUrl = true;
   }
 
-  // Every series metadata request started by the initial load, so the live poll can wait for them
-  // instead of re-requesting series that are still downloading.
-  const initialSeriesLoads = [];
-
   await Promise.allSettled(allRetrieves).then(async promises => {
     log.timeEnd(Enums.TimingEnum.STUDY_TO_DISPLAY_SETS);
     log.time(Enums.TimingEnum.DISPLAY_SETS_TO_FIRST_IMAGE);
@@ -219,9 +210,7 @@ export async function defaultRouteInit(
     function startRemainingPromises(remainingPromises) {
       remainingPromises.forEach(p =>
         p.forEach(p => {
-          const started = p.start();
-          initialSeriesLoads.push(started);
-          started.catch(error => {
+          p.start().catch(error => {
             console.error('Remaining series metadata fetch failed:', error);
           });
         })
@@ -241,7 +230,6 @@ export async function defaultRouteInit(
           return p;
         });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
-        initialSeriesLoads.push(...requiredSeriesPromises);
       } else {
         const { requiredSeries, remaining } = hangingProtocolService.filterSeriesRequiredForRun(
           hangingProtocolId,
@@ -253,7 +241,6 @@ export async function defaultRouteInit(
           return p;
         });
         allPromises.push(Promise.allSettled(requiredSeriesPromises));
-        initialSeriesLoads.push(...requiredSeriesPromises);
         remainingPromises.push(remaining);
       }
     });
@@ -294,148 +281,5 @@ export async function defaultRouteInit(
     applyHangingProtocol();
   });
 
-  const pollMs = appConfig?.liveStudyPollIntervalMs ?? 10000;
-  if (pollMs > 0) {
-    unsubscriptions.push(
-      startLiveStudyPoll({
-        studyInstanceUIDs,
-        dataSource,
-        filters,
-        pollMs,
-        ready: Promise.allSettled(initialSeriesLoads),
-      })
-    );
-    unsubscriptions.push(fillEmptyViewportsOnArrival({ displaySetService, viewportGridService }));
-  }
-
   return unsubscriptions;
-}
-
-/**
- * Once the initial hang is done, drop each newly created image display set into the first empty
- * viewport, so a specialist sitting in a 2x2 layout sees arriving images without re-picking the
- * layout. Non-image display sets (SR, SEG, unsupported) are left to the panels.
- *
- * @returns a function that stops listening
- */
-function fillEmptyViewportsOnArrival({ displaySetService, viewportGridService }) {
-  const { unsubscribe } = displaySetService.subscribe(
-    displaySetService.EVENTS.DISPLAY_SETS_ADDED,
-    ({ displaySetsAdded }) => {
-      const { viewports } = viewportGridService.getState();
-      const empty = [...viewports.values()].filter(v => !v.displaySetInstanceUIDs?.length);
-      const images = displaySetsAdded.filter(ds => !ds.unsupported && ds.numImageFrames > 0);
-      const assignments = images.slice(0, empty.length).map((ds, i) => ({
-        viewportId: empty[i].viewportId,
-        displaySetInstanceUIDs: [ds.displaySetInstanceUID],
-      }));
-      if (assignments.length) {
-        console.info('[LiveStudyPoll] filling empty viewports', assignments);
-        viewportGridService.setDisplaySetsForViewports(assignments);
-      }
-    }
-  );
-  return unsubscribe;
-}
-
-/**
- * Re-queries the study's series list on an interval so images stored in Orthanc after the
- * study was opened show up without a reload. Series metadata is only re-fetched for series
- * that are new or whose QIDO NumberOfSeriesRelatedInstances exceeds what the store holds;
- * DicomMetadataStore.addInstances dedupes by SOPInstanceUID, and the stack SOP class handler's
- * addInstances grows the existing display set so the open viewport refreshes in place.
- *
- * @returns a function that stops the poll
- */
-function startLiveStudyPoll({
-  studyInstanceUIDs,
-  dataSource,
-  filters,
-  pollMs,
-  ready = Promise.resolve(),
-}) {
-  let inFlight = false;
-  // Series whose metadata fetch is still pending; Orthanc can take minutes to answer while it is
-  // ingesting, and stacking duplicate requests for the same series only makes that worse.
-  const pendingSeries = new Set<string>();
-
-  async function poll() {
-    if (inFlight || document.hidden) {
-      return;
-    }
-    inFlight = true;
-    try {
-      for (const StudyInstanceUID of studyInstanceUIDs) {
-        // The data source caches the study metadata promise; drop it so this is a real re-query.
-        dataSource.deleteStudyMetadataPromise?.(StudyInstanceUID);
-        const seriesPromises = await dataSource.retrieve.series.metadata({
-          StudyInstanceUID,
-          filters,
-          returnPromises: true,
-        });
-        // Non-lazy data sources store everything themselves and return a summary object.
-        if (!Array.isArray(seriesPromises)) {
-          console.info(`[LiveStudyPoll] ${StudyInstanceUID}: non-lazy data source, full re-fetch`);
-          continue;
-        }
-        const fetched = [];
-        for (const seriesPromise of seriesPromises) {
-          const { SeriesInstanceUID, NumberOfSeriesRelatedInstances } =
-            seriesPromise.metadata ?? {};
-          const known =
-            DicomMetadataStore.getSeries(StudyInstanceUID, SeriesInstanceUID)?.instances.length ??
-            0;
-          // ponytail: if the server omits NumberOfSeriesRelatedInstances we re-fetch every series
-          // each poll; switch to QIDO instance search if that ever costs too much.
-          if (pendingSeries.has(SeriesInstanceUID)) {
-            continue;
-          }
-          if (!known || !(NumberOfSeriesRelatedInstances <= known)) {
-            fetched.push(`${SeriesInstanceUID} (${known} -> ${NumberOfSeriesRelatedInstances})`);
-            pendingSeries.add(SeriesInstanceUID);
-            seriesPromise
-              .start()
-              .catch(error => {
-                // Orthanc answers 409 when the series is being written at that instant; the next
-                // tick still sees the count mismatch and retries, so this is expected, not a failure.
-                if (error?.status === 409) {
-                  console.info(
-                    `[LiveStudyPoll] ${SeriesInstanceUID} mid-write (409), retrying next tick`
-                  );
-                  return;
-                }
-                console.warn('[LiveStudyPoll] series metadata fetch failed', error);
-              })
-              .finally(() => pendingSeries.delete(SeriesInstanceUID));
-          }
-        }
-        console.info(
-          `[LiveStudyPoll] ${StudyInstanceUID}: ${seriesPromises.length} series, ${fetched.length} new/grown`,
-          fetched
-        );
-      }
-    } catch (error) {
-      console.warn('[LiveStudyPoll] poll failed', error);
-    } finally {
-      inFlight = false;
-    }
-  }
-
-  let timer;
-  let stopped = false;
-  // Don't compete with the initial load: the first tick waits until every series metadata request
-  // from study open has settled, so the viewer starts exactly as fast as it did without polling.
-  ready.then(() => {
-    if (stopped) {
-      return;
-    }
-    console.info(
-      `[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms`
-    );
-    timer = setInterval(poll, pollMs);
-  });
-  return () => {
-    stopped = true;
-    clearInterval(timer);
-  };
 }

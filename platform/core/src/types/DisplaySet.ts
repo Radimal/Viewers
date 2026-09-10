@@ -17,6 +17,4 @@ export type DisplaySet = {
 export type DisplaySetSeriesMetadataInvalidatedEvent = {
   displaySetInstanceUID: string;
   invalidateData: boolean;
-  /** True when instances were only appended; existing image metadata is unchanged. */
-  appendedOnly?: boolean;
 };

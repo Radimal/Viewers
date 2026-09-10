@@ -133,41 +133,6 @@ const isSingleImageModality = modality => {
   return modality === 'CR' || modality === 'MG' || modality === 'DX';
 };
 
-const byInstanceNumber = (a, b) =>
-  (parseInt(a.InstanceNumber) || 0) - (parseInt(b.InstanceNumber) || 0);
-
-/**
- * Appends images that arrived after this stack display set was created (live
- * acquisition polling) instead of letting DisplaySetService fragment the series
- * into one display set per poll. Only instances that would have been stacked in
- * the first place are accepted; the rest are left for getDisplaySetsFromSeries.
- * Called with `this` bound to the display set by DisplaySetService.
- */
-function addStackInstances(instances) {
-  const stackable = instances.filter(
-    instance =>
-      (isImage(instance.SOPClassUID) || instance.Rows) &&
-      !isMultiFrame(instance) &&
-      !isSingleImageModality(instance.Modality)
-  );
-  if (!stackable.length) {
-    return;
-  }
-
-  this.images.push(...stackable);
-  this.sortBy(byInstanceNumber);
-
-  const { value: isReconstructable, averageSpacingBetweenFrames } = getDisplaySetInfo(this.images);
-  this.setAttributes({
-    numImageFrames: this.images.length,
-    isReconstructable,
-    countIcon: isReconstructable ? 'icon-mpr' : undefined,
-    averageSpacingBetweenFrames: averageSpacingBetweenFrames || null,
-    messages: getDisplaySetMessages(this.images, isReconstructable, this.isDynamicVolume),
-  });
-  return this;
-}
-
 function getSopClassUids(instances) {
   const uniqueSopClassUidsInSeries = new Set();
   instances.forEach(instance => {
@@ -241,7 +206,6 @@ function getDisplaySetsFromSeries(instances) {
     displaySet.setAttributes({
       sopClassUids,
     });
-    displaySet.addInstances = addStackInstances;
     displaySets.push(displaySet);
   }
 
