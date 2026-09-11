@@ -1,3 +1,7 @@
+// This package's copy of getImageSrcFromImageId is the one the longitudinal mode actually renders
+// (modes/longitudinal/src/index.ts lays out `tracked.thumbnailList`), so it gets the same coverage
+// as the extensions/default sibling rather than inheriting it by assumption — the two files have
+// drifted before.
 import getImageSrcFromImageId from './getImageSrcFromImageId';
 
 describe('getImageSrcFromImageId', () => {

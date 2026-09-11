@@ -2,6 +2,7 @@ import {
   isValidOrthancStudyId,
   generateOrthancStudyUUID,
   resolveDownloadStudyId,
+  renderedThumbnailUrlFor,
 } from './orthancUtils';
 
 // jsdom provides neither WebCrypto nor TextEncoder, and the real SHA-1 digest is the point of
@@ -160,5 +161,59 @@ describe('resolveDownloadStudyId', () => {
     Object.defineProperty(globalThis, 'crypto', { value: realCrypto, configurable: true });
     // Cannot verify, so the supplied id stands rather than the download failing outright.
     expect(result).toEqual({ studyId: OTHER_ID });
+  });
+});
+
+describe('renderedThumbnailUrlFor', () => {
+  const FRAME_ID =
+    'wadors:https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1';
+
+  it('appends /rendered to the frame request', () => {
+    expect(renderedThumbnailUrlFor(FRAME_ID)).toBe(
+      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1/rendered?viewport=256,256'
+    );
+  });
+
+  it('honours a caller-supplied size', () => {
+    expect(renderedThumbnailUrlFor(FRAME_ID, 128)).toContain('viewport=128,128');
+  });
+
+  // The study browser picks the MIDDLE frame of a multiframe instance, so the frame number has to
+  // survive. Collapsing to the instance-level resource renders frame 1 of every cine loop.
+  it('preserves the requested frame number', () => {
+    const middleFrame = FRAME_ID.replace('/frames/1', '/frames/42');
+
+    expect(renderedThumbnailUrlFor(middleFrame)).toBe(
+      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/42/rendered?viewport=256,256'
+    );
+  });
+
+  it('gives a different URL per frame of the same instance', () => {
+    // Distinctness is the property that breaks if the frame segment is ever stripped again: every
+    // frame of a cine loop would collapse onto one instance-level URL.
+    const frame42 = renderedThumbnailUrlFor(FRAME_ID.replace('/frames/1', '/frames/42'));
+
+    expect(frame42).not.toBe(renderedThumbnailUrlFor(FRAME_ID));
+    expect(frame42).toContain('/frames/42/rendered');
+  });
+
+  // Fail closed: every one of these must keep the caller on the existing full-frame path rather
+  // than inventing a URL the origin will 404.
+  it.each([
+    ['a wadouri imageId', 'dicomweb:https://cdn.example.com/wado?requestType=WADO&objectUID=7.8.9'],
+    ['an instance-level wadors imageId', 'wadors:https://cdn.example.com/dicom-web/instances/7.8.9'],
+    ['a frame segment that is not numeric', `${FRAME_ID.replace('/frames/1', '/frames/first')}`],
+    ['a trailing slash after the frame number', `${FRAME_ID}/`],
+    // Isolates the scheme check specifically: this one DOES end in /frames/<n>, so only the
+    // `wadors:` guard can reject it. Without that guard the 7-character slice chops a 9-character
+    // `dicomweb:` prefix and emits a corrupt URL instead of failing closed.
+    [
+      'a non-wadors scheme that still ends in a frame segment',
+      'dicomweb:https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1',
+    ],
+    ['an empty string', ''],
+    ['a non-string', undefined],
+  ])('returns null for %s', (_label, input) => {
+    expect(renderedThumbnailUrlFor(input)).toBeNull();
   });
 });
