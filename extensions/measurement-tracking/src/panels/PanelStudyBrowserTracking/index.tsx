@@ -71,15 +71,9 @@ function _createGetImageSrcFromImageIdFn(extensionManager) {
     '@ohif/extension-cornerstone.utilityModule.common'
   );
 
-  // Opt in per data source. `wadors` keeps the historic behaviour of decoding the full frame into
-  // a canvas; `rendered` hands the downscale to the origin. Gated rather than unconditional
-  // because it moves that work onto Orthanc, so it wants an environment at a time.
-  const dataSourceConfig = extensionManager.getActiveDataSource()?.[0]?.getConfig?.() ?? {};
-  const renderedThumbnails = dataSourceConfig.thumbnailRendering === 'rendered';
-
   try {
     const { cornerstone } = utilities.exports.getCornerstoneLibraries();
-    return getImageSrcFromImageId.bind(null, cornerstone, renderedThumbnails);
+    return getImageSrcFromImageId.bind(null, cornerstone);
   } catch (ex) {
     throw new Error('Required command not found');
   }

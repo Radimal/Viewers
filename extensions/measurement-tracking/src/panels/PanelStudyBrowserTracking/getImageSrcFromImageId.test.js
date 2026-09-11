@@ -32,7 +32,7 @@ describe('getImageSrcFromImageId', () => {
       utilities: { loadImageToCanvas },
     };
 
-    await expect(getImageSrcFromImageId(cornerstone, false, 'image-id')).resolves.toBe(
+    await expect(getImageSrcFromImageId(cornerstone, 'image-id')).resolves.toBe(
       'data:image/png;base64,thumbnail'
     );
 
@@ -79,7 +79,7 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
     global.fetch = jest.fn(() => Promise.resolve({ ok: true, blob: () => Promise.resolve({}) }));
     const cornerstone = cornerstoneSpy();
 
-    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).resolves.toBe(
+    await expect(getImageSrcFromImageId(cornerstone, FRAME_ID)).resolves.toBe(
       RENDERED_DATA_URL
     );
 
@@ -102,7 +102,7 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
     const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
     const cornerstone = cornerstoneSpy();
 
-    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).resolves.toBe(
+    await expect(getImageSrcFromImageId(cornerstone, FRAME_ID)).resolves.toBe(
       'data:image/png;base64,thumbnail'
     );
     expect(cornerstone.utilities.loadImageToCanvas).toHaveBeenCalled();
@@ -117,7 +117,7 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
     const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
     const cornerstone = cornerstoneSpy();
 
-    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).resolves.toBe(
+    await expect(getImageSrcFromImageId(cornerstone, FRAME_ID)).resolves.toBe(
       'data:image/png;base64,thumbnail'
     );
 
@@ -136,7 +136,7 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
       utilities: { loadImageToCanvas: jest.fn(() => Promise.reject(new Error('decode failed'))) },
     };
 
-    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).rejects.toThrow(
+    await expect(getImageSrcFromImageId(cornerstone, FRAME_ID)).rejects.toThrow(
       'decode failed'
     );
 
@@ -150,7 +150,7 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
     const cornerstone = cornerstoneSpy();
 
     await expect(
-      getImageSrcFromImageId(cornerstone, true, 'dicomweb:https://cdn.example.com/wado?objectUID=7')
+      getImageSrcFromImageId(cornerstone, 'dicomweb:https://cdn.example.com/wado?objectUID=7')
     ).resolves.toBe('data:image/png;base64,thumbnail');
 
     expect(global.fetch).not.toHaveBeenCalled();
@@ -158,18 +158,15 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
     createElement.mockRestore();
   });
 
-  it('keeps the canvas path when the flag is off, even for a frame imageId', async () => {
-    global.fetch = jest.fn();
-    const canvas = { toDataURL: jest.fn(() => 'data:image/png;base64,thumbnail') };
-    const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
+  it('takes the rendered path for every frame imageId, with no opt-in', async () => {
+    // Ungated on purpose: the only config key available is written by the deployment rather than
+    // by this repo, so a gate would have put the fix behind an infrastructure change.
+    global.fetch = jest.fn(() => Promise.resolve({ ok: true, blob: () => Promise.resolve({}) }));
     const cornerstone = cornerstoneSpy();
 
-    await expect(getImageSrcFromImageId(cornerstone, false, FRAME_ID)).resolves.toBe(
-      'data:image/png;base64,thumbnail'
-    );
+    await expect(getImageSrcFromImageId(cornerstone, FRAME_ID)).resolves.toBe(RENDERED_DATA_URL);
 
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(cornerstone.utilities.loadImageToCanvas).toHaveBeenCalled();
-    createElement.mockRestore();
+    expect(global.fetch).toHaveBeenCalledWith(RENDERED_URL);
+    expect(cornerstone.utilities.loadImageToCanvas).not.toHaveBeenCalled();
   });
 });

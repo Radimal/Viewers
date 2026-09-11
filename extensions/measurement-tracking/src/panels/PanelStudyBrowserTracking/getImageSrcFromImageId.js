@@ -58,23 +58,26 @@ function renderedThumbnail(renderedUrl) {
 
 /**
  * @param {*} cornerstone
- * @param {boolean} renderedThumbnails - when true, ask the origin for a downscaled JPEG instead of
- *   downloading and decoding the full frame. See `renderedThumbnailUrlFor`.
  * @param {*} imageId
  */
-function getImageSrcFromImageId(cornerstone, renderedThumbnails, imageId) {
-  if (renderedThumbnails) {
-    const renderedUrl = utils.orthancUtils.renderedThumbnailUrlFor(imageId);
+function getImageSrcFromImageId(cornerstone, imageId) {
+  const renderedUrl = utils.orthancUtils.renderedThumbnailUrlFor(imageId);
 
-    // The origin applies the photometric interpretation, so this path also sidesteps the
-    // MONOCHROME1 CPU-rendering branch in canvasThumbnail rather than reimplementing it.
-    //
-    // Falls back rather than resolving the URL unconditionally: an unrejectable promise silently
-    // disables the caller's catch, and with it the thumbnail_load_failed telemetry, so a 404, a 401
-    // or a CORS/COEP block would show a broken tile and report nothing.
-    if (renderedUrl) {
-      return renderedThumbnail(renderedUrl).catch(() => canvasThumbnail(cornerstone, imageId));
-    }
+  // Deliberately not gated on a config key. The only candidate was `thumbnailRendering`, which the
+  // app reads from the config its deployment writes at container start rather than from anything
+  // in this repo — so a gate would have made shipping this depend on an infrastructure change
+  // instead of a viewer release. Turning it off is a rollback.
+  //
+  // The origin applies the photometric interpretation, so this path also sidesteps the MONOCHROME1
+  // CPU-rendering branch in canvasThumbnail rather than reimplementing it. That is the one
+  // difference the fallback cannot catch, because it renders rather than fails.
+  //
+  // Falls back rather than resolving the URL unconditionally: an unrejectable promise silently
+  // disables the caller's catch, and with it the thumbnail_load_failed telemetry, so a 404, a 401
+  // or a CORS/COEP block would show a broken tile and report nothing. Any failure lands back on the
+  // full-frame path, so the worst case is the behaviour this replaces.
+  if (renderedUrl) {
+    return renderedThumbnail(renderedUrl).catch(() => canvasThumbnail(cornerstone, imageId));
   }
 
   return canvasThumbnail(cornerstone, imageId);
