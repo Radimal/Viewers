@@ -168,26 +168,33 @@ describe('renderedThumbnailUrlFor', () => {
   const FRAME_ID =
     'wadors:https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1';
 
-  it('swaps the frame path for a downscaled /rendered request', () => {
+  it('appends /rendered to the frame request', () => {
     expect(renderedThumbnailUrlFor(FRAME_ID)).toBe(
-      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/rendered?viewport=256,256'
+      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1/rendered?viewport=256,256'
     );
-  });
-
-  it('keeps the instance path and drops only the frame segment', () => {
-    // The whole point is that the origin renders the instance; a surviving /frames/ segment would
-    // mean we asked for the full frame under a different name.
-    expect(renderedThumbnailUrlFor(FRAME_ID)).not.toContain('/frames/');
-    expect(renderedThumbnailUrlFor(FRAME_ID)).toContain('/instances/7.8.9/rendered');
   });
 
   it('honours a caller-supplied size', () => {
     expect(renderedThumbnailUrlFor(FRAME_ID, 128)).toContain('viewport=128,128');
   });
 
-  it('rewrites multi-digit frame numbers', () => {
-    const multiframe = FRAME_ID.replace('/frames/1', '/frames/42');
-    expect(renderedThumbnailUrlFor(multiframe)).toBe(renderedThumbnailUrlFor(FRAME_ID));
+  // The study browser picks the MIDDLE frame of a multiframe instance, so the frame number has to
+  // survive. Collapsing to the instance-level resource renders frame 1 of every cine loop.
+  it('preserves the requested frame number', () => {
+    const middleFrame = FRAME_ID.replace('/frames/1', '/frames/42');
+
+    expect(renderedThumbnailUrlFor(middleFrame)).toBe(
+      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/42/rendered?viewport=256,256'
+    );
+  });
+
+  it('gives a different URL per frame of the same instance', () => {
+    // Distinctness is the property that breaks if the frame segment is ever stripped again: every
+    // frame of a cine loop would collapse onto one instance-level URL.
+    const frame42 = renderedThumbnailUrlFor(FRAME_ID.replace('/frames/1', '/frames/42'));
+
+    expect(frame42).not.toBe(renderedThumbnailUrlFor(FRAME_ID));
+    expect(frame42).toContain('/frames/42/rendered');
   });
 
   // Fail closed: every one of these must keep the caller on the existing full-frame path rather
@@ -197,6 +204,13 @@ describe('renderedThumbnailUrlFor', () => {
     ['an instance-level wadors imageId', 'wadors:https://cdn.example.com/dicom-web/instances/7.8.9'],
     ['a frame segment that is not numeric', `${FRAME_ID.replace('/frames/1', '/frames/first')}`],
     ['a trailing slash after the frame number', `${FRAME_ID}/`],
+    // Isolates the scheme check specifically: this one DOES end in /frames/<n>, so only the
+    // `wadors:` guard can reject it. Without that guard the 7-character slice chops a 9-character
+    // `dicomweb:` prefix and emits a corrupt URL instead of failing closed.
+    [
+      'a non-wadors scheme that still ends in a frame segment',
+      'dicomweb:https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1',
+    ],
     ['an empty string', ''],
     ['a non-string', undefined],
   ])('returns null for %s', (_label, input) => {

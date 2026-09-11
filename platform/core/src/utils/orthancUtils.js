@@ -216,13 +216,23 @@ export async function downloadStudyByDICOMIds(patientId, studyInstanceUID, baseU
  * DICOMweb `/rendered` URL for the thumbnail of a WADO-RS frame imageId.
  *
  * The study browser's thumbnail imageId is the *same* full-resolution frame as the displayed
- * image, because `thumbnailRendering: 'wadors'` resolves through `getWADORSImageId`. Cornerstone
+ * image. The data source builds it with `imageRendering` — not `thumbnailRendering`, which it
+ * never reads: `getImageIdsForInstance` calls `getImageId` without the `thumbnail` argument, so
+ * `DicomWebDataSource/utils/getImageId.js` always takes the `imageRendering` branch. Cornerstone
  * then downloads and decodes that whole frame and only shrinks the canvas afterwards, so a study
  * pays (one full frame x number of display sets) to draw its rail. `/rendered?viewport=` asks the
  * origin for an already-downscaled JPEG instead.
  *
+ * The frame segment is deliberately KEPT rather than collapsed to the instance. The study browser
+ * picks the *middle* frame (`getImageIdForThumbnail`), and for a multiframe instance every imageId
+ * is the same instance at a different frame — so dropping it would render frame 1 of every cine
+ * loop, which on ultrasound is often the probe-not-yet-on-patient frame.
+ *
  * Fails closed: anything that is not a `wadors:` imageId ending in `/frames/<n>` returns null and
  * the caller keeps the existing full-frame path, rather than this guessing at a URL shape.
+ *
+ * The result is consumed as a bare `<img src>`, which cannot carry an Authorization header the way
+ * cornerstone's frame loader does. Do not enable this against an origin that requires one.
  *
  * Separate from `extensions/default`'s `createRenderedRetrieve`, which builds the same endpoint
  * from an instance object for bulkdata retrieval and has no `viewport` — that is what makes this a
@@ -240,11 +250,11 @@ export function renderedThumbnailUrlFor(imageId, size = 256) {
   }
 
   const uri = imageId.slice('wadors:'.length);
-  const instanceUri = uri.replace(/\/frames\/\d+$/, '');
 
-  if (instanceUri === uri || !instanceUri) {
+  // Validity check only — the matched frame segment stays on the URL.
+  if (!/^.+\/frames\/\d+$/.test(uri)) {
     return null;
   }
 
-  return `${instanceUri}/rendered?viewport=${size},${size}`;
+  return `${uri}/rendered?viewport=${size},${size}`;
 }
