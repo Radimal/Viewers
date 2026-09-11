@@ -45,25 +45,102 @@ describe('getImageSrcFromImageId', () => {
 describe('getImageSrcFromImageId with rendered thumbnails', () => {
   const FRAME_ID =
     'wadors:https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1';
+  const RENDERED_URL =
+    'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/frames/1/rendered?viewport=256,256';
+  const RENDERED_DATA_URL = 'data:image/jpeg;base64,cmVuZGVyZWQ=';
+
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    // jsdom ships no FileReader that can read a stub blob, so resolve the data URL directly.
+    global.FileReader = function MockFileReader() {
+      this.readAsDataURL = () => {
+        this.result = RENDERED_DATA_URL;
+        this.onload();
+      };
+    };
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
 
   const cornerstoneSpy = () => ({
     metaData: { get: jest.fn() },
     utilities: { loadImageToCanvas: jest.fn(() => Promise.resolve()) },
   });
 
-  it('returns the /rendered URL without touching cornerstone', async () => {
+  it('reads the /rendered URL once and never touches cornerstone', async () => {
+    global.fetch = jest.fn(() => Promise.resolve({ ok: true, blob: () => Promise.resolve({}) }));
     const cornerstone = cornerstoneSpy();
 
     await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).resolves.toBe(
-      'https://cdn.example.com/dicom-web/studies/1.2.3/series/4.5.6/instances/7.8.9/rendered?viewport=256,256'
+      RENDERED_DATA_URL
     );
+
+    // One request, not two: /dicom-web/* is Cache-Control: no-store, so a separate probe would
+    // double Orthanc's render load rather than being served from cache.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(RENDERED_URL);
 
     // The whole point of the change: no full frame is fetched or decoded for a thumbnail.
     expect(cornerstone.utilities.loadImageToCanvas).not.toHaveBeenCalled();
     expect(cornerstone.metaData.get).not.toHaveBeenCalled();
   });
 
+  it('falls back to the canvas path on a non-ok rendered response', async () => {
+    // A 404 or 415 from the origin must not strand the tile.
+    global.fetch = jest.fn(() =>
+      Promise.resolve({ ok: false, status: 404, blob: () => Promise.resolve({}) })
+    );
+    const canvas = { toDataURL: jest.fn(() => 'data:image/png;base64,thumbnail') };
+    const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
+    const cornerstone = cornerstoneSpy();
+
+    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).resolves.toBe(
+      'data:image/png;base64,thumbnail'
+    );
+    expect(cornerstone.utilities.loadImageToCanvas).toHaveBeenCalled();
+
+    createElement.mockRestore();
+  });
+
+  it('falls back to the canvas path when the request itself fails', async () => {
+    // A CORS or COEP block rejects rather than returning a response.
+    global.fetch = jest.fn(() => Promise.reject(new TypeError('Failed to fetch')));
+    const canvas = { toDataURL: jest.fn(() => 'data:image/png;base64,thumbnail') };
+    const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
+    const cornerstone = cornerstoneSpy();
+
+    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).resolves.toBe(
+      'data:image/png;base64,thumbnail'
+    );
+
+    createElement.mockRestore();
+  });
+
+  it('rejects when the rendered request and the canvas fallback both fail', async () => {
+    // Rejection has to survive the fallback, or the caller's thumbnail_load_failed never fires.
+    global.fetch = jest.fn(() =>
+      Promise.resolve({ ok: false, status: 500, blob: () => Promise.resolve({}) })
+    );
+    const canvas = { toDataURL: jest.fn() };
+    const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
+    const cornerstone = {
+      metaData: { get: jest.fn() },
+      utilities: { loadImageToCanvas: jest.fn(() => Promise.reject(new Error('decode failed'))) },
+    };
+
+    await expect(getImageSrcFromImageId(cornerstone, true, FRAME_ID)).rejects.toThrow(
+      'decode failed'
+    );
+
+    createElement.mockRestore();
+  });
+
   it('falls back to the canvas path when the imageId is not a WADO-RS frame', async () => {
+    global.fetch = jest.fn();
     const canvas = { toDataURL: jest.fn(() => 'data:image/png;base64,thumbnail') };
     const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
     const cornerstone = cornerstoneSpy();
@@ -72,11 +149,13 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
       getImageSrcFromImageId(cornerstone, true, 'dicomweb:https://cdn.example.com/wado?objectUID=7')
     ).resolves.toBe('data:image/png;base64,thumbnail');
 
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(cornerstone.utilities.loadImageToCanvas).toHaveBeenCalled();
     createElement.mockRestore();
   });
 
   it('keeps the canvas path when the flag is off, even for a frame imageId', async () => {
+    global.fetch = jest.fn();
     const canvas = { toDataURL: jest.fn(() => 'data:image/png;base64,thumbnail') };
     const createElement = jest.spyOn(document, 'createElement').mockReturnValue(canvas);
     const cornerstone = cornerstoneSpy();
@@ -85,6 +164,7 @@ describe('getImageSrcFromImageId with rendered thumbnails', () => {
       'data:image/png;base64,thumbnail'
     );
 
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(cornerstone.utilities.loadImageToCanvas).toHaveBeenCalled();
     createElement.mockRestore();
   });
