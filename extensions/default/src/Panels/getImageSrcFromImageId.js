@@ -27,13 +27,10 @@ function canvasThumbnail(cornerstone, imageId) {
 /**
  * Read the origin-rendered thumbnail once and hand back a data URL.
  *
- * Deliberately not `<img src={renderedUrl}>` with the URL resolved straight through. Checking the
- * response before the <img> requests it — a probe Image, a HEAD — only costs nothing if the browser
- * may reuse it, and at the time of writing the rendered path inherits the `no-store` that the
- * DICOMweb origin sends on non-frame paths, so it would be a second round trip per thumbnail and
- * double the render load on Orthanc. That CPU is the stated risk of moving the downscale to the
- * origin at all. Reading the bytes once is correct either way, so this does not need revisiting if
- * that caching changes; check the response headers rather than trusting this sentence.
+ * Deliberately not `<img src={renderedUrl}>` with the URL resolved straight through: an image
+ * element gives no way to tell a 404, a 401 or a CORS/COEP block apart from a decode failure, and
+ * both the fallback and the telemetry below depend on knowing. `response.ok` is an explicit check,
+ * and reading it here is one request whatever the caching posture happens to be.
  *
  * A data URL rather than an object URL because the caller keeps these in a map for the life of the
  * panel and never revokes; `canvas.toDataURL()` on the path below has the same shape, so this frees
