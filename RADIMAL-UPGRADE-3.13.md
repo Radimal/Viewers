@@ -376,7 +376,21 @@ pattern minus everything but ohif):
   ACM + route53 + one ECS service + one idle Aurora, and nothing in any
   existing deployment's state (each deployment has its own state key).
 
-- EXACT FILES to create in radimal-terraform (PR via the normal flow):
+- DECISION 2026-09-14: canary runs on the EXISTING BLUE CLUSTER instead of
+  a standalone deployment — blue's OHIF already reads studies from the live
+  prod CloudFront (use_cloudfront_from_ohif), so the canary is a one-line
+  change: ohif_version "3.10.0.71" -> "3.13.3" in
+  orthanc-cluster/deployments/orthanc-blue-prod-1.tfvars. Test URL:
+  https://viewer-blue.prod-1.radimal.ai (or view-blue). Rollback = revert
+  the line + apply. TRADEOFF ACCEPTED: blue is the prod standby — an
+  incident divert to blue during the canary puts users on 3.13; the
+  understood answer is revert-and-redeploy blue's ohif (~2 min). The
+  standalone canary tfvars below remain UNCOMMITTED in radimal-terraform
+  (orthanc-canary-prod-1.{tfvars,backend.tfvars}) as the isolated fallback —
+  do not PR them unless the blue approach is vetoed.
+
+- Standalone fallback — EXACT FILES (already written to
+  radimal-terraform/orthanc-cluster/deployments/, uncommitted):
 
   orthanc-cluster/deployments/orthanc-canary-prod-1.backend.tfvars:
     bucket = "radimal-terraform-state"
