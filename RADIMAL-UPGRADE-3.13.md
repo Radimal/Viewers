@@ -235,10 +235,14 @@ This batch:
   reload; zoom speed changes zoom step in both a stack and MPR
   viewport.
 
-- [ ] Phase 4 — fold into the same staging pass (no code expected):
-      load a multi-tile JPEG2000 study on stock 3.13 codecs; load an NM
-      multiframe + cs3d spatial sync to confirm combineFrameInstance is
-      obsolete. OpenJPEG multi-tile patch + combineFrameInstance. Confirmed
+- [x] Phase 4 — implemented 2026-09-14. OpenJPEG multi-tile patch is NOT
+      obsolete: 3.13.3 still pins codec-openjpeg 1.3.0 with the stock wasm
+      (hash-verified) — ported vendor/1.3.0-patched + postinstall apply +
+      Dockerfile --check gate; patched wasm verified byte-identical in dist.
+      combineFrameInstance patch IS obsolete: new regression suite for the
+      real cross-frame leak passes on 3.13 (4/4). Staging confirmations:
+      load a multi-tile Sedecal J2K study; load an NM multiframe with
+      spatial sync (matrix rows P4a/P4b). Confirmed
       still needed: the fork's combineFrameInstance regression test (untracked
       `platform/core/src/utils/combineFrameInstance.test.js`) fails against
       3.13.3 — upstream still mutates the shared instance object. OpenJPEG
