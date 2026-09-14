@@ -117,6 +117,19 @@ deploys, and serves studies correctly.
    system with CR/DX reveal gate (two documented 3.13 adaptations);
    ViewerLayout series-metadata progress; useStudyInfo requested-UID
    semantics + tests; T6 25-study prior cap; sha- image tags.
+   Verified by mechanical audit 2026-09-14: every one of the 79 files in
+   the .73->.71 delta compared byte-for-byte against this branch — 22
+   identical (verbatim ports), every DIFFERS/ABSENT hunk explicitly
+   dispositioned. Audit catches folded in (3df8aa5872): stable panel
+   callback identities (T4's real mechanism), deferred prior-study search
+   (T6's second half), .71's richer combineFrameInstance suite. Additional
+   deliberate skips found in audit: core utils export-manifest test (pins
+   the 3.10 manifest; would be pure churn to re-pin), HotkeysManager debug
+   cleanup (fork-only code never carried), ui-next StudyBrowser/StudyItem/
+   Header/Icons fork hunks (case-status + monitor UI re-implemented via
+   radimalCaseStatus/StudyItemActions/menuOptions), reporterOrigin.ts
+   ui-next lib (superseded by orthancUtils), apply-openjpeg-patch.js (ours
+   from .73 is the NEWER multi-version script — .71 has the older one).
    Not ported, with reasons: live study-polling + T5 (backed out on .71
    itself); T4 (absorbed upstream via fetchedStudiesRef); HotkeyField
    unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
