@@ -351,7 +351,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                     key={speed}
                     value={speed}
                   >
-                    {Math.round(parseFloat(speed) * 100)}%
+                    {`${Math.round(parseFloat(speed) * 100)}%`}
                   </SelectItem>
                 ))}
               </SelectContent>

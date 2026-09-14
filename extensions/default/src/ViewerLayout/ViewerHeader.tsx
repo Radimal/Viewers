@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -10,11 +10,92 @@ import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
 import { preserveQueryParameters, InvalidationService } from '@ohif/app';
 import { Types } from '@ohif/core';
 import useStudyInfo from '../hooks/useStudyInfo';
+import {
+  VIEWER_WINDOW_NAME,
+  closeAllViewerWindows,
+  isManagedViewerWindow,
+  isPrimaryViewerWindow,
+  nextMonitorWindowId,
+  openSavedViewerWindows,
+  publishFamilyArrival,
+  readFamilyDepartureSinceLoad,
+  readFamilyWindowData,
+  reconcileFamilyOnMount,
+  stripCaseScopedParams,
+} from './viewerWindowUtils';
 
 function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }>) {
   const { servicesManager, extensionManager, commandsManager } = useSystem();
   const { customizationService, uiNotificationService } = servicesManager.services;
   const { studyInfo } = useStudyInfo();
+
+  useEffect(() => {
+    const extractStudyId = searchString => {
+      const params = new URLSearchParams(searchString);
+      return params.get('StudyInstanceUIDs');
+    };
+
+    const currentStudyId = extractStudyId(location.search);
+
+    const refreshTab = newStudyId => {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('StudyInstanceUIDs', newStudyId);
+      // This URL described the PREVIOUS case; only StudyInstanceUIDs is being updated, so every
+      // other case-scoped param would now point at the wrong study.
+      stripCaseScopedParams(currentUrl);
+      window.location.href = currentUrl.toString();
+    };
+
+    // Only additional monitor windows follow cross-window study changes. The primary is driven
+    // directly by its radimal-vet tab (LOAD_STUDY), and standalone share-link viewers must not be
+    // hijacked by another window's study change.
+    const followsFamilyStudy = isManagedViewerWindow() && !isPrimaryViewerWindow();
+
+    const handleStorageChange = event => {
+      if (!followsFamilyStudy || !event.newValue) {
+        return;
+      }
+      // The primary wrote a departure note: it is leaving this origin for a sibling one
+      // (VEG <-> non-VEG). The storage event is this monitor's most reliable signal — unlike the
+      // NAVIGATE_FAMILY broadcast it needs no channel listener race, and unlike window.open by
+      // name it cannot spawn a window. Re-read through the validating reader rather than trusting
+      // event.newValue.
+      if (event.key === 'familyDepartureTarget') {
+        const departure = readFamilyDepartureSinceLoad();
+        if (departure && departure.url !== window.location.href) {
+          window.location.href = departure.url;
+        }
+        return;
+      }
+      if (event.key === 'currentStudyId') {
+        const newStudyId = event.newValue;
+        if (currentStudyId !== newStudyId) {
+          refreshTab(newStudyId);
+        }
+      }
+    };
+
+    if (isPrimaryViewerWindow() && currentStudyId) {
+      publishFamilyArrival(currentStudyId);
+    }
+
+    // Reconcile on mount as well as on the event: a monitor that was still loading when the
+    // family switched case had no listeners yet, so this is where it catches up.
+    if (followsFamilyStudy && currentStudyId) {
+      const decision = reconcileFamilyOnMount(currentStudyId);
+      if (decision.action === 'follow-departure') {
+        window.location.href = decision.url;
+      } else if (decision.action === 'catch-up') {
+        refreshTab(decision.studyInstanceUid);
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [location.search]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,73 +192,50 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
     }
   };
 
-  // Radimal multi-window actions (windowData/windowsArray contract shared
-  // with the ViewerLayout heartbeat).
+  // Radimal multi-window actions (.71 implementation: canonical positional
+  // monitor ids, broadcast-first close, popup-block feedback).
   const handleDuplicateWindow = () => {
-    const windows = JSON.parse(localStorage.getItem('windowData')) || [];
-    const existingWindow = windows.find(win => win.closed && win.id !== 'viewerWindow');
+    const windows = readFamilyWindowData();
+    // Canonical positional id (viewerWindow-N) so every origin addresses the same
+    // physical window; prefer that entry's own saved geometry, else any closed monitor's.
+    const newId = nextMonitorWindowId();
+    const reusable =
+      windows.find(win => win.closed && win.id === newId) ||
+      windows.find(win => win.closed && win.id !== VIEWER_WINDOW_NAME);
 
-    if (existingWindow) {
-      const { width, height, x, y, id } = existingWindow;
-      const newWin = window.open(
-        window.location.href,
-        id,
-        `width=${width},height=${height},left=${x},top=${y}`
-      );
-      if (newWin) {
-        existingWindow.closed = false;
-        localStorage.setItem('windowData', JSON.stringify(windows));
-      }
-    } else {
-      const newId = `viewerWindow-${Date.now()}`;
-      const newWin = window.open(window.location.href, newId);
-      if (newWin) {
-        windows.push({
-          id: newId,
-          x: window.screenX,
-          y: window.screenY,
-          width: window.outerWidth,
-          height: window.outerHeight,
-          closed: false,
-        });
-        localStorage.setItem('windowData', JSON.stringify(windows));
-      }
+    const newWin = reusable
+      ? window.open(
+          window.location.href,
+          newId,
+          `width=${reusable.width},height=${reusable.height},left=${reusable.x},top=${reusable.y}`
+        )
+      : window.open(window.location.href, newId);
+
+    if (newWin) {
+      // Drop the consumed entry (it may carry a legacy timestamped id) and register the
+      // canonical one; the new window's own heartbeat keeps it fresh from here.
+      const remaining = windows.filter(win => win !== reusable && win.id !== newId);
+      remaining.push({
+        id: newId,
+        x: reusable?.x ?? window.screenX,
+        y: reusable?.y ?? window.screenY,
+        width: reusable?.width ?? window.outerWidth,
+        height: reusable?.height ?? window.outerHeight,
+        closed: false,
+      });
+      localStorage.setItem('windowData', JSON.stringify(remaining));
     }
   };
 
   const handleOpenSavedWindows = () => {
-    const windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
-    windows.forEach((win, index) => {
-      if (win.id === 'viewerWindow') {
-        return;
-      }
-      setTimeout(() => {
-        window.open(
-          window.location.href,
-          win.id,
-          `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
-        );
-      }, index * 200);
+    openSavedViewerWindows(blockedCount => {
+      uiNotificationService.show({
+        title: 'Popup Blocked',
+        message: `The browser blocked ${blockedCount} saved window(s). Allow popups for this site to restore them.`,
+        type: 'warning',
+        duration: 8000,
+      });
     });
-  };
-
-  const handleCloseWindows = () => {
-    const windowDataArray = [];
-    const windows = JSON.parse(localStorage.getItem('windowData')) || [];
-    windows.forEach(win => {
-      if (win.closed) {
-        return;
-      }
-      const childWindow = window.open('', win.id);
-      if (childWindow) {
-        childWindow.close();
-        win.closed = true;
-        windowDataArray.push(win);
-      }
-    });
-    localStorage.setItem('windowData', JSON.stringify(windows));
-    localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
-    window.close();
   };
 
   const menuOptions = [
@@ -217,31 +275,33 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
     });
   }
 
-  menuOptions.push(
-    {
-      title: t('Header:Reload Study'),
-      icon: 'Refresh',
-      onClick: handleInvalidateCache,
-    },
-    {
-      title: t('Header:Duplicate Window'),
-      icon: 'tool-monitor',
-      onClick: handleDuplicateWindow,
-    },
-    {
-      title: t('Header:Open Saved Windows'),
-      icon: 'open-saved-windows',
-      onClick: handleOpenSavedWindows,
-    }
-  );
+  menuOptions.push({
+    title: t('Header:Reload Study'),
+    icon: 'Refresh',
+    onClick: handleInvalidateCache,
+  });
 
-  // Only the primary window may mass-close (child windows can duplicate).
-  if (window.name === 'viewerWindow') {
-    menuOptions.push({
-      title: t('Header:Close Windows'),
-      icon: 'close-windows',
-      onClick: handleCloseWindows,
-    });
+  // Managing the window family is the primary window's job alone: a standalone
+  // share-link viewer duplicating itself would mint a managed viewerWindow-N
+  // name and start following the vet family's study changes.
+  if (isPrimaryViewerWindow()) {
+    menuOptions.push(
+      {
+        title: t('Header:Duplicate Window'),
+        icon: 'tool-monitor',
+        onClick: handleDuplicateWindow,
+      },
+      {
+        title: t('Header:Open Saved Windows'),
+        icon: 'open-saved-windows',
+        onClick: handleOpenSavedWindows,
+      },
+      {
+        title: t('Header:Close Windows'),
+        icon: 'close-windows',
+        onClick: closeAllViewerWindows,
+      }
+    );
   }
 
   if (appConfig.oidc) {

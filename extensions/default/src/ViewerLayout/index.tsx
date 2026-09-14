@@ -1,8 +1,20 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import { InvestigationalUseDialog } from '@ohif/ui-next';
-import { HangingProtocolService, CommandsManager, utils } from '@ohif/core';
+import { HangingProtocolService, CommandsManager } from '@ohif/core';
+import {
+  VIEWER_WINDOW_NAME,
+  WINDOW_INSTANCE_ID,
+  WINDOW_STARTED_AT,
+  closeAllViewerWindows,
+  getVetOrigin,
+  isManagedViewerWindow,
+  openSavedViewerWindows,
+  publishFamilyDeparture,
+  readFamilyWindowData,
+  vetOriginFor,
+} from './viewerWindowUtils';
 import { useAppConfig } from '@state';
 import ViewerHeader from './ViewerHeader';
 import SidePanelWithServices from '../Components/SidePanelWithServices';
@@ -44,6 +56,8 @@ function ViewerLayout({
   const [leftPanelClosedState, setLeftPanelClosed] = useState(leftPanelClosed);
   // Radimal: vet-app FADE signal dims the whole viewer chrome.
   const [fade, setFade] = useState(false);
+  const fadeRef = useRef(fade);
+  fadeRef.current = fade;
   const [rightPanelClosedState, setRightPanelClosed] = useState(rightPanelClosed);
 
   const [
@@ -149,28 +163,18 @@ function ViewerLayout({
     };
   }, [panelService, hasPanels]);
 
-
-  // ---------------------------------------------------------------------
-  // Radimal multi-window plumbing. The vet app opens the viewer as
-  // window.name === 'viewerWindow'; the primary window heartbeats its
-  // geometry to the vet app, children mirror FADE/CLOSE over a
-  // BroadcastChannel, and window sets persist in localStorage
-  // (windowData / windowsArray - shared contract with the header's
-  // Duplicate/Open Saved/Close Windows actions).
-  // ---------------------------------------------------------------------
-
-  // One-time storage reset per browser profile.
   useEffect(() => {
-    if (localStorage.getItem('resetViewerStorage') !== 'false') {
-      localStorage.setItem('resetViewerStorage', 'false');
-      localStorage.removeItem('windowData');
-      localStorage.removeItem('windowsArray');
+    // Standalone viewers (empty window.name) must not take part in family window bookkeeping:
+    // an { id: '' } entry in windowData gets reused by "Duplicate Window", producing a nameless
+    // child that no close/sync mechanism can reach.
+    if (!isManagedViewerWindow()) {
+      return;
     }
-  }, []);
 
-  // Geometry heartbeat + close tracking.
-  useEffect(() => {
-    let lastSaved = null;
+    // Captured at load: a vet-opened window always starts with an opener, a standalone one never
+    // does. Lets us tell "opener tab closed" apart from "never had an opener".
+    const hadOpener = !!window.opener;
+    let openerGoneTicks = 0;
 
     const saveWindowData = () => {
       const windowData = {
@@ -181,93 +185,145 @@ function ViewerLayout({
         height: window.outerHeight,
         closed: false,
       };
-
-      const serialized = JSON.stringify(windowData);
-      if (serialized !== lastSaved) {
-        lastSaved = serialized;
-        const windows = JSON.parse(localStorage.getItem('windowData')) || [];
-        const index = windows.findIndex(win => win.id === windowData.id);
-        if (index !== -1) {
-          windows[index] = windowData;
-        } else {
-          windows.push(windowData);
+      // The window that owns us is gone — the radimal-vet tab for the primary, the window we
+      // were duplicated from for a monitor window. Close rather than leaving a stale study on
+      // screen: an orphaned window has no path back to radimal-vet and would silently stop
+      // following case changes. Chrome nulls window.opener once the opener is destroyed, so
+      // check for null as well as closed; navigation/reload of the opener trips neither, and
+      // requiring two consecutive ticks avoids acting on a transient state. The primary takes
+      // its whole family with it; a monitor window closes only itself (its own duplicates
+      // cascade the same way), so a takeover primary's new family is never collateral damage.
+      if (hadOpener && (!window.opener || window.opener.closed)) {
+        openerGoneTicks += 1;
+        if (openerGoneTicks >= 2) {
+          if (window.name === VIEWER_WINDOW_NAME) {
+            closeAllViewerWindows();
+          } else {
+            window.close();
+          }
+          return;
         }
-        localStorage.setItem('windowData', JSON.stringify(windows));
+      } else {
+        openerGoneTicks = 0;
       }
 
-      if (window.name === 'viewerWindow') {
-        window.opener?.postMessage(windowData, utils.radimalEndpoints.getVetAppOrigin());
+      // Heartbeat: the primary reports presence, geometry, current study, and fade state to the
+      // radimal-vet opener on every tick — even when nothing changed — so the opener can tell
+      // the viewer is open without probing for it (probing via window.open would create one).
+      // Runs before the localStorage bookkeeping so nothing can starve it.
+      if (window.name === VIEWER_WINDOW_NAME && window.opener && !window.opener.closed) {
+        const origin = getVetOrigin();
+        if (origin) {
+          const studyUid = new URLSearchParams(window.location.search).get('StudyInstanceUIDs');
+          window.opener.postMessage({ ...windowData, studyUid, faded: fadeRef.current }, origin);
+        }
+      }
+
+      try {
+        const windows = readFamilyWindowData();
+
+        const index = windows.findIndex(win => win.id === windowData.id);
+
+        if (index !== -1) {
+          const existingData = windows[index];
+          const geometryChanged =
+            existingData.x !== windowData.x ||
+            existingData.y !== windowData.y ||
+            existingData.width !== windowData.width ||
+            existingData.height !== windowData.height;
+          // beforeunload marks this entry closed on ANY unload, including in-place reloads
+          // (banner refresh, F5) where geometry never changes — heal the flag, or every
+          // close-by-name mechanism (cross-origin case switch, Close Windows) skips a window
+          // that is actually open. A window running this heartbeat is by definition open.
+          if (geometryChanged || existingData.closed) {
+            windows[index] = windowData;
+            localStorage.setItem('windowData', JSON.stringify(windows));
+          }
+        } else {
+          windows.push(windowData);
+          localStorage.setItem('windowData', JSON.stringify(windows));
+        }
+      } catch (error) {
+        console.error('Error saving window data:', error);
       }
     };
 
-    const handleBeforeUnload = () => {
-      const windows = JSON.parse(localStorage.getItem('windowData')) || [];
+    saveWindowData();
+
+    const interval = setInterval(saveWindowData, 1000);
+
+    window.addEventListener('resize', saveWindowData);
+    window.addEventListener('beforeunload', () => {
+      const windows = readFamilyWindowData();
       const index = windows.findIndex(win => win.id === window.name);
       if (index !== -1) {
         windows[index].closed = true;
         localStorage.setItem('windowData', JSON.stringify(windows));
         localStorage.setItem('usingViewer', 'false');
       }
-    };
-
-    saveWindowData();
-    const interval = setInterval(saveWindowData, 1000);
-    window.addEventListener('resize', saveWindowData);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    });
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('resize', saveWindowData);
-      // The fork leaked this listener; remove it on unmount.
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      clearInterval(interval);
     };
   }, []);
 
-  // Vet-app postMessage bridge (FADE / CLOSE) + child-window mirror.
   useEffect(() => {
     const channel = new BroadcastChannel('window_channel');
-
-    const closeTrackedWindows = () => {
-      const windowDataArray = [];
-      const windows = JSON.parse(localStorage.getItem('windowData')) || [];
-      windows.forEach(win => {
-        if (win.closed) {
-          return;
-        }
-        const childWindow = window.open('', win.id);
-        if (childWindow) {
-          childWindow.close();
-          win.closed = true;
-          windowDataArray.push(win);
-        }
-      });
-      localStorage.setItem('windowData', JSON.stringify(windows));
-      localStorage.setItem('windowsArray', JSON.stringify(windowDataArray));
-      window.close();
-    };
-
+    setFade(false);
     const handleMessage = (event: MessageEvent) => {
-      if (!utils.radimalEndpoints.VET_APP_ALLOWED_ORIGINS.includes(event.origin)) {
+      const allowedOrigins = [
+        'http://localhost:8000',
+        'https://radimal-vet-staging.onrender.com',
+        'https://vet.radimal.ai',
+      ];
+
+      if (!allowedOrigins.includes(event.origin)) {
         return;
       }
-      if (event.data?.type === 'FADE') {
+      if (event.data && event.data.type === 'FADE') {
         channel.postMessage(event.data);
         setFade(event.data.value);
-      } else if (event.data?.type === 'CLOSE') {
-        channel.postMessage(event.data);
-        closeTrackedWindows();
+      } else if (event.data && event.data.type === 'CLOSE') {
+        // closeAllViewerWindows broadcasts CLOSE to the rest of the family itself.
+        closeAllViewerWindows();
+      } else if (
+        event.data &&
+        event.data.type === 'LOAD_STUDY' &&
+        typeof event.data.url === 'string'
+      ) {
+        // radimal-vet changed cases; navigate to the new study. Any sibling viewer origin that
+        // reports to our vet app is allowed — a VEG↔non-VEG case switch navigates this window
+        // cross-origin (e.g. view.radimal.ai → veg-view.radimal.ai). Same-origin, additional
+        // monitor windows follow via the currentStudyId storage event once this window reloads;
+        // cross-origin they can't (storage events are per-origin), so hand them the target URL
+        // over the family channel while everyone still shares this origin.
+        try {
+          const url = new URL(event.data.url, window.location.origin);
+          const targetVet = vetOriginFor(url.origin);
+          if (targetVet && targetVet === getVetOrigin()) {
+            if (url.origin !== window.location.origin) {
+              channel.postMessage({
+                type: 'NAVIGATE_FAMILY',
+                url: url.toString(),
+                senderId: window.name,
+              });
+              // The broadcast only reaches windows whose listener is already attached. A monitor
+              // that is still loading misses it, and cross-origin that is unrecoverable: once
+              // this window leaves the origin, neither localStorage nor the channel can reach it
+              // again, so it would show the previous patient indefinitely. Leave a departure note
+              // on this origin; the monitor reads it when it finishes loading (ViewerHeader's
+              // mount-time reconcile).
+              publishFamilyDeparture(url.toString());
+            }
+            window.location.href = url.toString();
+          }
+        } catch (error) {
+          console.error('Invalid LOAD_STUDY url:', event.data.url);
+        }
       } else {
         setFade(false);
-      }
-    };
-
-    // Child windows mirror the primary's FADE/CLOSE via the channel
-    // (BroadcastChannel is same-origin scoped; no origin check needed).
-    channel.onmessage = event => {
-      if (event.data?.type === 'FADE') {
-        setFade(event.data.value);
-      } else if (event.data?.type === 'CLOSE' && window.name !== 'viewerWindow') {
-        window.close();
       }
     };
 
@@ -279,59 +335,103 @@ function ViewerLayout({
     };
   }, []);
 
-  // Session restore: reopen saved windows on primary-window start.
   useEffect(() => {
-    let openOnStart = false;
-    try {
-      openOnStart = JSON.parse(localStorage.getItem('openAdditionalWindowsOnStart')) === true;
-    } catch (e) {
-      openOnStart = false;
+    const resetViewer = localStorage.getItem('resetViewerStorage');
+    if (!resetViewer || resetViewer !== 'false') {
+      localStorage.setItem('resetViewerStorage', 'false');
+      localStorage.removeItem('windowData');
+      localStorage.removeItem('windowsArray');
     }
-
-    if (!openOnStart || window.name !== 'viewerWindow') {
-      return;
-    }
-
-    const windows = JSON.parse(localStorage.getItem('windowsArray')) || [];
-    windows.forEach((win, index) => {
-      if (win.id === 'viewerWindow') {
-        return;
-      }
-      setTimeout(() => {
-        window.open(
-          window.location.href,
-          win.id,
-          `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
-        );
-      }, index * 200);
-    });
+    // on "first" load - delete all windowData + windowsArray from localStorage
   }, []);
 
-
-  // Cross-tab study sync: when the primary window navigates to a new study,
-  // duplicated windows follow via the storage event. (Fork had this in
-  // ViewerHeader; it belongs with the rest of the window plumbing.)
+  // "Open Additional Windows On Start" (User Preferences): the primary opened from radimal-vet
+  // restores the saved multi-monitor layout automatically. Only the primary restores — a
+  // standalone or secondary window re-running this would fight over the same named windows.
   useEffect(() => {
-    const currentStudyUID =
-      new URLSearchParams(window.location.search).get('StudyInstanceUIDs')?.split(',')[0] ?? '';
-
-    if (window.name === 'viewerWindow' && currentStudyUID) {
-      if (localStorage.getItem('currentStudyId') !== currentStudyUID) {
-        localStorage.setItem('currentStudyId', currentStudyUID);
-      }
+    if (window.name !== VIEWER_WINDOW_NAME) {
+      return;
     }
+    let openOnStart = false;
+    try {
+      openOnStart = !!JSON.parse(localStorage.getItem('openAdditionalWindowsOnStart'));
+    } catch (error) {
+      openOnStart = false;
+    }
+    if (openOnStart) {
+      openSavedViewerWindows(blockedCount => {
+        servicesManager.services.uiNotificationService?.show({
+          title: 'Popup Blocked',
+          message: `The browser blocked ${blockedCount} saved window(s). Allow popups for this site, then use Monitor > Open Saved Windows.`,
+          type: 'warning',
+          duration: 8000,
+        });
+      });
+    }
+  }, [servicesManager]);
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== 'currentStudyId' || !event.newValue || event.newValue === currentStudyUID) {
-        return;
+  useEffect(() => {
+    // Standalone viewers (share links, direct URLs) are not part of the vet-driven window
+    // family and must not react to its fade/close/takeover broadcasts.
+    if (!isManagedViewerWindow()) {
+      return;
+    }
+    const channel = new BroadcastChannel('window_channel');
+    setFade(false);
+    channel.onmessage = event => {
+      if (event.data.type === 'FADE') {
+        setFade(event.data.value);
+      } else if (event.data.type === 'CLOSE') {
+        window.close();
+      } else if (event.data.type === 'NAVIGATE_FAMILY') {
+        // The primary received a cross-origin case switch (VEG<->non-VEG) and is about to
+        // navigate away. Storage events are per-origin so monitors can't follow the usual
+        // way; the primary hands the whole family the target URL while everyone still
+        // shares an origin. Re-validate like LOAD_STUDY: only sibling viewer origins that
+        // report to the same vet app.
+        if (event.data.senderId !== window.name && typeof event.data.url === 'string') {
+          try {
+            const url = new URL(event.data.url);
+            if (vetOriginFor(url.origin) === getVetOrigin()) {
+              window.location.href = url.toString();
+            }
+          } catch (error) {
+            console.error('Invalid NAVIGATE_FAMILY url:', event.data.url);
+          }
+        }
+      } else if (event.data.type === 'PRIMARY_TAKEOVER') {
+        // A newer primary viewer announced itself (e.g. opened from another radimal-vet tab).
+        // Two primaries fight over currentStudyId, so the older one yields.
+        const isNewer =
+          event.data.startedAt > WINDOW_STARTED_AT ||
+          (event.data.startedAt === WINDOW_STARTED_AT &&
+            event.data.instanceId > WINDOW_INSTANCE_ID);
+        if (
+          window.name === VIEWER_WINDOW_NAME &&
+          event.data.instanceId !== WINDOW_INSTANCE_ID &&
+          isNewer
+        ) {
+          window.close();
+        }
       }
-      const url = new URL(window.location.href);
-      url.searchParams.set('StudyInstanceUIDs', event.newValue);
-      window.location.href = url.toString();
     };
 
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    return () => {
+      channel.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (window.name !== VIEWER_WINDOW_NAME) {
+      return;
+    }
+    const channel = new BroadcastChannel('window_channel');
+    channel.postMessage({
+      type: 'PRIMARY_TAKEOVER',
+      instanceId: WINDOW_INSTANCE_ID,
+      startedAt: WINDOW_STARTED_AT,
+    });
+    channel.close();
   }, []);
 
   const viewportComponents = viewports.map(getViewportComponentData);
