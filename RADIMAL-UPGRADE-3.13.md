@@ -367,9 +367,75 @@ pattern minus everything but ohif):
   view.radimal.ai) — verified on staging instead. Cutover later = flip
   ohif_version in the real prod tfvars per the runbook, then destroy the
   canary deployment.
-- Expect the terraform plan to show ALB + ACM + route53 + one ECS service
-  for the new cluster and nothing in any existing deployment's state (each
-  deployment has its own state key).
+- Module reality check (2026-09-14): the aurora RDS module is NOT gated on
+  enable_rds (only subnet math is), and no deployment has ever run
+  enable_rds=false — gating it now would change resource addresses for
+  every existing state (destroy/recreate plans on prod RDS). So the canary
+  keeps enable_rds=true at minimum ACU (idle, ~$1.5/day) for a plan shape
+  identical to the proven blue cluster. Expect the plan to show VPC + ALB +
+  ACM + route53 + one ECS service + one idle Aurora, and nothing in any
+  existing deployment's state (each deployment has its own state key).
+
+- EXACT FILES to create in radimal-terraform (PR via the normal flow):
+
+  orthanc-cluster/deployments/orthanc-canary-prod-1.backend.tfvars:
+    bucket = "radimal-terraform-state"
+    key = "orthanc-canary-prod-1"
+    region = "us-east-1"
+
+  orthanc-cluster/deployments/orthanc-canary-prod-1.tfvars:
+    # 3.13 canary: OHIF-only cluster serving the 3.13 viewer against the
+    # PROD Orthanc backend at its own hostname. Normal users stay on 3.10
+    # at view.radimal.ai — nothing here touches the prod viewer
+    # distribution, asset bucket, or prod ECS. Assets are served from this
+    # cluster's nginx (the 3.13 image carries its full dist); studies come
+    # from the prod CloudFront dicom-web (CORS '*'). RDS is an idle
+    # min-ACU cluster only because the aurora module is ungated (see
+    # runbook). Tear down by destroying this deployment.
+    env                         = "canary-prod-1"
+    subenv                      = "canary"
+    stack_name                  = "prod-1"
+    aws_region                  = "us-east-1"
+    parent_zone                 = "prod-1.radimal.ai"
+    is_prod                     = true
+    orthanc_active              = false
+    orthanc_version             = "25.12.2"
+    ohif_version                = "3.13.3"
+    enable_rds                  = true
+    enable_rds_reader           = false
+    perform_acm_validation      = true
+    network_provisioner         = false
+    network_cidr                = "10.10.80.0/20"
+    enabled_services = {
+      "orthanc": false
+      "orthancegress": false
+      "prometheus": false
+      "ohif": true
+      "dicom": false
+      "flask": false
+    }
+    fqdn_shortnames = {
+      "orthanc"    = "orthanc-canary"
+      "egress"     = "orthanc-egress-canary"
+      "dicom"      = "dicom-canary"
+      "flask"      = "flask-canary"
+      "viewer"     = "viewer-canary"
+      "view"       = "view-canary"
+      "cache"      = "cache-canary"
+      "prometheus" = "prometheus-canary"
+    }
+    ssh_tunnel_crossconnect = false
+    use_cloudfront_from_ohif = true
+    ohif_stack_orthanc_fqdn = "orthanc.prod-1.radimal.ai"
+    reporter_fqdn               = "radimal-reporter.onrender.com"
+    syslog_log_group_names = []
+    rds_min_acu     = 0.5
+    rds_max_acu     = 1
+
+- Order of operations: (1) push the Viewers branch first so CI rebuilds
+  ohif:v3.13.3.radimal with the reconciliation batch; (2) PR + apply the
+  canary deployment; (3) test at
+  https://viewer-canary.prod-1.radimal.ai/?StudyInstanceUIDs=<uid>.
 
 Deferred to canary/cumulative testing: staging Reload Study 500 (reporter-
 staging /cdn/invalidate), staging View Report failures (reporter-staging
