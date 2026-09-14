@@ -288,7 +288,7 @@ const commandsModule = ({
         studyInstanceUID = displaySet.StudyInstanceUID;
       }
 
-      const reporterOrigin = utils.radimalEndpoints.getReporterOrigin();
+      const reporterOrigin = utils.orthancUtils.reporterOriginFor(window.location.origin);
 
       let caseData;
       try {
@@ -364,7 +364,7 @@ const commandsModule = ({
      * loaded display-set metadata.
      */
     async downloadStudy() {
-      const reporterOrigin = utils.radimalEndpoints.getReporterOrigin();
+      const reporterOrigin = utils.orthancUtils.reporterOriginFor(window.location.origin);
 
       const params = new URLSearchParams(window.location.search);
       const studyId = params.get('studyId');
@@ -386,14 +386,29 @@ const commandsModule = ({
           duration: 3000,
         });
 
-        if (studyId) {
-          await utils.orthancUtils.downloadOrthancStudy(studyId, reporterOrigin, distinctId);
-        } else if (patientIdParam && studyInstanceUIDParam) {
-          await utils.orthancUtils.downloadStudyByDICOMIds(
-            patientIdParam,
-            studyInstanceUIDParam,
-            reporterOrigin
-          );
+        // resolveDownloadStudyId validates ?studyId= against the id derived
+        // from ?patientId= + ?StudyInstanceUIDs= and refuses if they
+        // contradict (an unvalidated id could download another patient's
+        // study). Loaded metadata remains the last resort.
+        const resolved = await utils.orthancUtils.resolveDownloadStudyId({
+          studyId,
+          patientId: patientIdParam,
+          studyInstanceUID: studyInstanceUIDParam,
+        });
+
+        if (resolved.error) {
+          console.error('Refusing to download:', resolved.detail);
+          uiNotificationService.show({
+            title: 'Download Error',
+            message: resolved.error,
+            type: 'error',
+            duration: 8000,
+          });
+          return;
+        }
+
+        if (resolved.studyId) {
+          await utils.orthancUtils.downloadOrthancStudy(resolved.studyId, reporterOrigin, distinctId);
         } else if (metadataPatientID && metadataStudyInstanceUID) {
           await utils.orthancUtils.downloadStudyByDICOMIds(
             metadataPatientID,

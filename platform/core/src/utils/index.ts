@@ -44,7 +44,6 @@ import { splitComma, getSplitParam } from './splitComma';
 import { createStudyBrowserTabs } from './createStudyBrowserTabs';
 import { sopClassDictionary } from './sopClassDictionary';
 import * as orthancUtils from './orthancUtils';
-import * as radimalEndpoints from './radimalEndpoints';
 import * as MeasurementFilters from './measurementFilters';
 import getClosestOrientationFromIOP from './getClosestOrientationFromIOP';
 import calculateScanAxisNormal from './calculateScanAxisNormal';
@@ -111,7 +110,6 @@ const utils = {
   generateAcceptHeader,
   createStudyBrowserTabs,
   orthancUtils,
-  radimalEndpoints,
   MeasurementFilters,
   getClosestOrientationFromIOP,
   calculateScanAxisNormal,
@@ -162,7 +160,6 @@ export {
   generateAcceptHeader,
   createStudyBrowserTabs,
   orthancUtils,
-  radimalEndpoints,
   MeasurementFilters,
   getClosestOrientationFromIOP,
   buildButtonCommands,

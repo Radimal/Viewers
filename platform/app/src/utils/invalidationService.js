@@ -3,7 +3,8 @@ import { utils } from '@ohif/core';
 export const InvalidationService = {
   async invalidatePath(studyInstanceUID) {
     try {
-      const baseUrl = utils.radimalEndpoints.getReporterOrigin() + '/cdn/invalidate';
+      const baseUrl =
+        utils.orthancUtils.reporterOriginFor(window.location.origin) + '/cdn/invalidate';
       const body = {
         path: `/dicom-web/studies/${studyInstanceUID}/*`,
       };

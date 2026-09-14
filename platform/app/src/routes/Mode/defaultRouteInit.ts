@@ -2,7 +2,7 @@ import { DicomMetadataStore, log, utils, Enums } from '@ohif/core';
 import getStudies from './studiesList';
 import isSeriesFilterUsed from '../../utils/isSeriesFilterUsed';
 
-const { getSplitParam, orthancUtils, radimalEndpoints } = utils;
+const { getSplitParam, orthancUtils } = utils;
 
 function isDuplicateStudyError(error: any): boolean {
   const details = error?.response?.Details;
@@ -33,7 +33,7 @@ function handleDuplicateStudyError(uiNotificationService): void {
   const distinctId = params.get('distinct_id');
   const patientIdParam = params.get('patientId') || params.get('PatientID');
   const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
-  const reporterOrigin = radimalEndpoints.getReporterOrigin();
+  const reporterOrigin = orthancUtils.reporterOriginFor(window.location.origin);
 
   let downloadPromise: Promise<void> | null = null;
   if (studyId) {

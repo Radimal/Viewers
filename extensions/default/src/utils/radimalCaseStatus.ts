@@ -51,7 +51,7 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
     return pending;
   }
 
-  const reporterOrigin = utils.radimalEndpoints.getReporterOrigin();
+  const reporterOrigin = utils.orthancUtils.reporterOriginFor(window.location.origin);
   const lookup = fetch(`${reporterOrigin}/case/${studyInstanceUID}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },

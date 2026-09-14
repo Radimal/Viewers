@@ -138,7 +138,7 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
 
   // Radimal: invalidate the CDN cache for the current study, then hard-reload
   // with the local caches cleared. Ported from the fork; endpoint comes from
-  // radimalEndpoints via InvalidationService.
+  // orthancUtils.reporterOriginFor via InvalidationService.
   const handleInvalidateCache = async () => {
     if (!studyInfo?.StudyInstanceUID) {
       uiNotificationService.show({
