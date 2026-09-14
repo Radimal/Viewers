@@ -27,6 +27,10 @@ import {
 function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }>) {
   const { servicesManager, extensionManager, commandsManager } = useSystem();
   const { customizationService, uiNotificationService } = servicesManager.services;
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const { studyInfo } = useStudyInfo();
 
   useEffect(() => {
@@ -96,9 +100,6 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [location.search]);
-
-  const navigate = useNavigate();
-  const location = useLocation();
 
   const onClickReturnButton = () => {
     const { pathname } = location;
