@@ -89,6 +89,51 @@ export function autoTrimBorders(viewport): boolean {
     return count >= sampled * MIN_CONTENT_PIXEL_FRACTION;
   };
 
+  // Every "trim complete" exit must leave the camera re-based to a
+  // deterministic reference frame (setDisplayArea + storeAsInitialCamera),
+  // even when there are no borders to trim. The driver snapshots the
+  // post-command camera as the untouched baseline and re-applies the user's
+  // manual zoom/pan delta on top of it; an exit that keeps the camera as-is
+  // lets a presentation-restored user zoom be read as that baseline, so the
+  // delta compounds on every revisit. The reset also clears a stale
+  // options.displayArea left by a previous image's trim.
+  const applyDisplayArea = displayArea => {
+    // setDisplayArea resets the camera to the unrotated, unflipped fit
+    // before applying the content zoom, so capture any persisted
+    // rotation/flip and re-apply afterwards.
+    const { flipHorizontal, flipVertical } = viewport.getCamera();
+    const rotation = viewport.getViewPresentation?.()?.rotation ?? 0;
+
+    viewport.setDisplayArea(displayArea);
+
+    if (rotation || flipHorizontal || flipVertical) {
+      // Re-apply without letting the transforms displace the freshly
+      // centered view: setDisplayArea(storeAsInitialCamera) re-bases
+      // initialCamera, after which cs3d's setRotation pan math shifts the
+      // camera and flip() mirrors the focal point off the content center.
+      // Pin the trim's pan across the re-apply.
+      const trimPan = viewport.getPan?.();
+      // Single call: flips are applied before rotation, matching the flipped
+      // frame the rotation value was measured in.
+      viewport.setViewPresentation({ rotation, flipHorizontal, flipVertical });
+      if (trimPan && viewport.setPan) {
+        viewport.setPan(trimPan);
+      }
+    }
+
+    viewport.render();
+    return true;
+  };
+
+  const fullImageDisplayArea = {
+    storeAsInitialCamera: true,
+    imageArea: [1, 1] as [number, number],
+    imageCanvasPoint: {
+      imagePoint: [0.5, 0.5] as [number, number],
+      canvasPoint: [0.5, 0.5] as [number, number],
+    },
+  };
+
   let top = 0;
   for (let r = 0; r < rows; r++) {
     if (isContentRow(r)) {
@@ -96,8 +141,8 @@ export function autoTrimBorders(viewport): boolean {
       break;
     }
     if (r === rows - 1) {
-      // Whole image is background; nothing to trim.
-      return true;
+      // Whole image is background; nothing to trim — still re-base.
+      return applyDisplayArea(fullImageDisplayArea);
     }
   }
 
@@ -136,7 +181,7 @@ export function autoTrimBorders(viewport): boolean {
     leftBorder < MIN_BORDER_FRACTION &&
     rightBorder < MIN_BORDER_FRACTION
   ) {
-    return true;
+    return applyDisplayArea(fullImageDisplayArea);
   }
 
   const padRows = Math.round(rows * 0.01);
@@ -151,38 +196,12 @@ export function autoTrimBorders(viewport): boolean {
   const centerX = (left + right) / 2 / columns;
   const centerY = (top + bottom) / 2 / rows;
 
-  const displayArea = {
+  return applyDisplayArea({
     storeAsInitialCamera: true,
     imageArea: [contentWidth, contentHeight] as [number, number],
     imageCanvasPoint: {
       imagePoint: [centerX, centerY] as [number, number],
       canvasPoint: [0.5, 0.5] as [number, number],
     },
-  };
-
-  // Save rotation/flip: legacy setDisplayArea resets the camera.
-  const cameraBefore = viewport.getCamera();
-  const presentationBefore = viewport.getViewPresentation?.();
-  const savedFlipH = cameraBefore?.flipHorizontal ?? false;
-  const savedFlipV = cameraBefore?.flipVertical ?? false;
-  const savedRotation = presentationBefore?.rotation ?? 0;
-
-  viewport.setDisplayArea(displayArea);
-
-  const cameraAfter = viewport.getCamera();
-  if ((cameraAfter?.flipHorizontal ?? false) !== savedFlipH) {
-    viewport.setCamera({ flipHorizontal: savedFlipH });
-  }
-  if ((cameraAfter?.flipVertical ?? false) !== savedFlipV) {
-    viewport.setCamera({ flipVertical: savedFlipV });
-  }
-  if (savedRotation !== 0 && viewport.getViewPresentation && viewport.setViewPresentation) {
-    const presentationAfter = viewport.getViewPresentation();
-    if (presentationAfter.rotation !== savedRotation) {
-      viewport.setViewPresentation({ ...presentationAfter, rotation: savedRotation });
-    }
-  }
-
-  viewport.render();
-  return true;
+  });
 }

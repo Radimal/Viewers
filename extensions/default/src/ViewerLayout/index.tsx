@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 import { InvestigationalUseDialog } from '@ohif/ui-next';
-import { HangingProtocolService, CommandsManager } from '@ohif/core';
+import { HangingProtocolService, CommandsManager, DicomMetadataStore } from '@ohif/core';
 import {
   VIEWER_WINDOW_NAME,
   WINDOW_INSTANCE_ID,
@@ -45,6 +45,11 @@ function ViewerLayout({
 
   const { panelService, hangingProtocolService, customizationService } = servicesManager.services;
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(appConfig.showLoadingIndicator);
+  // Series-metadata retrieval progress for the app-level loading overlay.
+  // undefined until the first SERIES_ADDED announces a series count.
+  const [seriesProgress, setSeriesProgress] = useState<
+    { loaded: number; total: number } | undefined
+  >();
 
   const hasPanels = useCallback(
     (side): boolean => !!panelService.getPanels(side).length,
@@ -162,6 +167,54 @@ function ViewerLayout({
       unsubscribe();
     };
   }, [panelService, hasPanels]);
+
+  // Real series-metadata progress for the loading overlay (.71). Listeners
+  // detach once the overlay hides.
+  useEffect(() => {
+    if (!showLoadingIndicator) {
+      return;
+    }
+
+    const countedStudyUIDs = new Set();
+    const loadedSeriesUIDs = new Set();
+    let totalSeries = 0;
+
+    const updateProgress = () => {
+      if (totalSeries > 0) {
+        setSeriesProgress({ loaded: loadedSeriesUIDs.size, total: totalSeries });
+      }
+    };
+
+    const seriesAddedSubscription = DicomMetadataStore.subscribe(
+      DicomMetadataStore.EVENTS.SERIES_ADDED,
+      ({ StudyInstanceUID, seriesSummaryMetadata }) => {
+        // Dedupe by study in case SERIES_ADDED re-fires for the same study.
+        if (countedStudyUIDs.has(StudyInstanceUID)) {
+          return;
+        }
+        countedStudyUIDs.add(StudyInstanceUID);
+        totalSeries += seriesSummaryMetadata.length;
+        updateProgress();
+      }
+    );
+
+    const instancesAddedSubscription = DicomMetadataStore.subscribe(
+      DicomMetadataStore.EVENTS.INSTANCES_ADDED,
+      ({ StudyInstanceUID, SeriesInstanceUID }) => {
+        // Only count series belonging to studies included in the denominator.
+        if (!countedStudyUIDs.has(StudyInstanceUID)) {
+          return;
+        }
+        loadedSeriesUIDs.add(SeriesInstanceUID);
+        updateProgress();
+      }
+    );
+
+    return () => {
+      seriesAddedSubscription.unsubscribe();
+      instancesAddedSubscription.unsubscribe();
+    };
+  }, [showLoadingIndicator]);
 
   useEffect(() => {
     // Standalone viewers (empty window.name) must not take part in family window bookkeeping:
@@ -451,7 +504,28 @@ function ViewerLayout({
         style={{ height: 'calc(100vh - 52px)' }}
       >
         <React.Fragment>
-          {showLoadingIndicator && <LoadingIndicatorProgress className="h-full w-full bg-background" />}
+          {showLoadingIndicator && (
+            <LoadingIndicatorProgress
+              className="h-full w-full bg-background"
+              progress={
+                // Until the first series completes there is no measurable
+                // fraction — keep it undefined so the bar animates its
+                // infinite sweep instead of sitting frozen at 0%.
+                seriesProgress && seriesProgress.loaded > 0
+                  ? Math.min(99, Math.floor((seriesProgress.loaded / seriesProgress.total) * 100))
+                  : undefined
+              }
+              textBlock={
+                seriesProgress ? (
+                  <div className="text-sm text-white">
+                    Loading series metadata (
+                    {Math.min(seriesProgress.loaded + 1, seriesProgress.total)} of{' '}
+                    {seriesProgress.total})
+                  </div>
+                ) : undefined
+              }
+            />
+          )}
           <ResizablePanelGroup {...resizablePanelGroupProps}>
             {/* LEFT SIDEPANELS */}
             {hasLeftPanels ? (
