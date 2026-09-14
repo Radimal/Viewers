@@ -237,6 +237,7 @@ describe('_initPostHogUnsafe wiring', () => {
     expect(event[1]).toEqual({
       build_commit: 'abc123def',
       build_time: null,
+      ms_since_navigation_start: expect.any(Number),
       unrelated: 1,
     });
   });
@@ -275,6 +276,58 @@ describe('_initPostHogUnsafe wiring', () => {
     expect(
       captured.filter(([, props]) => props?.build_commit !== 'abc123def').map(c => c[0])
     ).toEqual([]);
+  });
+
+  // Same shape and same reason as the build-commit case above: applied centrally
+  // so a new event cannot be added without it, therefore pinned centrally too.
+  // A per-event assertion would go green for every event nobody remembered to
+  // write one for, which is exactly how the property came to be missing from
+  // viewer_loaded and display_set_added while first_image_rendered had it.
+  it('stamps ms_since_navigation_start on EVERY captured event', async () => {
+    const { mod, calls } = await initFresh({ commitHash: 'abc123def' });
+    setVisibility('hidden');
+    mod.capturePostHogEvent('some_extension_event');
+
+    const captured = calls.filter(c => c[0] !== 'register' && c[0] !== 'unregister');
+    expect(captured.map(c => c[0]).sort()).toEqual([
+      'some_extension_event',
+      'viewer_hidden',
+      'viewer_loaded',
+    ]);
+    expect(
+      captured
+        .filter(([, props]) => typeof props?.ms_since_navigation_start !== 'number')
+        .map(c => c[0])
+    ).toEqual([]);
+  });
+
+  // The leg arithmetic this property exists for is a subtraction between two
+  // events, so it has to be the same clock on both ends. Date.now() is the wall
+  // clock and carries the reader's machine-clock skew; performance.now() is
+  // monotonic from navigation start and does not. A Date.now()-based
+  // implementation passes the presence check above and fails here.
+  it('measures ms_since_navigation_start on the monotonic clock, not the wall clock', async () => {
+    const realNow = performance.now.bind(performance);
+    performance.now = () => 8_250;
+    try {
+      const { mod, calls } = await initFresh({ commitHash: 'abc123def' });
+      mod.capturePostHogEvent('some_extension_event');
+      const event = calls.find(c => c[0] === 'some_extension_event');
+      expect(event[1].ms_since_navigation_start).toBe(8_250);
+    } finally {
+      performance.now = realNow;
+    }
+  });
+
+  // viewer_hidden reports the instant the tab was hidden, which is earlier than
+  // the instant the event was captured whenever PostHog was not yet ready. If
+  // the central stamp overwrote it, a tab hidden before init would report the
+  // init time and the boot-hidden population would silently lose its timing.
+  it('lets a caller override ms_since_navigation_start rather than clobbering it', async () => {
+    const { mod, calls } = await initFresh({ commitHash: 'abc123def' });
+    mod.capturePostHogEvent('some_extension_event', { ms_since_navigation_start: 42 });
+    const event = calls.find(c => c[0] === 'some_extension_event');
+    expect(event[1].ms_since_navigation_start).toBe(42);
   });
 
   // webpack.base.js reads commit.txt without trimming, unlike webpack.pwa.js,
