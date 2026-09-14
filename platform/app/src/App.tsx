@@ -38,6 +38,11 @@ import OpenIdConnectRoutes from './utils/OpenIdConnectRoutes';
 import { initPostHog, posthog } from './utils/posthog';
 import { startPostHogEventBridge, stopPostHogEventBridge } from './utils/posthogEventBridge';
 import cacheManager from './utils/cacheManager';
+import UpdateBanner from './components/UpdateBanner';
+import {
+  startFrameDownloadTelemetry,
+  stopFrameDownloadTelemetry,
+} from './utils/frameDownloadTelemetry';
 import './App.css';
 
 let commandsManager: CommandsManager,
@@ -74,19 +79,26 @@ function App({
 }) {
   const [init, setInit] = useState(null);
   useEffect(() => {
+    // Before initPostHog: posthog-js registers its own `pagehide` handler during
+    // init(), and same-type listeners fire in registration order. Registering
+    // ours second would queue the final flush *after* posthog had already
+    // drained its request queue, and that event would never be sent.
+    startFrameDownloadTelemetry();
     initPostHog(config?.posthog);
     const run = async () => {
       appInit(config, defaultExtensions, defaultModes).then(setInit).catch(console.error);
     };
 
     run();
-    // Auto-update polling disabled: force-reload on version change disrupted
-    // in-progress measurements. Users pick up new versions on next refresh.
-    // cacheManager.startVersionChecking();
+    // Update polling is non-disruptive: on version change it only surfaces the
+    // UpdateBanner (never force-reloads), so in-progress measurements are safe.
+    // Refresh happens only when the user clicks the banner.
+    cacheManager.startVersionChecking();
     // Make cache manager globally accessible for debugging
     if (typeof window !== 'undefined') {
       window.cacheManager = cacheManager;
     }
+    return () => stopFrameDownloadTelemetry();
   }, []);
 
   useEffect(() => {
@@ -191,6 +203,7 @@ function App({
 
   return (
     <CombinedProviders>
+      <UpdateBanner />
       <BrowserRouter
         basename={routerBasename}
         future={routerFutureFlags}
