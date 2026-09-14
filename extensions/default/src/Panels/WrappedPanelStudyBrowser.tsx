@@ -18,14 +18,20 @@ function WrappedPanelStudyBrowser() {
   // TODO: This should be made available a different way; route should have
   // already determined our datasource
   const [dataSource] = extensionManager.getActiveDataSource();
-  const _getStudiesForPatientByMRN = getStudiesForPatientByMRN.bind(null, dataSource);
+  // Stable identities: these are effect dependencies in the panel (e.g. the
+  // study/prior-study QIDO fetch), so a fresh .bind() per render re-fires
+  // those fetches on every parent re-render during study load.
+  const _getStudiesForPatientByMRN = useCallback(
+    getStudiesForPatientByMRN.bind(null, dataSource),
+    [dataSource]
+  );
   const _getImageSrcFromImageId = useCallback(
     _createGetImageSrcFromImageIdFn(extensionManager),
     []
   );
-  const _requestDisplaySetCreationForStudy = requestDisplaySetCreationForStudy.bind(
-    null,
-    dataSource
+  const _requestDisplaySetCreationForStudy = useCallback(
+    requestDisplaySetCreationForStudy.bind(null, dataSource),
+    [dataSource]
   );
 
   return (
