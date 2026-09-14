@@ -83,6 +83,49 @@ deploys, and serves studies correctly.
    (config injected), load CR/DX/CT/US/PDF studies, confirm assets load with
    3.13 hashed filenames, hard-refresh an old session (SW unregistration).
 
+## Phase 5 sequencing (agreed 2026-09-14)
+
+1. Verification now: automated layer locally (all-workspace jest, eslint,
+   Playwright with --ignore-snapshots) + remaining staging matrix rows.
+2. Reconcile the 3.10 stream (diff v3.10.0.71.radimal tip vs what's ported;
+   .71 IS the live source — the .73 branches are stale for multi-window).
+   Known items: first_image_rendered/layout_rendered telemetry,
+   all-images-rendered telemetry, update banner, MONOCHROME1 thumbnail fix
+   (already merged), orthancUtils.reporterOriginFor refactor (dedupe with
+   radimalEndpoints — keep ONE), ethos buckets + sha- ECR tags in the
+   workflow, thumbnails-dicomweb-rendered revert history, whatever lands
+   after this note.
+3. Canary deployment (plan below) for reporter-heavy verification against
+   prod data.
+4. Cutover per the checklist below, then destroy the canary.
+
+## Cutover checklist (execute in order, each reversible)
+
+1. Freeze the 3.10 branch (agree with the team: no more 3.10 feature work
+   after final reconciliation diff).
+2. App config: add 3.13-only keys via a per-deployment template variable
+   (NOT the shared app-config.js.tmpl until every cluster is 3.13):
+   measurementTrackingMode: 'simplified' (decided Phase 3). Note
+   autoTrimCollimationBorders defaults ON (config key only needed to
+   disable).
+3. Workflow: on the final v3.13.x release branch, re-add the prod buckets
+   to the S3 sync (prod-1, veg-prod-1 — and check whether ethos-stage-1/
+   ethos-prod-1 apply to 3.13 clusters), and mirror the 3.10 workflow's
+   later additions (sha-<commit> ECR tag, *.map exclusion — already
+   excluded on 3.13? verify). Push → CI builds + syncs.
+4. Terraform: flip ohif_version in prod tfvars one cluster at a time
+   (veg-prod after prod-1 soak, or per team preference). Plan must show
+   ONLY the ohif_http image change per cluster.
+5. Invalidate index.html on the prod CloudFront distributions.
+6. Soak + watch PostHog (first_image_rendered baseline vs 3.10 — the
+   speed-instrumentation dashboard) and error rates.
+7. Rollback lever (keep warm until soak ends): revert ohif_version in
+   tfvars + apply, re-run the newest v3.10.* branch workflow to restore
+   3.10 unhashed assets in prod buckets.
+8. After soak: destroy the canary deployment, archive the 3.10 branches
+   (keep the last one + its ECR image), move this runbook's content into
+   the repo docs if desired.
+
 ## Production rollout (when the port is done — Phase 5)
 
 Preconditions: all five phases re-ported, regression checklist green on
