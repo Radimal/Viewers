@@ -247,6 +247,49 @@ This batch:
       `platform/core/src/utils/combineFrameInstance.test.js`) fails against
       3.13.3 — upstream still mutates the shared instance object. OpenJPEG
       multi-tile remains to be tested on stock 3.13.
+## Phase 5 canary (verified feasible 2026-09-14)
+
+Run 3.13 against PROD studies at its own URL while normal users stay on
+3.10 — verifies reporter-heavy flows (DNR, View Report, Reload Study,
+duplicate-study handling) against real cases, which staging cannot
+(reporter-staging lacks the case data; staging Reload's /cdn/invalidate
+500s are reporter-staging-side).
+
+Design — an OHIF-only cluster deployment on the prod stack (the blue/green
+pattern minus everything but ohif):
+- New `orthanc-cluster/deployments/orthanc-canary-prod-1.tfvars` modeled on
+  orthanc-blue-prod-1.tfvars with: env=canary-prod-1, subenv=canary,
+  stack_name=prod-1, ohif_version="3.13.3", enable_rds=false, enabled_services
+  ohif-only (orthanc/dicom/egress/prometheus/flask all false), canary
+  fqdn_shortnames (viewer-canary/view-canary/...), a free network_cidr
+  (10.10.80.0/20 — prod uses 10.10.0.0/20 and 10.10.64.0/20),
+  use_cloudfront_from_ohif=true, ohif_stack_orthanc_fqdn=
+  orthanc.prod-1.radimal.ai, syslog_log_group_names=[].
+  Plus orthanc-canary-prod-1.backend.tfvars (key = "orthanc-canary-prod-1").
+- Test URL: https://viewer-canary.prod-1.radimal.ai/?StudyInstanceUIDs=...
+  Page + assets served from the canary nginx (3.13 image carries its full
+  dist — NO prod bucket sync, no CI workflow change); studies read from the
+  prod CloudFront dicom-web (its CORS policy is '*' — verified); reporter
+  resolves to PROD (hostname ends .radimal.ai, not .stage-1 — verified
+  against reporterOriginFor/radimalEndpoints); reporter CORS is wildcard
+  (CORS(app) — verified). PostHog: filter canary traffic by origin.
+- Zero prod-touch: prod distribution, bucket, and ECS unchanged. The canary
+  only exercises prod READ paths, plus two deliberate write-ish flows to
+  test knowingly: Reload Study invalidates the prod CDN's cached frames for
+  that one study (harmless, re-caches), and Download Study downloads via the
+  prod reporter.
+- Not covered by the canary: vet-app multi-window flows (prod vet opens
+  view.radimal.ai) — verified on staging instead. Cutover later = flip
+  ohif_version in the real prod tfvars per the runbook, then destroy the
+  canary deployment.
+- Expect the terraform plan to show ALB + ACM + route53 + one ECS service
+  for the new cluster and nothing in any existing deployment's state (each
+  deployment has its own state key).
+
+Deferred to canary/cumulative testing: staging Reload Study 500 (reporter-
+staging /cdn/invalidate), staging View Report failures (reporter-staging
+case data), the CT/MR patient-position stack-order check, iPad pass.
+
 - [ ] Phase 5 — full verification + prod cutover. Includes reconciling the
       parallel 3.10 work stream started 2026-08 (viewer speed updates:
       first_image_rendered metric, combineFrameInstance memoization,
