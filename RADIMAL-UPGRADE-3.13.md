@@ -205,7 +205,40 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
         LayoutSelector rewritten with no extension point); NotificationProvider
         autoClose (no caller on branch yet); ErrorBoundary prod toast (try
         showErrorDetails: 'dev' first).
-- [ ] Phase 4 — OpenJPEG multi-tile patch + combineFrameInstance. Confirmed
+## Phase 3 staging checklist (focused pass — run once this batch deploys)
+
+Wave 1 (already on staging): hotkeys w/p/m/o/q; vet overlay fields incl.
+sex/neutered/acq time; 4-way orientation markers; rotate-left button;
+patient-scoped tabs still populate (MRN includefield); PostHog identify
+after login.
+
+This batch:
+- Multi-window: open viewer from vet app → heartbeat (vet app sees
+  geometry), FADE dims viewer, CLOSE closes all windows; Duplicate
+  Window → navigate study in primary → duplicates follow; Open Saved
+  Windows after closing.
+- Reporter: PDF icon appears on study rows only for studies with cases;
+  click opens consultation PDF; View Report in study + thumbnail ⋯
+  menus; "no case" toast on a study without one.
+- Header: Reload Study (CDN invalidation → 30s → hard reload);
+  Download Study from the header slot (with and without ?studyId).
+- DNR: fully-DNR study still hangs a protocol; partially-DNR study
+  hides those series everywhere (browser, navigation, prefetch).
+- Duplicate study: known duplicate-UID URL → auto-download + persistent
+  notification (stays open — autoClose fix).
+- Auto slice sync: 2x2 CT/MR layout scrolls in lockstep per anatomy
+  group; manual toolbar toggle still works as override.
+- X-ray: CR/DX without WindowCenter/Width renders readable (auto-VOI);
+  collimated shot auto-crops with rotation/flip surviving; user zoom
+  suppresses re-trim on remount.
+- Preferences: mouse-button assignment applies live and survives
+  reload; zoom speed changes zoom step in both a stack and MPR
+  viewport.
+
+- [ ] Phase 4 — fold into the same staging pass (no code expected):
+      load a multi-tile JPEG2000 study on stock 3.13 codecs; load an NM
+      multiframe + cs3d spatial sync to confirm combineFrameInstance is
+      obsolete. OpenJPEG multi-tile patch + combineFrameInstance. Confirmed
       still needed: the fork's combineFrameInstance regression test (untracked
       `platform/core/src/utils/combineFrameInstance.test.js`) fails against
       3.13.3 — upstream still mutates the shared instance object. OpenJPEG
