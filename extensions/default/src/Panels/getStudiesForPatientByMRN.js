@@ -13,6 +13,10 @@ async function getStudiesForPatientByMRN(dataSource, qidoForStudyUID) {
   return dataSource.query.studies.search({
     patientId: mrn,
     disableWildcard: true,
+    // Cap the prior-study list (T6). Without this the search inherits the
+    // qido.js default of 101; QIDO has no server-side sort, so which 25
+    // come back for a >25-study patient is up to the server.
+    limit: 25,
     // Radimal: patient-scoped study-browser tabs match on
     // patientName / institution / birthDate — these fields must come
     // back on prior studies too, not just the primary study's query.
