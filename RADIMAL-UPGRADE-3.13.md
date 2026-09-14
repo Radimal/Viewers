@@ -104,14 +104,26 @@ deploys, and serves studies correctly.
 
 1. Verification now: automated layer locally (all-workspace jest, eslint,
    Playwright with --ignore-snapshots) + remaining staging matrix rows.
-2. Reconcile the 3.10 stream (diff v3.10.0.71.radimal tip vs what's ported;
-   .71 IS the live source — the .73 branches are stale for multi-window).
-   Known items: first_image_rendered/layout_rendered telemetry,
-   all-images-rendered telemetry, update banner, MONOCHROME1 thumbnail fix
-   (already merged), orthancUtils.reporterOriginFor refactor (dedupe with
-   radimalEndpoints — keep ONE), ethos buckets + sha- ECR tags in the
-   workflow, thumbnails-dicomweb-rendered revert history, whatever lands
-   after this note.
+2. Reconcile the 3.10 stream — DONE 2026-09-14 against
+   origin/v3.10.0.71.radimal tip 5d9d8341a2 (141 commits triaged by final
+   file state). Ported: full speed-telemetry stack (posthog.ts rewrite,
+   initViewTiming first_image/layout_rendered, frameDownloadTelemetry,
+   log.timeStartedAt, UpdateBanner + non-disruptive version polling);
+   orthancUtils wholesale (reporterOriginFor, download studyId validation,
+   renderedThumbnailUrlFor) with radimalEndpoints retired; rendered-path
+   thumbnails (subsumes MONOCHROME1 fix) + tracking-package jest config;
+   CT/MR date-time display-set ordering (total-order comparator, resolves
+   the sortingCriteria shape caveat); .71 autozoom re-base + manual-delta
+   system with CR/DX reveal gate (two documented 3.13 adaptations);
+   ViewerLayout series-metadata progress; useStudyInfo requested-UID
+   semantics + tests; T6 25-study prior cap; sha- image tags.
+   Not ported, with reasons: live study-polling + T5 (backed out on .71
+   itself); T4 (absorbed upstream via fetchedStudiesRef); HotkeyField
+   unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
+   load-percent overlay (post-cutover polish); build tooling (mise/babel/
+   node-version — 3.13 uses pnpm/rspack); ethos buckets (cutover
+   checklist). ANY 3.10 COMMIT LANDING AFTER 5d9d8341a2 NEEDS A FRESH
+   DELTA CHECK BEFORE CUTOVER (git log 5d9d8341a2..origin/v3.10.0.71.radimal).
 3. Canary deployment (plan below) for reporter-heavy verification against
    prod data.
 4. Cutover per the checklist below, then destroy the canary.
