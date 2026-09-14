@@ -199,7 +199,13 @@ describe('hidden_during_load on the emitted event', () => {
       }
     });
     delete window.__capturePostHogEvent;
-    return captured;
+    // Every case in this block is about first_image_rendered, and several assert
+    // on the array's LENGTH to pin "once per study, not once per viewport". The
+    // same paint now also emits layout_rendered, so returning both would
+    // make those length assertions count two different events and pass or fail
+    // for the wrong reason. Filtering here keeps them exact; layout_rendered
+    // has its own describe block below with its own harness.
+    return captured.filter(([name]) => name === 'first_image_rendered');
   };
 
   it('flags a load interrupted by a hidden stretch, even though the paint was visible', async () => {
@@ -270,6 +276,11 @@ describe('hidden_during_load on the emitted event', () => {
         },
       });
       expect(captured[0][1].ms).toBe(3_250);
+      // Asserted as an ABSENCE, not as a value. capturePostHogEvent stamps it on
+      // every event, which is downstream of the bridge this test spies on, so it
+      // never reaches these props. Its value is pinned for the whole event
+      // surface in platform/app/src/utils/posthog.test.js.
+      expect(captured[0][1].ms_since_navigation_start).toBeUndefined();
     } finally {
       performance.now = real;
     }
@@ -309,5 +320,286 @@ describe('hidden_during_load on the emitted event', () => {
     });
     expect(captured).toHaveLength(1);
     expect(captured[0][1].switch_type).toBe('reload');
+  });
+});
+
+// first_image_rendered answers "when did something appear". Nothing answered
+// "when was the layout finished", which is the question a reader actually asks
+// and the one frame_download_stats cannot answer: its 15s flush interval is
+// several times larger than the value being measured.
+describe('layout_rendered', () => {
+  const render = async ({ viewports = 1, secondStudy = false } = {}) => {
+    const captured = [];
+    await jest.isolateModulesAsync(async () => {
+      const { log, Enums } = await import('@ohif/core');
+      Enums.TimingEnum = {
+        STUDY_TO_FIRST_IMAGE: 'studyToFirstImage',
+        DISPLAY_SETS_TO_FIRST_IMAGE: 'displaySetsToFirstImage',
+        DISPLAY_SETS_TO_ALL_IMAGES: 'displaySetsToAllImages',
+        SCRIPT_TO_VIEW: 'scriptToView',
+      };
+      log.timingKeys = { studyToFirstImage: true };
+      // Real semantics: timeEnd clears timingKeys but leaves timeStartedAt, which
+      // is precisely what captureLayoutRendered relies on to read the start
+      // instant after the first-image timer has already been stopped.
+      log.timeEnd = key => {
+        log.timingKeys[key] = false;
+      };
+      log.timeStartedAt = { studyToFirstImage: performance.now() };
+
+      const initViewTiming = (await import('./initViewTiming')).default;
+      window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
+      setVisibility('visible');
+      await tick();
+
+      // Every viewport of a study is enabled before any of them paints, so all
+      // listeners attach while the timing keys are still true.
+      const elements = Array.from({ length: viewports }, () => document.createElement('div'));
+      elements.forEach(element => initViewTiming({ element }));
+      elements.forEach(element =>
+        element.dispatchEvent(
+          new CustomEvent('IMAGE_RENDERED', { detail: { viewportStatus: 'render', element } })
+        )
+      );
+
+      if (secondStudy) {
+        log.timingKeys = { studyToFirstImage: true };
+        log.timeStartedAt = { studyToFirstImage: performance.now() };
+        const second = document.createElement('div');
+        initViewTiming({ element: second });
+        second.dispatchEvent(
+          new CustomEvent('IMAGE_RENDERED', {
+            detail: { viewportStatus: 'render', element: second },
+          })
+        );
+      }
+    });
+    delete window.__capturePostHogEvent;
+    return captured;
+  };
+
+  it('fires once, after the last viewport of the study has painted', async () => {
+    const captured = await render({ viewports: 3 });
+    const all = captured.filter(([name]) => name === 'layout_rendered');
+    expect(all).toHaveLength(1);
+    // Ordering is the assertion: firing on the FIRST paint instead of the last
+    // would still produce exactly one event, and would still look correct.
+    expect(captured.map(([name]) => name)).toEqual(['first_image_rendered', 'layout_rendered']);
+  });
+
+  it('reports the viewport count, which viewportsWaiting cannot supply', async () => {
+    // viewportsWaiting is decremented to zero to trigger this event, so reading
+    // it here yields 0 for every layout. Asserted at 3 rather than "truthy": a
+    // regression to viewportsWaiting gives 0 and a regression to a hardcoded 1
+    // gives 1, and both must fail.
+    const [[, props]] = (await render({ viewports: 3 })).filter(
+      ([name]) => name === 'layout_rendered'
+    );
+    expect(props.viewports).toBe(3);
+  });
+
+  it('reports switch_type reload for the first study, not in_app', async () => {
+    // hasCapturedFirstImageThisPageLoad is already true by the time this event
+    // fires, so reading that latch directly labels the very first study of a
+    // page load 'in_app'. The latched-per-study copy is what prevents it.
+    const [[, props]] = (await render({ viewports: 2 })).filter(
+      ([name]) => name === 'layout_rendered'
+    );
+    expect(props.switch_type).toBe('reload');
+  });
+
+  it('reports in_app for a second study in the same page load', async () => {
+    const all = (await render({ secondStudy: true })).filter(
+      ([name]) => name === 'layout_rendered'
+    );
+    expect(all.map(([, props]) => props.switch_type)).toEqual(['reload', 'in_app']);
+    // Pins the reset branch as well: without it the second study carries the
+    // first study's registrations forward and reports 2.
+    expect(all.map(([, props]) => props.viewports)).toEqual([1, 1]);
+  });
+
+  it('does not fire while a viewport is still outstanding', async () => {
+    // A study whose second viewport never paints is the stuck-viewer case. The
+    // absence of this event is the signal; manufacturing one would erase it.
+    const captured = [];
+    await jest.isolateModulesAsync(async () => {
+      const { log, Enums } = await import('@ohif/core');
+      Enums.TimingEnum = {
+        STUDY_TO_FIRST_IMAGE: 'studyToFirstImage',
+        DISPLAY_SETS_TO_FIRST_IMAGE: 'displaySetsToFirstImage',
+        DISPLAY_SETS_TO_ALL_IMAGES: 'displaySetsToAllImages',
+        SCRIPT_TO_VIEW: 'scriptToView',
+      };
+      log.timingKeys = { studyToFirstImage: true };
+      log.timeEnd = key => {
+        log.timingKeys[key] = false;
+      };
+      log.timeStartedAt = { studyToFirstImage: performance.now() };
+      const initViewTiming = (await import('./initViewTiming')).default;
+      window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
+      setVisibility('visible');
+      await tick();
+
+      const painted = document.createElement('div');
+      const stuck = document.createElement('div');
+      initViewTiming({ element: painted });
+      initViewTiming({ element: stuck });
+      painted.dispatchEvent(
+        new CustomEvent('IMAGE_RENDERED', {
+          detail: { viewportStatus: 'render', element: painted },
+        })
+      );
+    });
+    delete window.__capturePostHogEvent;
+    expect(captured.map(([name]) => name)).toEqual(['first_image_rendered']);
+  });
+
+  it('flags a study whose load overlapped a hidden tab', async () => {
+    const captured = [];
+    await jest.isolateModulesAsync(async () => {
+      const { log, Enums } = await import('@ohif/core');
+      Enums.TimingEnum = {
+        STUDY_TO_FIRST_IMAGE: 'studyToFirstImage',
+        DISPLAY_SETS_TO_FIRST_IMAGE: 'displaySetsToFirstImage',
+        DISPLAY_SETS_TO_ALL_IMAGES: 'displaySetsToAllImages',
+        SCRIPT_TO_VIEW: 'scriptToView',
+      };
+      log.timingKeys = { studyToFirstImage: true };
+      log.timeEnd = key => {
+        log.timingKeys[key] = false;
+      };
+      const initViewTiming = (await import('./initViewTiming')).default;
+      window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
+      setVisibility('visible');
+      await tick();
+      log.timeStartedAt = { studyToFirstImage: performance.now() };
+
+      const element = document.createElement('div');
+      initViewTiming({ element });
+      // Backgrounded mid-load and refocused before the paint: the paint itself
+      // is visible, so a "hidden right now" check would call this clean.
+      setVisibility('hidden');
+      setVisibility('visible');
+      await tick();
+      element.dispatchEvent(
+        new CustomEvent('IMAGE_RENDERED', { detail: { viewportStatus: 'render', element } })
+      );
+    });
+    delete window.__capturePostHogEvent;
+    const [[, props]] = captured.filter(([name]) => name === 'layout_rendered');
+    expect(props.hidden_during_load).toBe(true);
+  });
+
+  it('counts an element enabled twice as a single viewport', async () => {
+    // CornerstoneViewportService re-enables an already-enabled element, which
+    // fires ELEMENT_ENABLED again. addEventListener dedupes the repeat listener,
+    // so an un-deduped second registration adds a count nothing decrements and
+    // the event never fires at all -- indistinguishable from a stuck viewport.
+    const captured = [];
+    await jest.isolateModulesAsync(async () => {
+      const { log, Enums } = await import('@ohif/core');
+      Enums.TimingEnum = {
+        STUDY_TO_FIRST_IMAGE: 'studyToFirstImage',
+        DISPLAY_SETS_TO_FIRST_IMAGE: 'displaySetsToFirstImage',
+        DISPLAY_SETS_TO_ALL_IMAGES: 'displaySetsToAllImages',
+        SCRIPT_TO_VIEW: 'scriptToView',
+      };
+      log.timeEnd = key => {
+        log.timingKeys[key] = false;
+      };
+      log.timingKeys = { studyToFirstImage: true };
+      log.timeStartedAt = { studyToFirstImage: performance.now() };
+      const initViewTiming = (await import('./initViewTiming')).default;
+      window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
+      setVisibility('visible');
+      await tick();
+
+      const element = document.createElement('div');
+      initViewTiming({ element });
+      initViewTiming({ element });
+      element.dispatchEvent(
+        new CustomEvent('IMAGE_RENDERED', { detail: { viewportStatus: 'render', element } })
+      );
+    });
+    delete window.__capturePostHogEvent;
+    const all = captured.filter(([name]) => name === 'layout_rendered');
+    expect(all).toHaveLength(1);
+    expect(all[0][1].viewports).toBe(1);
+  });
+
+  it('counts the same element again once it has painted and a new study starts', async () => {
+    // The dedupe must not be permanent. A viewport element outlives the study
+    // shown in it, so if it were never forgotten the next study reusing that
+    // element would register nothing, attach no listener, and emit no event.
+    const captured = [];
+    await jest.isolateModulesAsync(async () => {
+      const { log, Enums } = await import('@ohif/core');
+      Enums.TimingEnum = {
+        STUDY_TO_FIRST_IMAGE: 'studyToFirstImage',
+        DISPLAY_SETS_TO_FIRST_IMAGE: 'displaySetsToFirstImage',
+        DISPLAY_SETS_TO_ALL_IMAGES: 'displaySetsToAllImages',
+        SCRIPT_TO_VIEW: 'scriptToView',
+      };
+      log.timeEnd = key => {
+        log.timingKeys[key] = false;
+      };
+      const initViewTiming = (await import('./initViewTiming')).default;
+      window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
+      setVisibility('visible');
+      await tick();
+
+      const element = document.createElement('div');
+      const paint = () =>
+        element.dispatchEvent(
+          new CustomEvent('IMAGE_RENDERED', { detail: { viewportStatus: 'render', element } })
+        );
+      log.timingKeys = { studyToFirstImage: true };
+      log.timeStartedAt = { studyToFirstImage: performance.now() };
+      initViewTiming({ element });
+      paint();
+
+      log.timingKeys = { studyToFirstImage: true };
+      log.timeStartedAt = { studyToFirstImage: performance.now() };
+      initViewTiming({ element });
+      paint();
+    });
+    delete window.__capturePostHogEvent;
+    const all = captured.filter(([name]) => name === 'layout_rendered');
+    expect(all).toHaveLength(2);
+    expect(all.map(([, props]) => props.viewports)).toEqual([1, 1]);
+  });
+
+  it('does not fire for a study with no recorded start instant', async () => {
+    // timeStartedAt is what captureLayoutRendered reads after timeEnd has
+    // cleared timingKeys. With no start instant there is no window to evaluate
+    // hidden_during_load over, so the event must be suppressed rather than
+    // emitted with a flag that defaulted to false.
+    const captured = [];
+    await jest.isolateModulesAsync(async () => {
+      const { log, Enums } = await import('@ohif/core');
+      Enums.TimingEnum = {
+        STUDY_TO_FIRST_IMAGE: 'studyToFirstImage',
+        DISPLAY_SETS_TO_FIRST_IMAGE: 'displaySetsToFirstImage',
+        DISPLAY_SETS_TO_ALL_IMAGES: 'displaySetsToAllImages',
+        SCRIPT_TO_VIEW: 'scriptToView',
+      };
+      log.timeEnd = key => {
+        log.timingKeys[key] = false;
+      };
+      log.timingKeys = { displaySetsToAllImages: true };
+      log.timeStartedAt = {};
+      const initViewTiming = (await import('./initViewTiming')).default;
+      window.__capturePostHogEvent = (name, props) => captured.push([name, props]);
+      setVisibility('visible');
+      await tick();
+
+      const element = document.createElement('div');
+      initViewTiming({ element });
+      element.dispatchEvent(
+        new CustomEvent('IMAGE_RENDERED', { detail: { viewportStatus: 'render', element } })
+      );
+    });
+    delete window.__capturePostHogEvent;
+    expect(captured.filter(([name]) => name === 'layout_rendered')).toHaveLength(0);
   });
 });

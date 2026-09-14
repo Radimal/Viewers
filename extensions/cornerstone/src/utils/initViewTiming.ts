@@ -8,6 +8,25 @@ const IMAGE_TIMING_KEYS = [];
 // is what distinguishes switch_type 'in_app' from 'reload'.
 let hasCapturedFirstImageThisPageLoad = false;
 
+// The switch_type reported for THIS study, latched at first paint. all_images
+// fires after hasCapturedFirstImageThisPageLoad has already flipped, so reading
+// that latch again there would label every study 'in_app', including the first.
+let switchTypeThisStudy: 'in_app' | 'reload' = 'reload';
+
+// How many viewports this study REGISTERED; it never decrements. viewportsWaiting
+// counts DOWN to zero, so it is always 0 at the point layout_rendered fires
+// and cannot be the denominator. Reset when a fresh batch starts registering.
+let viewportsThisStudy = 0;
+
+// An element can be enabled more than once while the timers are still running:
+// CornerstoneViewportService re-enables an already-enabled element, and says so
+// in its own comment. addEventListener dedupes the repeat, because the handler is
+// a single module-level function, so a second registration would add a count that
+// nothing ever decrements and viewportsWaiting would never reach zero -- which
+// reads as a stuck viewport rather than as the double-count it is. Count each
+// element once, and forget it when it paints so a later re-enable counts again.
+const registeredElements = new WeakSet<object>();
+
 // A hidden tab suspends requestAnimationFrame, so IMAGE_RENDERED can fire
 // minutes — even hours — after the study was actually delivered, while
 // performance.now() keeps counting. Those samples measure when the clinician
@@ -82,14 +101,25 @@ export default function initViewTiming({ element }) {
     IMAGE_TIMING_KEYS.push(
       TimingEnum.DISPLAY_SETS_TO_ALL_IMAGES,
       TimingEnum.DISPLAY_SETS_TO_FIRST_IMAGE,
-      TimingEnum.STUDY_TO_FIRST_IMAGE,
+      TimingEnum.STUDY_TO_FIRST_IMAGE
     );
   }
 
   if (!IMAGE_TIMING_KEYS.find(key => log.timingKeys[key])) {
     return;
   }
+  if (registeredElements.has(element)) {
+    return;
+  }
+  registeredElements.add(element);
+  // A zero here means the previous batch has fully drained, so this element is
+  // the first of a new one. Counting up separately keeps a denominator that
+  // survives viewportsWaiting being decremented back to zero.
+  if (!imageTiming.viewportsWaiting) {
+    viewportsThisStudy = 0;
+  }
   imageTiming.viewportsWaiting += 1;
+  viewportsThisStudy += 1;
   element.addEventListener(EVENTS.IMAGE_RENDERED, imageRenderedListener);
 }
 
@@ -104,8 +134,62 @@ function imageRenderedListener(evt) {
   log.timeEnd(TimingEnum.SCRIPT_TO_VIEW);
   imageTiming.viewportsWaiting -= 1;
   evt.detail.element.removeEventListener(EVENTS.IMAGE_RENDERED, imageRenderedListener);
+  registeredElements.delete(evt.detail.element);
   if (!imageTiming.viewportsWaiting) {
     log.timeEnd(TimingEnum.DISPLAY_SETS_TO_ALL_IMAGES);
+    captureLayoutRendered(evt);
+  }
+}
+
+/**
+ * Reports `layout_rendered` when the last enabled viewport has painted.
+ *
+ * COUNTS VIEWPORTS, NOT FRAMES — which is what the name says, and why it is not
+ * called all_images_rendered. This is "everything in the current layout is on
+ * screen", the question a reader asks when they open a case, and NOT "every
+ * image in the series is loaded so scrolling never stalls". For x-ray the two
+ * are close; for a long CT stack they are not. Answering the second needs an
+ * expected-frame denominator (`displaySet.numImageFrames`, summed across the
+ * study) and a per-frame hook, which is a larger change.
+ *
+ * `viewports` is emitted so a consumer can see the denominator rather than
+ * assume one, and so a single-viewport layout is distinguishable from a grid.
+ *
+ * Duration is deliberately NOT computed here. Both timers start inside
+ * defaultRouteInit, i.e. after app boot, which is what makes
+ * `first_image_rendered.ms` cover only a fraction of the real window.
+ * DISPLAY_SETS_TO_ALL_IMAGES starts later still, after metadata retrieval, so it
+ * is short by even more. Subtract `ms_since_navigation_start` between events
+ * instead.
+ *
+ * Does not fire when a viewport never paints, which is the same shape as
+ * `first_image_rendered` and is the signal the stuck-viewer rate is built on: a
+ * missing event is data, so this must not manufacture one.
+ */
+function captureLayoutRendered(evt) {
+  try {
+    const { TimingEnum } = Enums;
+    // timeEnd() clears timingKeys but never timeStartedAt, so the start instant
+    // is still readable here even though the timer has been stopped. Guard on
+    // the timestamp rather than on timingKeys for that reason.
+    const startedAt = log.timeStartedAt?.[TimingEnum.STUDY_TO_FIRST_IMAGE];
+    if (startedAt === undefined) {
+      return;
+    }
+    (window as any).__capturePostHogEvent?.('layout_rendered', {
+      viewports: viewportsThisStudy,
+      modality: getRenderedModality(evt),
+      cluster: window.location.host,
+      // Latched at first paint. By the time the last viewport lands,
+      // hasCapturedFirstImageThisPageLoad is already true and would read
+      // 'in_app' for every study including the first.
+      switch_type: switchTypeThisStudy,
+      // Same window as first_image_rendered's flag but a longer one, so it is
+      // strictly more likely to trip. Exclude at query time, do not drop here.
+      hidden_during_load: wasHiddenDuringWindow(startedAt),
+    });
+  } catch (e) {
+    console.warn('[PostHog] layout_rendered capture failed', e);
   }
 }
 
@@ -128,7 +212,13 @@ function captureFirstImageRendered(evt) {
     }
     const switch_type = hasCapturedFirstImageThisPageLoad ? 'in_app' : 'reload';
     hasCapturedFirstImageThisPageLoad = true;
+    switchTypeThisStudy = switch_type;
     (window as any).__capturePostHogEvent?.('first_image_rendered', {
+      // `ms` starts at defaultRouteInit, AFTER the tab opened, the bundle loaded
+      // and the app booted, so it under-reports by the whole boot. The
+      // clinician-perceived number is `ms_since_navigation_start`, which
+      // capturePostHogEvent now stamps on every event — see its header for why
+      // that clock and not page_load_started_at against the event timestamp.
       ms: Math.round(performance.now() - startedAt),
       modality: getRenderedModality(evt),
       cluster: window.location.host,
