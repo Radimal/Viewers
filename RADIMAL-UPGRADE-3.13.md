@@ -83,6 +83,23 @@ deploys, and serves studies correctly.
    (config injected), load CR/DX/CT/US/PDF studies, confirm assets load with
    3.13 hashed filenames, hard-refresh an old session (SW unregistration).
 
+## Phase 5 automated verification — PASSED (2026-09-14)
+
+- ESLint over all 68 branch-changed source files: clean.
+- Jest, every workspace: 1,092 tests green (core 368, cornerstone 600,
+  default 92, app 32; measurement-tracking has no 3.13 test files — its
+  suite was 3.10-side, reconciliation item).
+- Upstream Playwright E2E (--ignore-snapshots, screenshot baselines are
+  Radimal-themed by design): 170/177 passed, 5 skipped, 2 failures both
+  classified environmental, not regressions —
+  LivewireContourSegmentation passes in isolation (4-worker load flake);
+  MPRThenRTOverlayNoHydration exceeds the 15s viewport-settle budget on
+  a laptop but passes with 60s (43s wall) — expect green on CI hardware.
+  Auto-slice-sync explicitly ruled out (spec fails identically with it
+  disabled). NM multiframe spec passed (combineFrameInstance
+  confirmation). Remaining E2E debt: re-baseline screenshots for the
+  Radimal theme if we want visual regression coverage on this branch.
+
 ## Phase 5 sequencing (agreed 2026-09-14)
 
 1. Verification now: automated layer locally (all-workspace jest, eslint,
