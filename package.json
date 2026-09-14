@@ -8,6 +8,7 @@
   },
   "scripts": {
     "preinstall": "node preinstall.js",
+    "postinstall": "node scripts/apply-openjpeg-patch.js",
     "cm": "npx git-cz",
     "build": "node scripts/update-version.js && pnpm --filter @ohif/app run build:viewer",
     "build:dev": "node scripts/update-version.js && pnpm --filter @ohif/app run build:dev",

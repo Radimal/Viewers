@@ -39,6 +39,10 @@ ENV PATH=/usr/src/app/node_modules/.bin:$PATH
 # runs during `pnpm install` below -- before the full source is copied -- so the
 # script file must already be present or install fails with MODULE_NOT_FOUND.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc preinstall.js ./
+# scripts/ + vendor/ must exist before install: the root postinstall
+# (scripts/apply-openjpeg-patch.js) runs during the deps-only pnpm install.
+COPY scripts ./scripts
+COPY vendor ./vendor
 COPY --parents ./extensions/*/package.json ./modes/*/package.json ./platform/*/package.json ./
 # Run the install before copying the rest of the files.
 # Keep --no-frozen-lockfile here (unlike CI): .dockerignore excludes
@@ -55,6 +59,11 @@ ENV QUICK_BUILD true
 ARG APP_CONFIG=config/default.js
 ARG PUBLIC_URL=/
 ENV PUBLIC_URL=${PUBLIC_URL}
+
+# Re-apply + verify the multi-tile JPEG2000 codec patch with the full tree
+# present. postinstall already applied it best-effort; this HARD-FAILS the
+# build on codec version drift or an unpatched copy.
+RUN node scripts/apply-openjpeg-patch.js && node scripts/apply-openjpeg-patch.js --check
 
 RUN pnpm run show:config
 RUN pnpm run build
