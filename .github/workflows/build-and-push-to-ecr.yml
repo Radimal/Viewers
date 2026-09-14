@@ -50,6 +50,7 @@ jobs:
           file: Dockerfile
           tags: |
             "${{ env.ECR }}:${{ github.ref_name }}"
+            "${{ env.ECR }}:sha-${{ github.sha }}"
           push: true
           provenance: false
           cache-from: type=gha
