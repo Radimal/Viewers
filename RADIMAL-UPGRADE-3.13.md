@@ -477,3 +477,74 @@ case data), the CT/MR patient-position stack-order check, iPad pass.
       orthancUtils export manifest, and whatever else lands on v3.10.0.7x
       branches after the fork-delta inventory was taken) — diff
       v3.10.0.73.radimal..<final 3.10 tip> and re-port the delta.
+
+## Canary comprehensive test matrix (2026-09-15)
+
+All rows at https://viewer-blue.prod-1.radimal.ai unless noted. For the
+multi-window rows, the viewer must believe it is the vet-launched primary
+window: prod vet can't open the canary URL, so in the console run
+`window.name = 'viewerWindow'; location.reload()` once per tab first.
+Without it the monitor menu is hidden BY DESIGN (share-link windows must
+not manage the window family) — that is why "Duplicate Window" seems
+missing on a pasted URL.
+
+### Header / chrome
+| # | Feature | Test | Expected |
+|---|---------|------|----------|
+| 1 | Download placement | Look right of patient info | Download icon between patient info and gear; spinner while zipping; file lands |
+| 2 | Download validation | Append `&studyId=deadbeef` to URL, download | Uses derived id, console warn about malformed id |
+| 3 | Reload Study | Gear → Reload Study | Invalidation banner → reload; study reopens (prod reporter, should work unlike staging) |
+| 4 | Monitor menu gate | Pasted URL, no rename | No Duplicate/Open Saved/Close Windows in gear |
+| 5 | Monitor menu | After window.name trick | All three entries present |
+| 6 | Zoom speed pref | Preferences → zoom speed dropdown | Percent options render and persist |
+| 7 | Theme | General look | Radimal dark theme, logo, favicon |
+| 8 | Undo/Redo arrows | Draw a length measurement, click undo then redo | Measurement disappears/reappears (they are annotation undo/redo — inert until something is drawn) |
+
+### Multi-window (after window.name trick in the PRIMARY tab)
+| # | Feature | Test | Expected |
+|---|---------|------|----------|
+| 9 | Duplicate Window | Gear → Duplicate Window | New window viewerWindow-1, same study |
+| 10 | Family fade | Navigate primary to another study | All family windows fade + unfade together after load |
+| 11 | Family navigate | Primary changes study | Secondaries follow to the new study |
+| 12 | Close Windows | From primary | Secondaries close first, primary last |
+| 13 | Open Saved Windows | Duplicate, move/size it, Close Windows, reopen study, Open Saved Windows | Window reopens at saved position (popup blocker note if blocked) |
+| 14 | Departure notes | Close a secondary manually, navigate primary | No orphan errors; heartbeat cleanup within ~2s |
+
+### Persistence / viewport
+| # | Feature | Test | Expected |
+|---|---------|------|----------|
+| 15 | Rotation/flip persist | Rotate+flip, switch series, return; then reload tab | Both survive series switch AND reload |
+| 16 | Zoom/pan persist | Zoom+pan, switch series, return | Restored |
+| 17 | Auto-trim CR/DX | Open collimated CR/DX | Borders trimmed on first render, no flash of untrimmed image |
+| 18 | Trim + manual zoom | Trim, zoom in, leave series, return | Manual zoom delta preserved on top of trim |
+| 19 | Trim + rotation | Rotate a trimmed image, leave, return | Trim and rotation both correct, no drift/compounding |
+| 20 | SmartScrollbar | Scroll a large CT | Scrollbar tracks; no jumps |
+| 21 | Series nav bounds | Next/prev series at study edge | Stops at study boundary, does not cross into priors |
+
+### Study browser / data
+| # | Feature | Test | Expected |
+|---|---------|------|----------|
+| 22 | CT/MR ordering | Study with several CT/MR series | Series ordered by date+time, then number; stable across reloads |
+| 23 | Priors | Patient with priors | Tabs per study; current study renders before prior search completes (T6 defer) |
+| 24 | PDF icon | Study rows with a finished case | PDF icon on the row, opens report; absent on caseless studies |
+| 25 | Thumbnails | Rail on a big study | Canvas thumbnails (rendered path backed out); MONOCHROME1 not inverted; clicking a series that has a thumbnail starts warm |
+| 26 | Duplicate-UID URL | Open URL with same UID twice in StudyInstanceUIDs | No duplicate-study crash |
+| 27 | DNR study | Open a DNR-flagged study | DNR series handling unchanged from 3.10 |
+
+### Live study-populate (NEW — only deployment anywhere)
+| # | Feature | Test | Expected |
+|---|---------|------|----------|
+| 28 | Growth | Open a study < 24h old that is still receiving images | New instances appear in open stack without reload; slice/zoom/W-L kept; console `[LiveStudyPoll]` lines |
+| 29 | Empty viewport fill | 2x2 layout with empty tiles while study grows | New series lands in first empty tile |
+| 30 | Header count | While growing | Study browser instance count climbs |
+| 31 | Recency gate | Open a years-old study, watch console | `stopped: no recent studies to poll` |
+| 32 | Quiet stop | Leave a recent-but-finished study open ~5 min | `stopped: no growth for 30 ticks` |
+| 33 | Teardown | Open next study before the first finishes loading, repeat 5-10x | No accumulating polls (one `[LiveStudyPoll] polling...` per open study max), no freeze |
+
+### Codecs / telemetry (P4 / P1)
+| # | Feature | Test | Expected |
+|---|---------|------|----------|
+| 34 | Multi-tile J2K | Sedecal multi-tile study | Tiles decode correctly (patched OpenJPEG) |
+| 35 | NM multiframe | NM study, scroll frames | Per-frame positions correct (3.13 combineFrameInstance) |
+| 36 | PostHog | Open studies, check PostHog live events filtered to viewer-blue origin | first_image_rendered / layout_rendered with build tag; frame download stats on tab close |
+| 37 | UpdateBanner | Push any new build while a tab is open | Non-disruptive banner offering reload appears within poll interval |
