@@ -209,18 +209,6 @@ const toolbarButtons: Button[] = [
       ],
     },
   },
-  // Radimal: download the study's DICOMs from the header's secondary slot
-  {
-    id: 'downloadStudy',
-    uiType: 'ohif.toolButton',
-    props: {
-      icon: 'Download',
-      label: i18n.t('Buttons:Download Study'),
-      tooltip: i18n.t('Buttons:Download Study'),
-      commands: 'downloadStudy',
-      evaluate: 'evaluate.action',
-    },
-  },
   // Radimal: counter-clockwise rotate alongside upstream's rotate-right
   {
     id: 'rotate-left',
@@ -746,8 +734,9 @@ const toolbarButtons: Button[] = [
  * append/replace entries without rebuilding.
  */
 export const toolbarSections = {
-  // Radimal: header secondary slot (empty upstream)
-  [TOOLBAR_SECTIONS.secondary]: ['downloadStudy'],
+  // Radimal: header secondary slot back to empty — download moved to the
+  // header's right cluster next to patient info (as on 3.10)
+  [TOOLBAR_SECTIONS.secondary]: [],
   // Radimal: ImageSliceSync promoted to the primary row (manual override on
   // top of the automatic slice-sync grouping)
   [TOOLBAR_SECTIONS.primary]: [

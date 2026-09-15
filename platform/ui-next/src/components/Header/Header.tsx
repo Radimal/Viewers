@@ -29,6 +29,7 @@ interface HeaderProps {
     createLogoComponentFn?: (React: any, props: any) => ReactNode;
   };
   PatientInfo?: ReactNode;
+  onDownloadStudy?: () => Promise<void> | void;
   Secondary?: ReactNode;
   UndoRedo?: ReactNode;
 }
@@ -41,10 +42,25 @@ function Header({
   isSticky = false,
   WhiteLabeling,
   PatientInfo,
+  onDownloadStudy,
   UndoRedo,
   Secondary,
   ...props
 }: HeaderProps): ReactNode {
+  const [isDownloading, setIsDownloading] = React.useState(false);
+
+  const handleDownload = async () => {
+    if (!onDownloadStudy || isDownloading) {
+      return;
+    }
+    setIsDownloading(true);
+    try {
+      await onDownloadStudy();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const onClickReturn = () => {
     if (isReturnEnabled && onClickReturnButton) {
       onClickReturnButton();
@@ -85,6 +101,25 @@ function Header({
             <div className="border-muted mx-1.5 h-[25px] border-r"></div>
             {PatientInfo}
             <div className="border-muted mx-1.5 h-[25px] border-r"></div>
+            {/* Radimal: study download lives right of the patient info, as on 3.10 */}
+            {onDownloadStudy && (
+              <div className="mr-2 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-primary hover:bg-muted mt-2 h-full w-full"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  title={isDownloading ? 'Downloading...' : 'Download Study'}
+                >
+                  {isDownloading ? (
+                    <Icons.LoadingSpinner className="animate-spin" />
+                  ) : (
+                    <Icons.Download />
+                  )}
+                </Button>
+              </div>
+            )}
             <div className="flex-shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
