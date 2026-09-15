@@ -140,6 +140,12 @@ deploys, and serves studies correctly.
    non-teardown freeze theory during canary testing (poll volume across
    tabs is covered by the gates).
 
+   Backed out 2026-09-15: rendered-thumbnail path — 3.10 reverted it again
+   (83c7350a59: /rendered <img> skips cornerstone, thumbnail clicks land
+   cold; prod retagged to sha-5d9d8341) so the .71 port of it was removed
+   from this branch too. Re-landing needs cross-series prefetch first
+   (studyPrefetcher.displaySetsCount is 1).
+
    Not ported, with reasons: live study-polling + T5 (backed out on .71
    itself); T4 (absorbed upstream via fetchedStudiesRef); HotkeyField
    unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
