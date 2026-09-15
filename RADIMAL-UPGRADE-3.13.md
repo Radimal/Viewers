@@ -130,6 +130,16 @@ deploys, and serves studies correctly.
    radimalCaseStatus/StudyItemActions/menuOptions), reporterOrigin.ts
    ui-next lib (superseded by orthancUtils), apply-openjpeg-patch.js (ours
    from .73 is the NEWER multi-version script — .71 has the older one).
+   Re-landed 2026-09-15 (c01f818441): live study-populate — the feature
+   reverted from 3.10 in 7ac1202e52 — forward-ported WITH the revert
+   ticket's fixes: Mode.tsx deferred-teardown holder (the freeze root
+   cause; unit-tested), 24h recency gate + 30-quiet-tick self-stop,
+   visibilitychange pause. Config knob: liveStudyPollIntervalMs
+   (default 10000, <=0 disables). NOTE: 3.10 does NOT have this feature
+   live — the canary is the only deployment of it; watch for the ~30%
+   non-teardown freeze theory during canary testing (poll volume across
+   tabs is covered by the gates).
+
    Not ported, with reasons: live study-polling + T5 (backed out on .71
    itself); T4 (absorbed upstream via fetchedStudiesRef); HotkeyField
    unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
