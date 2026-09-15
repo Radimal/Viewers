@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useImageViewer } from '@ohif/ui-next';
-import { useSystem, utils } from '@ohif/core';
+import { useSystem, utils, DicomMetadataStore } from '@ohif/core';
 import { useNavigate } from 'react-router-dom';
 import { useViewportGrid, StudyBrowser, Separator } from '@ohif/ui-next';
 import { PanelStudyBrowserHeader } from './PanelStudyBrowserHeader';
@@ -44,6 +44,20 @@ function PanelStudyBrowser({
   );
   const [hasLoadedViewports, setHasLoadedViewports] = useState(false);
   const [studyDisplayList, setStudyDisplayList] = useState([]);
+
+  // The header count comes from the QIDO study query at load; live polling can
+  // add instances afterwards, so bump it to whatever the metadata store holds.
+  const refreshStudyInstanceCounts = () => {
+    setStudyDisplayList(prev =>
+      prev.map(study => {
+        const stored = DicomMetadataStore.getStudy(study.studyInstanceUid);
+        const loaded = stored?.series.reduce((sum, s) => sum + (s.instances?.length ?? 0), 0) ?? 0;
+        return loaded > (Number(study.numInstances) || 0)
+          ? { ...study, numInstances: loaded }
+          : study;
+      })
+    );
+  };
   const [displaySets, setDisplaySets] = useState([]);
   const [displaySetsLoadingState, setDisplaySetsLoadingState] = useState({});
   const [thumbnailImageSrcMap, setThumbnailImageSrcMap] = useState({});
@@ -336,6 +350,11 @@ function PanelStudyBrowser({
       }
     );
 
+    const SubscriptionLiveInstanceCounts = displaySetService.subscribe(
+      displaySetService.EVENTS.DISPLAY_SET_SERIES_METADATA_INVALIDATED,
+      refreshStudyInstanceCounts
+    );
+
     const SubscriptionDisplaySetMetaDataInvalidated = displaySetService.subscribe(
       displaySetService.EVENTS.DISPLAY_SET_SERIES_METADATA_INVALIDATED,
       () => {
@@ -357,6 +376,7 @@ function PanelStudyBrowser({
     return () => {
       SubscriptionDisplaySetsChanged.unsubscribe();
       SubscriptionDisplaySetMetaDataInvalidated.unsubscribe();
+      SubscriptionLiveInstanceCounts.unsubscribe();
     };
   }, [
     displaySetsLoadingState,

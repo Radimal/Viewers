@@ -282,6 +282,7 @@ const OHIFCornerstoneViewport = React.memo(
         async ({
           displaySetInstanceUID: invalidatedDisplaySetInstanceUID,
           invalidateData,
+          appendedOnly,
         }: Types.DisplaySetSeriesMetadataInvalidatedEvent) => {
           if (!invalidateData) {
             return;
@@ -291,12 +292,28 @@ const OHIFCornerstoneViewport = React.memo(
 
           if (viewportInfo.hasDisplaySet(invalidatedDisplaySetInstanceUID)) {
             const viewportData = viewportInfo.getViewportData();
+            const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
+            const currentImageId = (csViewport as any)?.getCurrentImageId?.();
             const newViewportData = await cornerstoneCacheService.invalidateViewportData(
               viewportData,
               invalidatedDisplaySetInstanceUID,
               dataSource,
-              displaySetService
+              displaySetService,
+              // Appended-only growth leaves existing images' metadata valid;
+              // purging them would re-download the whole stack every poll tick.
+              { purgeImageCache: !appendedOnly }
             );
+
+            // Stay on the image the user is looking at, by id rather than index,
+            // since newly appended slices can sort in ahead of it.
+            const stackData = newViewportData.data?.[0] as {
+              imageIds?: string[];
+              initialImageIndex?: number;
+            };
+            const currentIndex = stackData?.imageIds?.indexOf(currentImageId) ?? -1;
+            if (currentIndex >= 0) {
+              stackData.initialImageIndex = currentIndex;
+            }
 
             const keepCamera = true;
             cornerstoneViewportService.updateViewport(viewportId, newViewportData, keepCamera);

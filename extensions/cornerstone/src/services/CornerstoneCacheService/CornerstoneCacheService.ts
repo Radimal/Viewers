@@ -20,6 +20,20 @@ class CornerstoneCacheService {
 
   constructor(servicesManager: AppTypes.ServicesManager) {
     this.servicesManager = servicesManager;
+
+    // The stack imageIds memo below goes stale when instances are appended to a display set
+    // (live acquisition polling); drop it so the next viewport gets the full stack.
+    const { displaySetService } = servicesManager.services;
+    displaySetService?.subscribe(
+      displaySetService.EVENTS.DISPLAY_SET_SERIES_METADATA_INVALIDATED,
+      ({ displaySetInstanceUID }) => {
+        this.stackImageIds.delete(displaySetInstanceUID);
+        const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUID);
+        if (displaySet) {
+          delete displaySet.imageIds;
+        }
+      }
+    );
   }
 
   public getCacheSize() {
@@ -102,7 +116,8 @@ class CornerstoneCacheService {
     viewportData: VolumeViewportData | StackViewportData,
     invalidatedDisplaySetInstanceUID: string,
     dataSource,
-    displaySetService
+    displaySetService,
+    { purgeImageCache = true } = {}
   ): Promise<VolumeViewportData | StackViewportData> {
     // Decide stack-vs-volume rebuild from the persisted data shape, NOT viewportType:
     // native viewports collapse both onto PLANAR_NEXT, so a native stack would
@@ -113,24 +128,32 @@ class CornerstoneCacheService {
     if (dataShapeType === Enums.ViewportType.STACK) {
       const displaySet = displaySetService.getDisplaySetByUID(invalidatedDisplaySetInstanceUID);
       const imageIds = this._getCornerstoneStackImageIds(displaySet, dataSource);
+      displaySet.imageIds = imageIds;
+      this.stackImageIds.set(invalidatedDisplaySetInstanceUID, imageIds);
 
-      // remove images from the cache to be able to re-load them
-      imageIds.forEach(imageId => {
-        if (cs3DCache.getImageLoadObject(imageId)) {
-          cs3DCache.removeImageLoadObject(imageId);
-        }
-      });
+      // remove images from the cache to be able to re-load them, unless the caller knows the
+      // existing images' metadata is unchanged (instances were only appended)
+      if (purgeImageCache) {
+        imageIds.forEach(imageId => {
+          if (cs3DCache.getImageLoadObject(imageId)) {
+            cs3DCache.removeImageLoadObject(imageId);
+          }
+        });
+      }
 
+      // _setStackViewport reads viewportData.data[0]; this must be an array like StackViewportData.
       return {
         // Preserve the original viewportType (legacy STACK or native PLANAR_NEXT);
         // the rebuilt data shape, not this field, drives the native re-mount dispatch.
         viewportType: viewportData.viewportType,
         dataShapeType: Enums.ViewportType.STACK,
-        data: {
-          StudyInstanceUID: displaySet.StudyInstanceUID,
-          displaySetInstanceUID: invalidatedDisplaySetInstanceUID,
-          imageIds,
-        },
+        data: [
+          {
+            StudyInstanceUID: displaySet.StudyInstanceUID,
+            displaySetInstanceUID: invalidatedDisplaySetInstanceUID,
+            imageIds,
+          },
+        ],
       };
     }
 

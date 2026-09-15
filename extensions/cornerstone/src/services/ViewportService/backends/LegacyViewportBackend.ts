@@ -182,11 +182,20 @@ export class LegacyViewportBackend implements IViewportBackend {
     }
 
     if (isStackViewportType(viewport)) {
-      displaySetPromise = this.service._setStackViewport(
-        viewport as Types.IStackViewport,
-        viewportData as StackViewportData,
-        viewportInfo
-      );
+      // setStack resets zoom/pan and re-derives window level; keep what the
+      // user had (live study polling re-mounts a growing stack in place).
+      const vp = viewport as Types.IStackViewport;
+      const viewportCamera = keepCamera ? vp.getCamera() : undefined;
+      const viewportProperties = keepCamera ? vp.getProperties() : undefined;
+      displaySetPromise = this.service
+        ._setStackViewport(vp, viewportData as StackViewportData, viewportInfo)
+        .then(() => {
+          if (keepCamera) {
+            vp.setProperties(viewportProperties);
+            vp.setCamera(viewportCamera);
+            vp.render();
+          }
+        });
     }
 
     return displaySetPromise;

@@ -1,74 +1,60 @@
-jest.mock('./getDisplaySetMessages', () => jest.fn(() => ({ addMessage: jest.fn() })));
-jest.mock('./getDisplaySetsFromUnsupportedSeries', () => jest.fn());
-
 import getSopClassHandlerModule from './getSopClassHandlerModule';
 
-const makeInstance = () => ({
-  imageId: 'dicomfile:blob://local-multiframe',
-  url: 'dicomfile:blob://local-multiframe',
-  NumberOfFrames: 4,
-  Rows: 2,
-  Columns: 2,
-  PixelSpacing: [1, 1],
-  SliceThickness: 1,
-  ImageOrientationPatient: [1, 0, 0, 0, 1, 0],
-  ImagePositionPatient: [0, 0, 0],
-  FrameOfReferenceUID: 'frame-of-reference',
-  StudyInstanceUID: 'study',
-  SeriesInstanceUID: 'series',
-  SOPInstanceUID: 'sop',
-  SOPClassUID: '1.2.840.10008.5.1.4.1.1.2.1',
+// 3.13 harness: addStackInstances re-sorts via customizationService and
+// re-derives imageIds through the active data source.
+const extensionManager = {
+  getModuleEntry: () => ({
+    exports: { getDynamicVolumeInfo: () => ({ isDynamicVolume: false, timePoints: [] }) },
+  }),
+  getActiveDataSource: () => [
+    {
+      getImageIdsForDisplaySet: ds => ds.images.map(i => i.imageId),
+      retrieve: {},
+    },
+  ],
+};
+
+const servicesManager = {
+  services: {
+    customizationService: {
+      getCustomization: () => ({ sortFunctions: {}, defaultSortFunctionName: undefined }),
+    },
+  },
+};
+
+const CT_IMAGE_STORAGE = '1.2.840.10008.5.1.4.1.1.2';
+const instance = (n, extra = {}) => ({
+  SOPClassUID: CT_IMAGE_STORAGE,
+  SOPInstanceUID: `sop${n}`,
+  InstanceNumber: n,
   Modality: 'CT',
-  SeriesDescription: 'Local multiframe CT',
-  SeriesNumber: 1,
+  Rows: 512,
+  Columns: 512,
+  SeriesInstanceUID: 'series1',
+  StudyInstanceUID: 'study1',
+  imageId: `wadors:${n}`,
+  ...extra,
 });
 
-describe('getSopClassHandlerModule', () => {
-  it('checks dynamic volume grouping with generated multiframe imageIds', () => {
-    const frameImageIds = [
-      'dicomfile:blob://local-multiframe&frame=1',
-      'dicomfile:blob://local-multiframe&frame=2',
-      'dicomfile:blob://local-multiframe&frame=3',
-      'dicomfile:blob://local-multiframe&frame=4',
-    ];
-    const getDynamicVolumeInfo = jest.fn(() => ({
-      isDynamicVolume: false,
-      timePoints: [frameImageIds],
-      splittingTag: null,
-    }));
-    const dataSource = {
-      getImageIdsForDisplaySet: jest.fn(() => frameImageIds),
-      retrieve: {
-        getGetThumbnailSrc: jest.fn(),
-      },
-    };
-    const customizationService = {
-      getCustomization: jest.fn(() => ({
-        sortFunctions: {},
-        defaultSortFunctionName: 'default',
-      })),
-    };
-    const appContext = {
+describe('stack display set addInstances (live acquisition)', () => {
+  it('grows the existing display set with new stackable images and rejects the rest', () => {
+    const { getSopClassHandlerModule: getModule } = getSopClassHandlerModule;
+    const sopModule = (getModule ?? getSopClassHandlerModule)({
+      extensionManager,
+      servicesManager,
       appConfig: {},
-      extensionManager: {
-        getActiveDataSource: jest.fn(() => [dataSource]),
-        getModuleEntry: jest.fn(() => ({
-          exports: {
-            getDynamicVolumeInfo,
-          },
-        })),
-      },
-      servicesManager: {
-        services: {
-          customizationService,
-        },
-      },
-    };
+    });
+    const [stackHandler] = sopModule;
+    const [ds] = stackHandler.getDisplaySetsFromSeries([instance(2), instance(1)]);
+    expect(ds.numImageFrames).toBe(2);
 
-    const stackHandler = getSopClassHandlerModule(appContext)[0];
+    const multiframe = instance(9, { NumberOfFrames: 30 });
+    expect(ds.addInstances([instance(3), multiframe])).toBe(ds);
+    expect(ds.images.map(i => i.InstanceNumber)).toEqual([1, 2, 3]);
+    expect(ds.numImageFrames).toBe(3);
 
-    stackHandler.getDisplaySetsFromSeries([makeInstance()]);
-
-    expect(getDynamicVolumeInfo).toHaveBeenCalledWith(frameImageIds);
+    // Nothing stackable: caller must fall back to creating new display sets.
+    expect(ds.addInstances([multiframe])).toBeUndefined();
+    expect(ds.numImageFrames).toBe(3);
   });
 });

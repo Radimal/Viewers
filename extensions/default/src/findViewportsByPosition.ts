@@ -22,8 +22,10 @@ export const findOrCreateViewport = (
   positionId: string,
   options: Record<string, unknown>
 ) => {
+  // Reuse what was shown at this position before, but never an empty slot: display sets that
+  // arrived since (e.g. live acquisition polling) must still get a chance to fill it below.
   const byPositionViewport = viewportsByPosition?.[positionId];
-  if (byPositionViewport) {
+  if (byPositionViewport?.displaySetInstanceUIDs?.length) {
     return { ...byPositionViewport };
   }
   const { protocolId, stageIndex } = hangingProtocolService.getState();
