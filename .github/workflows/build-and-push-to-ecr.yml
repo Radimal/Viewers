@@ -63,6 +63,17 @@ jobs:
           docker cp "$CID:/usr/share/nginx/html" ./dist
           docker rm "$CID"
 
+      - name: Guard against unreplaced process.env in the bundle
+        run: |
+          # An unreplaced process.env.<X> read is a ReferenceError in the
+          # browser (no process global) — the app dies at load. Fails the
+          # build if any bundle carries one (add missing keys to
+          # .webpack/webpack.base.js defineValues).
+          if grep -l 'process\.env\.' ./dist/*.js; then
+            echo "::error::Literal process.env found in production bundle"
+            exit 1
+          fi
+
       - name: Read version from build
         id: version
         run: |
