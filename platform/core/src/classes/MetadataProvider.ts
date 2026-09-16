@@ -211,21 +211,22 @@ class MetadataProvider {
         const windowCenter = Array.isArray(WindowCenter) ? WindowCenter : [WindowCenter];
         const windowWidth = Array.isArray(WindowWidth) ? WindowWidth : [WindowWidth];
 
-        // Radimal: cs3d 3.x throws 'Invalid VOI LUT function' (StackViewport
-        // _getVOIRangeForCurrentImage -> toLowHighRange) for any value outside
-        // its enum, and real-world CTs carry padded / nonstandard values that
-        // 3.10's cornerstone silently tolerated. Normalize; unknown -> undefined
-        // so cornerstone falls back to LINEAR instead of crashing the render.
-        const normalizedVOILUTFunction = ['LINEAR', 'LINEAR_EXACT', 'SIGMOID'].includes(
-          typeof VOILUTFunction === 'string' ? VOILUTFunction.trim().toUpperCase() : VOILUTFunction
-        )
-          ? VOILUTFunction.trim().toUpperCase()
-          : undefined;
+        // Radimal: voiLUTFunction is deliberately NOT emitted. Upstream's two
+        // consumers disagree on its shape — dicom-image-loader createImage
+        // indexes it as an array (a naturalized string 'LINEAR' becomes 'L'),
+        // while setDefaultVolumeVOI passes it as a scalar — and cs3d 3.x
+        // toLowHighRange throws 'Invalid VOI LUT function' on whichever form
+        // loses, which took down the whole route for any study carrying tag
+        // 0028,1056 (all Radimal CTs). Omitting it makes both paths use the
+        // LINEAR default, which is also what 3.10 effectively rendered: its
+        // loader had the same indexing bug and its cornerstone ignored the
+        // resulting 'L'. Revisit only if a SIGMOID/LINEAR_EXACT study shows a
+        // real W/L difference — that needs the upstream shape fixed first.
+        void VOILUTFunction;
 
         metadata = {
           windowCenter: toNumber(windowCenter),
           windowWidth: toNumber(windowWidth),
-          voiLUTFunction: normalizedVOILUTFunction,
         };
 
         break;

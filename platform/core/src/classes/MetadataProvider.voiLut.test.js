@@ -1,10 +1,11 @@
 import metadataProvider from './MetadataProvider';
 import DicomMetadataStore from '../services/DicomMetadataStore';
 
-// cs3d 3.x throws 'Invalid VOI LUT function' for values outside its enum;
-// the provider must hand cornerstone only LINEAR / LINEAR_EXACT / SIGMOID
-// or undefined (which falls back to LINEAR).
-describe('MetadataProvider voiLutModule VOILUTFunction normalization', () => {
+// cs3d 3.x throws 'Invalid VOI LUT function' from BOTH the stack path
+// (createImage indexes the value as an array: 'LINEAR' -> 'L') and the volume
+// path (scalar) — the shapes are mutually exclusive, so the provider must not
+// emit the field at all; both paths then default to LINEAR (3.10 parity).
+describe('MetadataProvider voiLutModule VOILUTFunction', () => {
   // DicomMetadataStore dedupes by SOPInstanceUID, so each case gets its own.
   let sop = 0;
 
@@ -31,24 +32,14 @@ describe('MetadataProvider voiLutModule VOILUTFunction normalization', () => {
     return metadataProvider.get('voiLutModule', imageId);
   };
 
-  it('passes valid values through', () => {
-    expect(voiFor('SIGMOID').voiLUTFunction).toBe('SIGMOID');
-    expect(voiFor('LINEAR_EXACT').voiLUTFunction).toBe('LINEAR_EXACT');
+  it('never emits voiLUTFunction, whatever the tag holds', () => {
+    for (const value of ['LINEAR', 'SIGMOID', 'LINEAR_EXACT', 'SIGMOID ', 'BOGUS', '', undefined]) {
+      expect(voiFor(value).voiLUTFunction).toBeUndefined();
+    }
   });
 
-  it('normalizes padded/lowercase values', () => {
-    expect(voiFor('SIGMOID ').voiLUTFunction).toBe('SIGMOID');
-    expect(voiFor('linear').voiLUTFunction).toBe('LINEAR');
-  });
-
-  it('drops unknown values instead of crashing the render', () => {
-    expect(voiFor('SIGMOID_1').voiLUTFunction).toBeUndefined();
-    expect(voiFor('').voiLUTFunction).toBeUndefined();
-    expect(voiFor(undefined).voiLUTFunction).toBeUndefined();
-  });
-
-  it('still returns window values alongside a dropped function', () => {
-    const voi = voiFor('BOGUS');
+  it('still returns window values', () => {
+    const voi = voiFor('LINEAR');
     expect(voi.windowCenter).toEqual([40]);
     expect(voi.windowWidth).toEqual([400]);
   });
