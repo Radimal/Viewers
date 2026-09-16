@@ -211,10 +211,21 @@ class MetadataProvider {
         const windowCenter = Array.isArray(WindowCenter) ? WindowCenter : [WindowCenter];
         const windowWidth = Array.isArray(WindowWidth) ? WindowWidth : [WindowWidth];
 
+        // Radimal: cs3d 3.x throws 'Invalid VOI LUT function' (StackViewport
+        // _getVOIRangeForCurrentImage -> toLowHighRange) for any value outside
+        // its enum, and real-world CTs carry padded / nonstandard values that
+        // 3.10's cornerstone silently tolerated. Normalize; unknown -> undefined
+        // so cornerstone falls back to LINEAR instead of crashing the render.
+        const normalizedVOILUTFunction = ['LINEAR', 'LINEAR_EXACT', 'SIGMOID'].includes(
+          typeof VOILUTFunction === 'string' ? VOILUTFunction.trim().toUpperCase() : VOILUTFunction
+        )
+          ? VOILUTFunction.trim().toUpperCase()
+          : undefined;
+
         metadata = {
           windowCenter: toNumber(windowCenter),
           windowWidth: toNumber(windowWidth),
-          voiLUTFunction: VOILUTFunction,
+          voiLUTFunction: normalizedVOILUTFunction,
         };
 
         break;
