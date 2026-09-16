@@ -105,6 +105,19 @@ export const legacyViewportOperations: IViewportOperations = {
   reset(viewport: CoreTypes.IViewport): void {
     const vp = viewport as CoreTypes.IStackViewport;
     vp.resetProperties?.();
+    // cs3d bug: initialTransferFunctionNodes are snapshotted BEFORE the
+    // MONOCHROME1 invert is applied at first display, and resetProperties
+    // restores those un-inverted nodes while setInvertColor(initialInvert)
+    // no-ops (true -> true). The flag then says inverted but the LUT is not,
+    // so reset visually inverts MONOCHROME1 images. Recreating the LUT makes
+    // setVOI re-apply this.invert to the fresh transfer function. CPU
+    // rendering keys invert off the flag directly and never diverges.
+    const props = vp.getProperties?.();
+    if (props?.invert) {
+      (vp as unknown as {
+        setVOI?: (range: unknown, opts?: { forceRecreateLUTFunction?: boolean }) => void;
+      }).setVOI?.(props.voiRange, { forceRecreateLUTFunction: true });
+    }
     vp.resetCamera();
   },
 
