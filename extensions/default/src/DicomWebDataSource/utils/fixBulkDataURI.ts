@@ -25,6 +25,22 @@ function fixBulkDataURI(value, instance, dicomWebConfig) {
 
   BulkDataURI = uriConfig.transform?.(BulkDataURI) || BulkDataURI;
 
+  // Radimal: Orthanc behind the ALB/CloudFront cannot know its public origin,
+  // so an ABSOLUTE BulkDataURI carries whatever scheme/Host the proxy chain
+  // forwarded — seen in prod as http://viewer.prod-1.radimal.ai/dicom-web/...,
+  // which the https page blocks as mixed content (broke PALETTE COLOR loads:
+  // palette LUT bulkdata fetch fails and the image never renders). The
+  // client's wadoRoot IS the known-good public dicom-web origin, so re-root
+  // any absolute URI onto it whenever the origins differ.
+  if (BulkDataURI.startsWith('http') && dicomWebConfig.wadoRoot?.startsWith('http')) {
+    const uri = new URL(BulkDataURI);
+    const root = new URL(dicomWebConfig.wadoRoot);
+    if (uri.origin !== root.origin && uri.pathname.startsWith(`${root.pathname}/`)) {
+      value.BulkDataURI = `${root.origin}${uri.pathname}${uri.search}`;
+      return;
+    }
+  }
+
   // Handle incorrectly prefixed origins
   const { startsWith, prefixWith = '' } = uriConfig;
   if (startsWith && BulkDataURI.startsWith(startsWith)) {
