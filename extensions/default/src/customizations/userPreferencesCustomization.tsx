@@ -4,7 +4,7 @@ import { UserPreferencesModal, FooterAction } from '@ohif/ui-next';
 import { useTranslation } from 'react-i18next';
 import i18n from '@ohif/i18n';
 
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@ohif/ui-next';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Checkbox } from '@ohif/ui-next';
 
 const { availableLanguages, defaultLanguage, currentLanguage: currentLanguageFn } = i18n;
 
@@ -178,6 +178,15 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     crosshairModifier: initialCrosshairModifier,
     mouseTools: getMouseToolAssignment(toolGroupService),
     zoomSpeed: getZoomSpeedPref(),
+    // Radimal (3.10 parity): auto-reopen the saved multi-monitor layout when a
+    // study opens (ViewerLayout reads this key on primary-window start).
+    openAdditionalWindowsOnStart: (() => {
+      try {
+        return !!JSON.parse(localStorage.getItem('openAdditionalWindowsOnStart'));
+      } catch (e) {
+        return false;
+      }
+    })(),
   });
 
   const onLanguageChangeHandler = (value: string) => {
@@ -336,6 +345,20 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
           ))}
           <div className="flex items-center justify-between gap-2">
             <span className="text-foreground text-base">
+              {t('OpenAdditionalWindowsOnStart', {
+                defaultValue: 'Open Additional Windows On Start',
+              })}
+            </span>
+            <Checkbox
+              checked={state.openAdditionalWindowsOnStart}
+              onCheckedChange={value =>
+                setState(s => ({ ...s, openAdditionalWindowsOnStart: !!value }))
+              }
+              aria-label="Open Additional Windows On Start"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-foreground text-base">
               {t('ZoomSpeed', { defaultValue: 'Zoom Speed' })}
             </span>
             <Select
@@ -427,6 +450,10 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
               applyMouseToolAssignment(toolGroupService, state.mouseTools);
               try {
                 localStorage.setItem('zoomSpeed', state.zoomSpeed);
+                localStorage.setItem(
+                  'openAdditionalWindowsOnStart',
+                  JSON.stringify(state.openAdditionalWindowsOnStart)
+                );
               } catch (e) {
                 /* storage unavailable */
               }
