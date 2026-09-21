@@ -48,6 +48,8 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           file: Dockerfile
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
           tags: |
             "${{ env.ECR }}:${{ github.ref_name }}"
             "${{ env.ECR }}:sha-${{ github.sha }}"

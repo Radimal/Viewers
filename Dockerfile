@@ -58,6 +58,14 @@ ENV QUICK_BUILD true
 # ENV GENERATE_SOURCEMAP=false
 ARG APP_CONFIG=config/default.js
 ARG PUBLIC_URL=/
+# Radimal: real build identity. commit.txt is a stale checked-in file (the
+# repo's version.mjs only refreshes it in release flows we don't run), and
+# webpack.base.js bakes it into the bundle (process.env.COMMIT_HASH — About
+# dialog, PostHog build tags) while scripts/update-version.js emits it into
+# /version.json for update detection. Without this every build claims the
+# same commit and the UpdateBanner can never fire.
+ARG COMMIT_SHA=local
+RUN echo "${COMMIT_SHA}" > ./commit.txt
 ENV PUBLIC_URL=${PUBLIC_URL}
 
 # Re-apply + verify the multi-tile JPEG2000 codec patch with the full tree
