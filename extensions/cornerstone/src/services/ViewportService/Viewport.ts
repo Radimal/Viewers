@@ -225,27 +225,18 @@ class ViewportInfo {
     // Todo: currently this does not work for non image & referenceImage displaySets.
     // Since SEG and other derived displaySets are loaded in a different way, and not
     // via cornerstoneViewportService
-    let viewportData = this.getViewportData();
-
-    // Branch on the persisted data shape, not viewportType: native ("next") volume
-    // viewports carry viewportType === PLANAR_NEXT while their data is still a volume
-    // array, so keying off viewportType alone would treat them as a stack object and
-    // miss the display set — skipping invalidateViewportData() on metadata invalidation.
-    // Falls back to viewportType for legacy viewportData with no dataShapeType.
-    const dataShapeType = viewportData.dataShapeType ?? viewportData.viewportType;
-
-    if (
-      dataShapeType === Enums.ViewportType.ORTHOGRAPHIC ||
-      dataShapeType === Enums.ViewportType.VOLUME_3D
-    ) {
-      viewportData = viewportData as VolumeViewportData;
-      return viewportData.data.some(
-        ({ displaySetInstanceUID: dsUID }) => dsUID === displaySetInstanceUID
-      );
+    const viewportData = this.getViewportData();
+    if (!viewportData?.data) {
+      return false;
     }
-
-    viewportData = viewportData as StackViewportData;
-    return viewportData.data.displaySetInstanceUID === displaySetInstanceUID;
+    // Stack and volume data are both ARRAYS at mount (see _getStackViewportData's
+    // `data: displaySets`), so the old stack branch's object read
+    // (`data.displaySetInstanceUID`) was always undefined — every stack viewport
+    // answered false and skipped invalidateViewportData() on metadata invalidation
+    // (live study-populate growth, Reload Study). Tolerate a bare object too,
+    // since invalidateViewportData historically returned one.
+    const data = Array.isArray(viewportData.data) ? viewportData.data : [viewportData.data];
+    return data.some(({ displaySetInstanceUID: dsUID }) => dsUID === displaySetInstanceUID);
   }
 
   /**
