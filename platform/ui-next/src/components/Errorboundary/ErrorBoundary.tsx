@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from '../Dialog/Dialog';
 import { ScrollArea } from '../ScrollArea/ScrollArea';
 import { Button } from '../Button/Button';
 import { useNotification } from '../../contextProviders';
+import { isTransportRejection } from './isTransportRejection';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -286,6 +287,16 @@ const ErrorBoundary = ({
 
     const handleRejection = (event: PromiseRejectionEvent) => {
       event.preventDefault();
+      // Radimal: a failed image/bulkdata request is NOT a route failure. Orthanc
+      // answers 504/409 for frames it is still writing (live study-populate polls
+      // a study mid-ingest by design), cornerstone's request pool retries or the
+      // next poll tick re-fetches, and blanking the whole viewer over one
+      // background frame is far worse than the missed frame. cs3d rejects these
+      // with the raw XHR (not an Error), which makes them cheap to recognize.
+      if (isTransportRejection(event.reason)) {
+        console.warn('Transient request failure (not escalating):', event.reason);
+        return;
+      }
       clearTimeout(errorTimeout);
       errorTimeout = setTimeout(() => {
         setError(event.reason || event);
