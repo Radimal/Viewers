@@ -150,6 +150,11 @@ deploys, and serves studies correctly.
    originally descoped, restored on specialist request. Preference shapes the
    default hanging protocol stage at module load; save reloads the page.
 
+   Re-landed 2026-09-22 (f8b39e4814): wheel-tool preference + inversion —
+   revert-of-revert of 7f9892d593, plus the Scroll Wheel Tool / Invert
+   Scroll Wheel rows in the 3.13 preferences modal (save reloads; bindings
+   built at mode entry). Same localStorage keys as 3.10.
+
    Not ported, with reasons: live study-polling + T5 (backed out on .71
    itself); T4 (absorbed upstream via fetchedStudiesRef); HotkeyField
    unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
