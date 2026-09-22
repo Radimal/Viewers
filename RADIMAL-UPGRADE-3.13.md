@@ -146,6 +146,10 @@ deploys, and serves studies correctly.
    from this branch too. Re-landing needs cross-series prefetch first
    (studyPrefetcher.displaySetsCount is 1).
 
+   Re-landed 2026-09-22 (5cff219ee4): Set NxM as Default layout preference —
+   originally descoped, restored on specialist request. Preference shapes the
+   default hanging protocol stage at module load; save reloads the page.
+
    Not ported, with reasons: live study-polling + T5 (backed out on .71
    itself); T4 (absorbed upstream via fetchedStudiesRef); HotkeyField
    unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
