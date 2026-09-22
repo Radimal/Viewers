@@ -302,6 +302,7 @@ export async function defaultRouteInit(
         dataSource,
         filters,
         pollMs,
+        uiNotificationService,
         ready: Promise.allSettled(initialSeriesLoads),
       })
     );
@@ -338,12 +339,27 @@ function fillEmptyViewportsOnArrival({ displaySetService, viewportGridService })
   return unsubscribe;
 }
 
+// After this many consecutive quiet ticks (30 ticks at the default 10s = 5
+// minutes) the poll IDLES to a slow interval instead of stopping — a wet-read
+// study can receive images at any point while it is open (a re-sent old study
+// too, which is why there is deliberately NO StudyDate age gate: acquisition
+// time says nothing about ingest time). Growth snaps it back to the fast
+// interval, so the worst case is one idle-interval delay before images flow.
+const LIVE_POLL_MAX_QUIET_TICKS = 30;
+const LIVE_POLL_IDLE_INTERVAL_MS = 60 * 1000;
+// At most one "images arriving" toast per this window, so a burst of ticks
+// doesn't stack notifications.
+const LIVE_POLL_NOTIFY_THROTTLE_MS = 60 * 1000;
+
 /**
  * Re-queries the study's series list on an interval so images stored in Orthanc after the
  * study was opened show up without a reload. Series metadata is only re-fetched for series
  * that are new or whose QIDO NumberOfSeriesRelatedInstances exceeds what the store holds;
  * DicomMetadataStore.addInstances dedupes by SOPInstanceUID, and the stack SOP class handler's
  * addInstances grows the existing display set so the open viewport refreshes in place.
+ *
+ * Re-land guards (see the revert ticket for 7ac1202e52): polling idles to a slow interval
+ * after a quiet period and pauses while the tab is hidden.
  *
  * @returns a function that stops the poll
  */
@@ -352,18 +368,73 @@ function startLiveStudyPoll({
   dataSource,
   filters,
   pollMs,
+  uiNotificationService,
   ready = Promise.resolve(),
 }) {
   let inFlight = false;
+  let quietTicks = 0;
+  let idle = false;
+  let lastNotifiedAt = 0;
   // Series whose metadata fetch is still pending; Orthanc can take minutes to answer while it is
   // ingesting, and stacking duplicate requests for the same series only makes that worse.
   const pendingSeries = new Set<string>();
+
+  let timer;
+  let stopped = false;
+
+  function currentInterval() {
+    return idle ? LIVE_POLL_IDLE_INTERVAL_MS : pollMs;
+  }
+
+  function setIdle(nextIdle) {
+    if (idle === nextIdle) {
+      return;
+    }
+    idle = nextIdle;
+    if (timer) {
+      clearInterval(timer);
+      timer = setInterval(poll, currentInterval());
+    }
+    console.info(
+      idle
+        ? `[LiveStudyPoll] idling (${LIVE_POLL_IDLE_INTERVAL_MS}ms) after quiet period`
+        : `[LiveStudyPoll] resuming fast poll (${pollMs}ms)`
+    );
+  }
+
+  function notifyArrival(grownCount) {
+    const now = Date.now();
+    if (now - lastNotifiedAt < LIVE_POLL_NOTIFY_THROTTLE_MS) {
+      return;
+    }
+    lastNotifiedAt = now;
+    uiNotificationService?.show({
+      title: 'New images arriving',
+      message: `${grownCount} series receiving new images.`,
+      type: 'info',
+      duration: 4000,
+    });
+  }
+
+  function stop(reason) {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    clearInterval(timer);
+    timer = undefined;
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    if (reason) {
+      console.info(`[LiveStudyPoll] stopped: ${reason}`);
+    }
+  }
 
   async function poll() {
     if (inFlight || document.hidden) {
       return;
     }
     inFlight = true;
+    let grownThisTick = 0;
     try {
       for (const StudyInstanceUID of studyInstanceUIDs) {
         // The data source caches the study metadata promise; drop it so this is a real re-query.
@@ -386,7 +457,10 @@ function startLiveStudyPoll({
             DicomMetadataStore.getSeries(StudyInstanceUID, SeriesInstanceUID)?.instances.length ??
             0;
           // ponytail: if the server omits NumberOfSeriesRelatedInstances we re-fetch every series
-          // each poll; switch to QIDO instance search if that ever costs too much.
+          // each poll; switch to QIDO instance search if that ever costs too much. (Verified
+          // 2026-09-10 against production QIDO: Orthanc returns 00201209 in the default series
+          // response, with or without an explicit includefield — the guarantee is Orthanc's
+          // behaviour, not the spec.)
           if (pendingSeries.has(SeriesInstanceUID)) {
             continue;
           }
@@ -409,20 +483,44 @@ function startLiveStudyPoll({
               .finally(() => pendingSeries.delete(SeriesInstanceUID));
           }
         }
-        console.info(
-          `[LiveStudyPoll] ${StudyInstanceUID}: ${seriesPromises.length} series, ${fetched.length} new/grown`,
-          fetched
-        );
+        grownThisTick += fetched.length;
+        if (fetched.length) {
+          console.info(
+            `[LiveStudyPoll] ${StudyInstanceUID}: ${seriesPromises.length} series, ${fetched.length} new/grown`,
+            fetched
+          );
+        }
       }
     } catch (error) {
       console.warn('[LiveStudyPoll] poll failed', error);
     } finally {
       inFlight = false;
     }
+
+    if (grownThisTick > 0) {
+      quietTicks = 0;
+      setIdle(false);
+      notifyArrival(grownThisTick);
+    } else if (++quietTicks >= LIVE_POLL_MAX_QUIET_TICKS) {
+      setIdle(true);
+    }
   }
 
-  let timer;
-  let stopped = false;
+  // A hidden tab keeps no timer at all; restart on return instead of no-op ticks.
+  function onVisibilityChange() {
+    if (stopped) {
+      return;
+    }
+    if (document.hidden) {
+      clearInterval(timer);
+      timer = undefined;
+    } else if (!timer) {
+      timer = setInterval(poll, currentInterval());
+      // Coming back to the tab is a strong "is anything new?" signal.
+      poll();
+    }
+  }
+
   // Don't compete with the initial load: the first tick waits until every series metadata request
   // from study open has settled, so the viewer starts exactly as fast as it did without polling.
   ready.then(() => {
@@ -430,12 +528,12 @@ function startLiveStudyPoll({
       return;
     }
     console.info(
-      `[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms`
+      `[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms (idles to ${LIVE_POLL_IDLE_INTERVAL_MS}ms after ${LIVE_POLL_MAX_QUIET_TICKS} quiet ticks)`
     );
-    timer = setInterval(poll, pollMs);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (!document.hidden) {
+      timer = setInterval(poll, pollMs);
+    }
   });
-  return () => {
-    stopped = true;
-    clearInterval(timer);
-  };
+  return () => stop();
 }

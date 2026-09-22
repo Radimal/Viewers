@@ -11,6 +11,7 @@ import Compose from './Compose';
 import { history } from '../../utils/history';
 import loadModules from '../../pluginImports';
 import { defaultRouteInit } from './defaultRouteInit';
+import { createDeferredTeardown } from './deferredTeardown';
 import { updateAuthServiceAndCleanUrl } from './updateAuthServiceAndCleanUrl';
 
 const { getSplitParam } = utils;
@@ -303,10 +304,17 @@ export default function ModeRoute({
       );
     };
 
-    let unsubscriptions;
+    // defaultRouteInit awaits every series-metadata request before returning
+    // its teardowns, so cleanup can run FIRST (reader opens the next study
+    // mid-load). The holder fires teardowns immediately when they arrive
+    // after disposal — otherwise the live study poll would outlive the route.
+    const routeTeardown = createDeferredTeardown();
     setupRouteInit()
       .then(unsubs => {
-        unsubscriptions = unsubs;
+        routeTeardown.arm(unsubs ?? []);
+        if (routeTeardown.isDisposed) {
+          return;
+        }
 
         // Some code may need to run after hanging protocol initialization
         // (eg: workflowStepsService initialization on 4D mode)
@@ -335,11 +343,7 @@ export default function ModeRoute({
       }
       // The unsubscriptions must occur before the extension onModeExit
       // in order to prevent exceptions during cleanup caused by spurious events
-      if (unsubscriptions) {
-        unsubscriptions.forEach(unsub => {
-          unsub();
-        });
-      }
+      routeTeardown.dispose();
       // The extension manager must be called after the mode, this is
       // expected to cleanup the state to a standard setup.
       extensionManager.onModeExit();
