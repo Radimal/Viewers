@@ -1,10 +1,44 @@
 // Updated ToolbarLayoutSelector.tsx
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import PropTypes from 'prop-types';
 import { CommandsManager } from '@ohif/core';
 
-import { LayoutSelector } from '@ohif/ui-next';
+import { LayoutSelector, Button } from '@ohif/ui-next';
 import { useTranslation } from 'react-i18next';
+
+// Radimal: "Set NxM as Default". The saved preference shapes the default
+// hanging protocol's stage (getHangingProtocolModule reads it at module
+// load), so every study opens in the user's grid. Saving reloads the page
+// because the protocol is built once at startup.
+const getUserLayoutPreference = () => {
+  try {
+    const saved = localStorage.getItem('userLayoutPreference');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        rows: parsed.rows || 1,
+        columns: parsed.columns || 1,
+        name: parsed.name || '1x1',
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to load user layout preference:', error);
+  }
+  return { rows: 1, columns: 1, name: '1x1' };
+};
+
+const saveUserLayoutPreference = (rows, columns) => {
+  try {
+    localStorage.setItem(
+      'userLayoutPreference',
+      JSON.stringify({ rows, columns, name: `${rows}x${columns}` })
+    );
+    return true;
+  } catch (error) {
+    console.warn('Failed to save user layout preference:', error);
+    return false;
+  }
+};
 
 function ToolbarLayoutSelectorWithServices({
   commandsManager,
@@ -13,8 +47,32 @@ function ToolbarLayoutSelectorWithServices({
   columns = 4,
   ...props
 }) {
-  const { customizationService } = servicesManager.services;
+  const { customizationService, viewportGridService } = servicesManager.services;
   const { t } = useTranslation('ToolbarLayoutSelector');
+  const [userDefaultLayout, setUserDefaultLayout] = useState(getUserLayoutPreference());
+
+  const getCurrentLayout = () => {
+    try {
+      const { numRows, numCols } = viewportGridService.getState().layout;
+      return { rows: numRows, columns: numCols };
+    } catch (error) {
+      return { rows: 1, columns: 1 };
+    }
+  };
+
+  const currentLayout = getCurrentLayout();
+  const currentIsDefault =
+    currentLayout.rows === userDefaultLayout.rows &&
+    currentLayout.columns === userDefaultLayout.columns;
+
+  const handleSetAsDefault = () => {
+    if (saveUserLayoutPreference(currentLayout.rows, currentLayout.columns)) {
+      setUserDefaultLayout(getUserLayoutPreference());
+      // The default hanging protocol is built from the preference at module
+      // load; a reload is how the new default takes effect.
+      window.location.reload();
+    }
+  };
 
   // Get the presets from the customization service
   const commonPresets = customizationService?.getCustomization('layoutSelector.commonPresets') || [
@@ -187,6 +245,23 @@ function ToolbarLayoutSelectorWithServices({
               {t('rows and columns')} <br />
               {t('Click to apply')}
             </LayoutSelector.HelpText>
+            <div className="flex flex-col gap-1">
+              <span className="text-muted-foreground text-[10px]">
+                {t('Default')}: {userDefaultLayout.name}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-6 px-2 py-1 text-xs"
+                onClick={handleSetAsDefault}
+                disabled={currentIsDefault}
+              >
+                {t('Set {{layout}} as Default', {
+                  layout: `${currentLayout.rows}x${currentLayout.columns}`,
+                  defaultValue: `Set ${currentLayout.rows}x${currentLayout.columns} as Default`,
+                })}
+              </Button>
+            </div>
           </div>
         </LayoutSelector.Content>
       </LayoutSelector>
