@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useSystem, hotkeys as hotkeysModule } from '@ohif/core';
+import { useSystem, hotkeys as hotkeysModule, utils } from '@ohif/core';
 import { UserPreferencesModal, FooterAction } from '@ohif/ui-next';
 import { useTranslation } from 'react-i18next';
 import i18n from '@ohif/i18n';
@@ -178,6 +178,10 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     crosshairModifier: initialCrosshairModifier,
     mouseTools: getMouseToolAssignment(toolGroupService),
     zoomSpeed: getZoomSpeedPref(),
+    // Radimal wheel preferences (utils/wheelPreferences.js reads the same
+    // localStorage keys at tool-group init; a reload applies the change).
+    scrollWheelTool: utils.getScrollWheelTool(),
+    invertScrollWheel: utils.getScrollWheelInversion(),
     // Radimal (3.10 parity): auto-reopen the saved multi-monitor layout when a
     // study opens (ViewerLayout reads this key on primary-window start).
     openAdditionalWindowsOnStart: (() => {
@@ -359,6 +363,33 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-foreground text-base">
+              {t('ScrollWheelTool', { defaultValue: 'Scroll Wheel Tool' })}
+            </span>
+            <Select
+              value={state.scrollWheelTool}
+              onValueChange={val => setState(s => ({ ...s, scrollWheelTool: val }))}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="StackScroll">{t('Stack Scroll')}</SelectItem>
+                <SelectItem value="Zoom">{t('Zoom')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-foreground text-base">
+              {t('InvertScrollWheel', { defaultValue: 'Invert Scroll Wheel' })}
+            </span>
+            <Checkbox
+              checked={state.invertScrollWheel}
+              onCheckedChange={value => setState(s => ({ ...s, invertScrollWheel: !!value }))}
+              aria-label="Invert Scroll Wheel"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-foreground text-base">
               {t('ZoomSpeed', { defaultValue: 'Zoom Speed' })}
             </span>
             <Select
@@ -448,14 +479,25 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
 
               // Radimal: mouse-button tools + zoom speed
               applyMouseToolAssignment(toolGroupService, state.mouseTools);
+              const wheelChanged =
+                state.scrollWheelTool !== utils.getScrollWheelTool() ||
+                state.invertScrollWheel !== utils.getScrollWheelInversion();
               try {
                 localStorage.setItem('zoomSpeed', state.zoomSpeed);
                 localStorage.setItem(
                   'openAdditionalWindowsOnStart',
                   JSON.stringify(state.openAdditionalWindowsOnStart)
                 );
+                localStorage.setItem('scrollWheelTool', state.scrollWheelTool);
+                localStorage.setItem('invertScrollWheel', String(state.invertScrollWheel));
               } catch (e) {
                 /* storage unavailable */
+              }
+              if (wheelChanged) {
+                // applyWheelPreferences runs at tool-group init (mode entry);
+                // reload is how a changed wheel binding takes effect.
+                window.location.reload();
+                return;
               }
 
               if (toolGroupService && state.crosshairModifier != null) {
