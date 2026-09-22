@@ -1,6 +1,19 @@
 import { utils } from '@ohif/core';
 import i18n from '@ohif/i18n';
+import { hasCase } from '../utils/radimalCaseStatus';
 const { formatDate } = utils;
+
+// Hide View Report for studies known to have no reporter case. Unknown status
+// (lookup still in flight) keeps the item — the command's own no-report
+// notification covers that window, and MoreDropdownMenu re-renders when the
+// status resolves (RadimalCaseIndicator triggers the lookup per row).
+const whenStudyHasReport = ({ StudyInstanceUID, displaySetInstanceUID, servicesManager }) => {
+  const studyUID =
+    StudyInstanceUID ??
+    servicesManager?.services?.displaySetService?.getDisplaySetByUID(displaySetInstanceUID)
+      ?.StudyInstanceUID;
+  return hasCase(studyUID) !== false;
+};
 
 export default {
   // Radimal: View Report opens the reporter consultation PDF. This entry
@@ -11,6 +24,7 @@ export default {
       label: i18n.t('StudyBrowser:View Report'),
       iconName: 'RadimalPdf',
       commands: 'viewReport',
+      visible: whenStudyHasReport,
     },
   ],
   'studyBrowser.thumbnailMenuItems': [
@@ -19,6 +33,7 @@ export default {
       label: i18n.t('StudyBrowser:View Report'),
       iconName: 'RadimalPdf',
       commands: 'viewReport',
+      visible: whenStudyHasReport,
     },
     {
       id: 'tagBrowser',

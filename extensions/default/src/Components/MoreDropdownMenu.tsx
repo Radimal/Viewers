@@ -8,6 +8,7 @@ import {
   Button,
 } from '@ohif/ui-next';
 import { useSystem } from '@ohif/core';
+import { hasCase, subscribeCaseStatus } from '../utils/radimalCaseStatus';
 
 /**
  * The default sub-menu appearance and setup is defined here, but this can be
@@ -84,6 +85,23 @@ export default function MoreDropdownMenu(bindProps) {
   }
 
   function BoundMoreDropdownMenu(props) {
+    // Radimal: re-render when a study's reporter case status resolves, so an
+    // item's `visible` predicate (e.g. View Report needing a case) is
+    // re-evaluated without reopening the menu. Harmless for menus whose items
+    // have no predicate.
+    const studyUID =
+      props.StudyInstanceUID ??
+      servicesManager.services.displaySetService?.getDisplaySetByUID(props.displaySetInstanceUID)
+        ?.StudyInstanceUID;
+    React.useSyncExternalStore(subscribeCaseStatus, () => hasCase(studyUID));
+
+    const visibleItems = items.filter(
+      item => item.visible?.({ ...props, servicesManager }) !== false
+    );
+    if (!visibleItems.length) {
+      return null;
+    }
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -103,7 +121,7 @@ export default function MoreDropdownMenu(bindProps) {
           ...props,
           commandsManager: commandsManager,
           servicesManager: servicesManager,
-          items,
+          items: visibleItems,
         })}
       </DropdownMenu>
     );
