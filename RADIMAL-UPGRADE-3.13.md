@@ -546,8 +546,8 @@ missing on a pasted URL.
 | 28 | Growth | Open a study < 24h old that is still receiving images | New instances appear in open stack without reload; slice/zoom/W-L kept; console `[LiveStudyPoll]` lines |
 | 29 | Empty viewport fill | 2x2 layout with empty tiles while study grows | New series lands in first empty tile |
 | 30 | Header count | While growing | Study browser instance count climbs |
-| 31 | Recency gate | Open a years-old study, watch console | `stopped: no recent studies to poll` |
-| 32 | Quiet stop | Leave a recent-but-finished study open ~5 min | `stopped: no growth for 30 ticks` |
+| 31 | Idle backoff | Leave a quiet study open ~5 min, watch console | `idling (60000ms) after quiet period`; poll continues at 60s |
+| 32 | Idle wake | After idling, send new instances to the study | Within ~60s: `resuming fast poll`, 'New images arriving' toast, viewport grows |
 | 33 | Teardown | Open next study before the first finishes loading, repeat 5-10x | No accumulating polls (one `[LiveStudyPoll] polling...` per open study max), no freeze |
 
 ### Codecs / telemetry (P4 / P1)
