@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
-import { utils } from '@ohif/core';
+import { utils, DicomMetadataStore } from '@ohif/core';
 import { useImageViewer, useViewportGrid, Dialog, ButtonEnums } from '@ohif/ui';
 import { StudyBrowser } from '@ohif/ui-next';
 
@@ -66,6 +66,20 @@ export default function PanelStudyBrowserTracking({
     ...StudyInstanceUIDs,
   ]);
   const [studyDisplayList, setStudyDisplayList] = useState([]);
+
+  // The header count comes from the QIDO study query at load; live polling can add instances
+  // afterwards, so bump it to whatever the metadata store now holds.
+  const refreshStudyInstanceCounts = () => {
+    setStudyDisplayList(prev =>
+      prev.map(study => {
+        const stored = DicomMetadataStore.getStudy(study.studyInstanceUid);
+        const loaded = stored?.series.reduce((sum, s) => sum + (s.instances?.length ?? 0), 0) ?? 0;
+        return loaded > (Number(study.numInstances) || 0)
+          ? { ...study, numInstances: loaded }
+          : study;
+      })
+    );
+  };
   const [hasLoadedViewports, setHasLoadedViewports] = useState(false);
   const [displaySets, setDisplaySets] = useState([]);
   const [displaySetsLoadingState, setDisplaySetsLoadingState] = useState({});
@@ -359,6 +373,7 @@ export default function PanelStudyBrowserTracking({
         );
 
         setDisplaySets(mappedDisplaySets);
+        refreshStudyInstanceCounts();
       }
     );
 
@@ -379,6 +394,7 @@ export default function PanelStudyBrowserTracking({
         );
 
         setDisplaySets(mappedDisplaySets);
+        refreshStudyInstanceCounts();
       }
     );
 

@@ -89,6 +89,8 @@ declare global {
       extensions?: string[];
       modes?: string[];
       experimentalStudyBrowserSort?: boolean;
+      /** Re-query the open study for new series/instances every N ms. 0 disables. Default 10000. */
+      liveStudyPollIntervalMs?: number;
       defaultDataSourceName?: string;
       hotkeys?: Record<string, Hotkey> | Hotkey[];
       preferSizeOverAccuracy?: boolean;
