@@ -304,6 +304,7 @@ export async function defaultRouteInit(
         dataSource,
         filters,
         pollMs,
+        uiNotificationService,
         ready: Promise.allSettled(initialSeriesLoads),
       })
     );
@@ -340,31 +341,17 @@ function fillEmptyViewportsOnArrival({ displaySetService, viewportGridService })
   return unsubscribe;
 }
 
-// Only studies this young keep a live poll: an in-progress acquisition finishes within
-// hours, and anything older will never grow, so polling it forever is pure load.
-const LIVE_POLL_MAX_STUDY_AGE_MS = 24 * 60 * 60 * 1000;
-// Stop after this many consecutive ticks with no new/grown series (30 ticks at the
-// default 10s = 5 minutes of quiet); a growth resets the counter.
+// After this many consecutive quiet ticks (30 ticks at the default 10s = 5
+// minutes) the poll IDLES to a slow interval instead of stopping — a wet-read
+// study can receive images at any point while it is open (a re-sent old study
+// too, which is why there is deliberately NO StudyDate age gate: acquisition
+// time says nothing about ingest time). Growth snaps it back to the fast
+// interval, so the worst case is one idle-interval delay before images flow.
 const LIVE_POLL_MAX_QUIET_TICKS = 30;
-
-/** DICOM DA (YYYYMMDD) + TM (HHMMSS[.frac]) to epoch ms; null when unparseable. */
-function dicomDateTimeToMs(da, tm) {
-  if (!da || !/^\d{8}$/.test(da)) {
-    return null;
-  }
-  const time = (tm || '000000').padEnd(6, '0');
-  const iso = `${da.slice(0, 4)}-${da.slice(4, 6)}-${da.slice(6, 8)}T${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}`;
-  const ms = Date.parse(iso);
-  return Number.isNaN(ms) ? null : ms;
-}
-
-/** True when the loaded study is recent enough to be growing. Unknown dates do NOT poll. */
-function isStudyRecent(StudyInstanceUID) {
-  const study = DicomMetadataStore.getStudy(StudyInstanceUID);
-  const instance = study?.series?.[0]?.instances?.[0];
-  const ms = dicomDateTimeToMs(instance?.StudyDate, instance?.StudyTime);
-  return ms !== null && Date.now() - ms < LIVE_POLL_MAX_STUDY_AGE_MS;
-}
+const LIVE_POLL_IDLE_INTERVAL_MS = 60 * 1000;
+// At most one "images arriving" toast per this window, so a burst of ticks
+// doesn't stack notifications.
+const LIVE_POLL_NOTIFY_THROTTLE_MS = 60 * 1000;
 
 /**
  * Re-queries the study's series list on an interval so images stored in Orthanc after the
@@ -383,17 +370,53 @@ function startLiveStudyPoll({
   dataSource,
   filters,
   pollMs,
+  uiNotificationService,
   ready = Promise.resolve(),
 }) {
   let inFlight = false;
   let quietTicks = 0;
+  let idle = false;
+  let lastNotifiedAt = 0;
   // Series whose metadata fetch is still pending; Orthanc can take minutes to answer while it is
   // ingesting, and stacking duplicate requests for the same series only makes that worse.
   const pendingSeries = new Set<string>();
 
   let timer;
   let stopped = false;
-  let pollableStudyUIDs = [];
+
+  function currentInterval() {
+    return idle ? LIVE_POLL_IDLE_INTERVAL_MS : pollMs;
+  }
+
+  function setIdle(nextIdle) {
+    if (idle === nextIdle) {
+      return;
+    }
+    idle = nextIdle;
+    if (timer) {
+      clearInterval(timer);
+      timer = setInterval(poll, currentInterval());
+    }
+    console.info(
+      idle
+        ? `[LiveStudyPoll] idling (${LIVE_POLL_IDLE_INTERVAL_MS}ms) after quiet period`
+        : `[LiveStudyPoll] resuming fast poll (${pollMs}ms)`
+    );
+  }
+
+  function notifyArrival(grownCount) {
+    const now = Date.now();
+    if (now - lastNotifiedAt < LIVE_POLL_NOTIFY_THROTTLE_MS) {
+      return;
+    }
+    lastNotifiedAt = now;
+    uiNotificationService?.show({
+      title: 'New images arriving',
+      message: `${grownCount} series receiving new images.`,
+      type: 'info',
+      duration: 4000,
+    });
+  }
 
   function stop(reason) {
     if (stopped) {
@@ -415,7 +438,7 @@ function startLiveStudyPoll({
     inFlight = true;
     let grownThisTick = 0;
     try {
-      for (const StudyInstanceUID of pollableStudyUIDs) {
+      for (const StudyInstanceUID of studyInstanceUIDs) {
         // The data source caches the study metadata promise; drop it so this is a real re-query.
         dataSource.deleteStudyMetadataPromise?.(StudyInstanceUID);
         const seriesPromises = await dataSource.retrieve.series.metadata({
@@ -478,8 +501,10 @@ function startLiveStudyPoll({
 
     if (grownThisTick > 0) {
       quietTicks = 0;
+      setIdle(false);
+      notifyArrival(grownThisTick);
     } else if (++quietTicks >= LIVE_POLL_MAX_QUIET_TICKS) {
-      stop(`no growth for ${LIVE_POLL_MAX_QUIET_TICKS} ticks`);
+      setIdle(true);
     }
   }
 
@@ -492,7 +517,9 @@ function startLiveStudyPoll({
       clearInterval(timer);
       timer = undefined;
     } else if (!timer) {
-      timer = setInterval(poll, pollMs);
+      timer = setInterval(poll, currentInterval());
+      // Coming back to the tab is a strong "is anything new?" signal.
+      poll();
     }
   }
 
@@ -502,14 +529,8 @@ function startLiveStudyPoll({
     if (stopped) {
       return;
     }
-    // Recency gate: metadata is loaded by now, so study age is known.
-    pollableStudyUIDs = studyInstanceUIDs.filter(isStudyRecent);
-    if (!pollableStudyUIDs.length) {
-      stop('no recent studies to poll');
-      return;
-    }
     console.info(
-      `[LiveStudyPoll] polling ${pollableStudyUIDs.length} recent study(ies) every ${pollMs}ms`
+      `[LiveStudyPoll] polling ${studyInstanceUIDs.length} study(ies) every ${pollMs}ms (idles to ${LIVE_POLL_IDLE_INTERVAL_MS}ms after ${LIVE_POLL_MAX_QUIET_TICKS} quiet ticks)`
     );
     document.addEventListener('visibilitychange', onVisibilityChange);
     if (!document.hidden) {
