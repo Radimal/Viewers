@@ -86,7 +86,7 @@ function Header({
               onClick={onClickReturn}
               data-cy="return-to-work-list"
             >
-              {isReturnEnabled && <Icons.ArrowLeft className="text-primary ml-1 h-7 w-7" />}
+              {isReturnEnabled && <Icons.ArrowLeft className="text-highlight ml-1 h-7 w-7" />}
               <div className="ml-1">
                 {WhiteLabeling?.createLogoComponentFn?.(React, props) || <Icons.OHIFLogo />}
               </div>
@@ -107,7 +107,7 @@ function Header({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-primary hover:bg-muted mt-2 h-full w-full"
+                  className="text-highlight hover:bg-muted mt-2 h-full w-full"
                   onClick={handleDownload}
                   disabled={isDownloading}
                   title={isDownloading ? 'Downloading...' : 'Download Study'}
@@ -126,7 +126,7 @@ function Header({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-primary hover:bg-muted mt-2 h-full w-full"
+                    className="text-highlight hover:bg-muted mt-2 h-full w-full"
                   >
                     <Icons.GearSettings />
                   </Button>

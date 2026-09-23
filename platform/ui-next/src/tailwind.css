@@ -8,7 +8,7 @@
 
 @layer base {
   :root {
-    --highlight: 191 74% 63%;
+    --highlight: 0 0% 73%; /* Radimal: 3.10 gray #b9b9b9 (active/hover) */
     --neutral: 213 22% 59%;
     --neutral-light: 214 69% 81%;
     --neutral-dark: 214 16% 21%;

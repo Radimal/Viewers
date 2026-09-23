@@ -8,7 +8,8 @@ import { useIconPresentation } from '../../contextProviders/IconPresentationProv
 const baseClasses = '!rounded-lg inline-flex items-center justify-center';
 const defaultClasses = 'bg-transparent text-foreground/80 hover:bg-background hover:text-highlight';
 const activeClasses = 'bg-highlight text-background hover:!bg-highlight/80';
-const toggledClasses = 'bg-transparent text-highlight hover:bg-muted';
+// Radimal: 3.10 active tool = gray pill, black icon
+const toggledClasses = 'bg-highlight text-black hover:bg-highlight/90';
 const disabledClasses =
   'text-foreground hover:bg-muted hover:text-highlight opacity-40 cursor-not-allowed';
 
