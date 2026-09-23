@@ -48,7 +48,9 @@ async function appInit(appConfigOrFunc, defaultExtensions, defaultModes) {
   };
   // Default the peer import function
   appConfig.peerImport ||= peerImport;
-  appConfig.measurementTrackingMode ||= 'standard';
+  // Radimal: track measurements automatically — no 'track this series?' prompt.
+  // Deployments can still override via app-config (standard | simplified | none).
+  appConfig.measurementTrackingMode ||= 'simplified';
   appConfig.routerBasename ||= publicUrl;
 
   const extensionManager = new ExtensionManager({
