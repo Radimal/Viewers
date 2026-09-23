@@ -173,9 +173,10 @@ deploys, and serves studies correctly.
 
 1. Freeze the 3.10 branch (agree with the team: no more 3.10 feature work
    after final reconciliation diff).
-2. App config: DONE in code — measurementTrackingMode now defaults to
-   'simplified' in appInit.js (2026-09-23), so the shared template needs
-   no change. Note
+2. App config: DONE in code (2026-09-23) — appInit.js derives
+   measurementTrackingMode from 3.10's disableConfirmationPrompts flag
+   ('simplified' when true), which the shared template already sets for
+   every cluster. No template change needed. Note
    autoTrimCollimationBorders defaults ON (config key only needed to
    disable).
 3. Workflow: on the final v3.13.x release branch, re-add the prod buckets
