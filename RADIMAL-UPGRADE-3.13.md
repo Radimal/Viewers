@@ -173,9 +173,9 @@ deploys, and serves studies correctly.
 
 1. Freeze the 3.10 branch (agree with the team: no more 3.10 feature work
    after final reconciliation diff).
-2. App config: add 3.13-only keys via a per-deployment template variable
-   (NOT the shared app-config.js.tmpl until every cluster is 3.13):
-   measurementTrackingMode: 'simplified' (decided Phase 3). Note
+2. App config: DONE in code — measurementTrackingMode now defaults to
+   'simplified' in appInit.js (2026-09-23), so the shared template needs
+   no change. Note
    autoTrimCollimationBorders defaults ON (config key only needed to
    disable).
 3. Workflow: on the final v3.13.x release branch, re-add the prod buckets
