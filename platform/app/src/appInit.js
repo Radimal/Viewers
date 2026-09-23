@@ -48,9 +48,15 @@ async function appInit(appConfigOrFunc, defaultExtensions, defaultModes) {
   };
   // Default the peer import function
   appConfig.peerImport ||= peerImport;
-  // Radimal: track measurements automatically — no 'track this series?' prompt.
-  // Deployments can still override via app-config (standard | simplified | none).
-  appConfig.measurementTrackingMode ||= 'simplified';
+  // Radimal (3.10 parity): disableConfirmationPrompts — set in the shared
+  // app-config template for every cluster — silenced ALL tracking prompts on
+  // 3.10 (begin tracking, new series, SR hydration). 3.13 moved those prompts
+  // to measurementTrackingMode, so the flag alone no longer suppressed them;
+  // map it onto 'simplified', which skips the same prompts. An explicit
+  // measurementTrackingMode in app-config still wins.
+  appConfig.measurementTrackingMode ||= appConfig.disableConfirmationPrompts
+    ? 'simplified'
+    : 'standard';
   appConfig.routerBasename ||= publicUrl;
 
   const extensionManager = new ExtensionManager({

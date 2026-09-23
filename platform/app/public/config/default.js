@@ -60,6 +60,7 @@ window.config = {
   showWarningMessageForCrossOrigin: true,
   showCPUFallbackMessage: true,
   showLoadingIndicator: true,
+  disableConfirmationPrompts: true,
   posthog: {
     apiKey: 'phc_jtIAczfFVla7mOaQ22HDCrOUaskz9LlQdWx6Jb7SRDK',
     apiHost: 'https://us.i.posthog.com',
