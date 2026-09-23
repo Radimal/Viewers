@@ -43,6 +43,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc preinstall.js ./
 # (scripts/apply-openjpeg-patch.js) runs during the deps-only pnpm install.
 COPY scripts ./scripts
 COPY vendor ./vendor
+# patches/ holds pnpm patchedDependencies (cornerstone tools calibration fix);
+# pnpm install fails if a referenced patch file is missing.
+COPY patches ./patches
 COPY --parents ./extensions/*/package.json ./modes/*/package.json ./platform/*/package.json ./
 # Run the install before copying the rest of the files.
 # Keep --no-frozen-lockfile here (unlike CI): .dockerignore excludes

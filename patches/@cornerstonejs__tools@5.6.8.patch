@@ -1,0 +1,19 @@
+diff --git a/dist/esm/utilities/getCalibratedUnits.js b/dist/esm/utilities/getCalibratedUnits.js
+index e777b443e0801ed3713a5544972cfec3eed1de57..736a55479c30c59247763b2382fdf24b6042a7b2 100644
+--- a/dist/esm/utilities/getCalibratedUnits.js
++++ b/dist/esm/utilities/getCalibratedUnits.js
+@@ -95,9 +95,11 @@ const getCalibratedLengthUnitsAndScale = (image, handles) => {
+                 (UNIT_MAPPING[region.physicalUnitsYDirection] || 'px') + SQUARE;
+         }
+     }
+-    else if (calibration.scale) {
+-        scale = calibration.scale;
+-    }
++    /* Radimal patch: removed the X-axis scale clobber. The initial
++       assignment already divides calibration.scale by the column pixel
++       spacing; overwriting `scale` with the raw ratio here (while scaleY
++       kept its division) made user-calibrated lengths on images WITH
++       pixel spacing wrong by an angle-dependent factor. */
+     return {
+         unit: unit + (calibrationType ? ` ${calibrationType}` : ''),
+         areaUnit: areaUnit + (calibrationType ? ` ${calibrationType}` : ''),
