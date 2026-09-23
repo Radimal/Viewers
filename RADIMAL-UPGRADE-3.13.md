@@ -160,8 +160,11 @@ deploys, and serves studies correctly.
    unpause (absorbed — ui-next Hotkey unpauses on blur); per-viewport
    load-percent overlay (post-cutover polish); build tooling (mise/babel/
    node-version — 3.13 uses pnpm/rspack); ethos buckets (cutover
-   checklist). ANY 3.10 COMMIT LANDING AFTER 5d9d8341a2 NEEDS A FRESH
-   DELTA CHECK BEFORE CUTOVER (git log 5d9d8341a2..origin/v3.10.0.71.radimal).
+   checklist). ANY 3.10 COMMIT LANDING AFTER 2480b9e85f NEEDS A FRESH
+   DELTA CHECK BEFORE CUTOVER (git log 2480b9e85f..origin/v3.10.0.71.radimal).
+   (Pin advanced 2026-09-23: 5d9d8341a2..2480b9e85f was the thumbnail
+   reinstate+revert (net no-op, mirrored) and live-populate re-landed on
+   3.10 from THIS branch's fixes — nothing new flowed forward.)
 3. Canary deployment (plan below) for reporter-heavy verification against
    prod data.
 4. Cutover per the checklist below, then destroy the canary.
@@ -557,3 +560,24 @@ missing on a pasted URL.
 | 35 | NM multiframe | NM study, scroll frames | Per-frame positions correct (3.13 combineFrameInstance) |
 | 36 | PostHog | Open studies, check PostHog live events filtered to viewer-blue origin | first_image_rendered / layout_rendered with build tag; frame download stats on tab close |
 | 37 | UpdateBanner | Push any new build while a tab is open | Non-disruptive banner offering reload appears within poll interval |
+
+## Status 2026-09-23 — percentage rollout
+
+- Upstream folded through OHIF 3.13.10 (1a112b6b4f): security overrides +
+  dicom-pdf encapsulated-document validation. version.txt stays 3.13.3
+  (ECR tag / tfvars naming). Re-check `git log v3.13.10..upstream/release/3.13`
+  before cutover.
+- Theme aligned with 3.10 (01a845049b): --highlight gray #b9b9b9, active
+  tool = gray pill + black icon, header icons gray; blue stays for accents.
+- Rollout lever: PostHog flag `viewer-313-canary` (id 890339) consumed by
+  radimal-vet ohifStudyUrl (shipped e917c62c; GATSBY_CANARY_VIEWER_URL is
+  set — proven by 825 opens from the 4 flagged vets on view-blue since
+  09-16). Main cluster only; VEG/Ethos and share links never divert.
+  Widen by ADDING a condition group (all users, N%) — keep the email group.
+  Kill switch: set that group to 0% (no deploy).
+- Baseline at 4 users (7d): view.radimal.ai p50 2286ms / p90 5164ms,
+  view-blue p50 2695ms / p90 6012ms. Blue serves bundles from nginx with no
+  CDN edge, so some gap is expected; re-compare at 10%.
+- Blue is the prod standby: while the cohort is live, an incident divert
+  to blue puts ALL users on 3.13 — revert blue's ohif_version first.
+
