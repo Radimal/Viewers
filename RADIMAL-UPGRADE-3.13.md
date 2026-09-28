@@ -169,6 +169,29 @@ deploys, and serves studies correctly.
    prod data.
 4. Cutover per the checklist below, then destroy the canary.
 
+### VEG canary (2026-09-28): orthanc-veg-blue
+
+VEG has no standby cluster (its one deployment is subenv "green"), so the VEG
+canary is a NEW ohif-only "blue" deployment on the veg-prod-1 stack —
+`orthanc-cluster/deployments/orthanc-veg-blue.{tfvars,backend.tfvars}`
+(written, uncommitted, modeled on orthanc-veg-prod + the prod-1 blue recipe).
+Verified against the module before drafting:
+- ALB lookup is `orthanc-alb-${stack_name}` -> veg-blue attaches host rules
+  for veg-viewer-blue/veg-view-blue to the EXISTING veg stack ALB; green's
+  rules untouched.
+- CloudFront lookup is tag env == stack_name -> app-config dicom-web points
+  at the veg-prod-1 distribution (same studies/cache as live VEG users).
+- vetOriginFor: https + *.radimal.ai (non-stage) -> vet.radimal.ai; the
+  reporter maps to prod. Both correct for veg-viewer-blue.
+- cidr 10.20.80.0/20 free (10.20.48.0/20 only appears commented out in the
+  ethos files — avoided). Region us-west-2 like the veg stack; the ohif
+  image pulls cross-region from us-east-1 ECR exactly as veg green does.
+- Same ungated-aurora rider as the standalone canary: idle 0.5-ACU RDS.
+Test at https://veg-viewer-blue.prod-1.radimal.ai/?StudyInstanceUIDs=<uid>.
+Vet-app flag for VEG: override CONFIG.VEG_VIEWER_URL in viewerBaseUrl when
+the flag is on AND dicomSource === DicomSource.VEG, and add the veg-blue
+origin to allowedViewerOrigins.
+
 ## Cutover checklist (execute in order, each reversible)
 
 1. Freeze the 3.10 branch (agree with the team: no more 3.10 feature work
