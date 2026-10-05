@@ -40,6 +40,8 @@ const ZOOM_SPEED_OPTIONS = ['0.05', '0.1', '0.2', '0.3', '0.4'];
 // mode's registerModeToolbar reads the same key at mode entry.
 const PINNED_TOOLS_KEY = 'pinnedToolbarTools';
 const PINNABLE_SECTIONS = ['MeasurementTools', 'MoreTools'];
+// Keep in sync with MAX_PINNED_TOOLS in modes/basic/src/modeCustomization.ts.
+const MAX_PINNED_TOOLS = 10;
 
 function getPinnedToolsPref(): string[] {
   try {
@@ -441,7 +443,10 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
         {pinnableTools.length > 0 && (
           <>
             <UserPreferencesModal.SubHeading>
-              {t('PinnedToolbarTools', { defaultValue: 'Pinned Toolbar Tools' })}
+              {t('PinnedToolbarTools', {
+                defaultValue: 'Pinned Toolbar Tools (max {{max}})',
+                max: MAX_PINNED_TOOLS,
+              })}
             </UserPreferencesModal.SubHeading>
             <UserPreferencesModal.HotkeysGrid>
               {pinnableTools.map(tool => (
@@ -452,6 +457,10 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                   <span className="text-foreground text-base">{tool.label}</span>
                   <Checkbox
                     checked={state.pinnedTools.includes(tool.id)}
+                    disabled={
+                      !state.pinnedTools.includes(tool.id) &&
+                      state.pinnedTools.length >= MAX_PINNED_TOOLS
+                    }
                     onCheckedChange={value =>
                       setState(s => ({
                         ...s,

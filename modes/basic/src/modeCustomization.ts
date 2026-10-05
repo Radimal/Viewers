@@ -40,11 +40,14 @@ export function registerModeToolbar({ toolbarService }, { toolbarButtons, toolba
 
 /** Dropdown sections whose tools a user can pin to the primary row. */
 const PINNABLE_SECTIONS = ['MeasurementTools', 'MoreTools'];
+/** More than this overflows the primary row into the undo button on a 14" laptop. */
+const MAX_PINNED_TOOLS = 10;
 
 /**
  * Radimal: moves the user's pinned tools (localStorage `pinnedToolbarTools`,
  * set from the preferences modal) out of their dropdown and onto the primary
- * row, just before the MoreTools menu. Mutates `sections` in place.
+ * row, just before the MoreTools menu, up to MAX_PINNED_TOOLS. Mutates
+ * `sections` in place.
  */
 export function applyPinnedTools(sections: Record<string, string[]>): void {
   let pinned: string[] = [];
@@ -58,7 +61,11 @@ export function applyPinnedTools(sections: Record<string, string[]>): void {
   }
   const primary = [...sections.primary];
   sections.primary = primary;
+  let count = 0;
   for (const id of pinned) {
+    if (count === MAX_PINNED_TOOLS) {
+      break;
+    }
     const from = PINNABLE_SECTIONS.find(key => sections[key]?.includes(id));
     if (!from || primary.includes(id)) {
       continue;
@@ -66,6 +73,7 @@ export function applyPinnedTools(sections: Record<string, string[]>): void {
     sections[from] = sections[from].filter(b => b !== id);
     const at = primary.indexOf('MoreTools');
     primary.splice(at === -1 ? primary.length : at, 0, id);
+    count++;
   }
 }
 
