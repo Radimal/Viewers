@@ -32,8 +32,40 @@ export function registerModeToolbar({ toolbarService }, { toolbarButtons, toolba
   toolbarService.register(toArray(toolbarButtons));
 
   const sections: Record<string, string[]> = Object.assign({}, ...toArray(toolbarSections));
+  applyPinnedTools(sections);
   for (const [key, section] of Object.entries(sections)) {
     toolbarService.updateSection(key, section);
+  }
+}
+
+/** Dropdown sections whose tools a user can pin to the primary row. */
+const PINNABLE_SECTIONS = ['MeasurementTools', 'MoreTools'];
+
+/**
+ * Radimal: moves the user's pinned tools (localStorage `pinnedToolbarTools`,
+ * set from the preferences modal) out of their dropdown and onto the primary
+ * row, just before the MoreTools menu. Mutates `sections` in place.
+ */
+export function applyPinnedTools(sections: Record<string, string[]>): void {
+  let pinned: string[] = [];
+  try {
+    pinned = JSON.parse(localStorage.getItem('pinnedToolbarTools')) || [];
+  } catch (e) {
+    return;
+  }
+  if (!Array.isArray(pinned) || !sections.primary) {
+    return;
+  }
+  const primary = [...sections.primary];
+  sections.primary = primary;
+  for (const id of pinned) {
+    const from = PINNABLE_SECTIONS.find(key => sections[key]?.includes(id));
+    if (!from || primary.includes(id)) {
+      continue;
+    }
+    sections[from] = sections[from].filter(b => b !== id);
+    const at = primary.indexOf('MoreTools');
+    primary.splice(at === -1 ? primary.length : at, 0, id);
   }
 }
 

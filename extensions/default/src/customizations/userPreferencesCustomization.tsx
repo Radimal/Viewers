@@ -36,6 +36,20 @@ const MOUSE_BUTTONS = [
 const DEFAULT_MOUSE_TOOLS = { left: 'WindowLevel', middle: 'Pan', right: 'Zoom' };
 const ZOOM_SPEED_OPTIONS = ['0.05', '0.1', '0.2', '0.3', '0.4'];
 
+// Radimal: dropdown tools a user can pin to the primary toolbar row. The basic
+// mode's registerModeToolbar reads the same key at mode entry.
+const PINNED_TOOLS_KEY = 'pinnedToolbarTools';
+const PINNABLE_SECTIONS = ['MeasurementTools', 'MoreTools'];
+
+function getPinnedToolsPref(): string[] {
+  try {
+    const pinned = JSON.parse(localStorage.getItem(PINNED_TOOLS_KEY));
+    return Array.isArray(pinned) ? pinned : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 function getZoomSpeedPref(): string {
   try {
     const saved = localStorage.getItem('zoomSpeed');
@@ -132,6 +146,16 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
   const { hotkeysManager, servicesManager } = useSystem();
   const { t, i18n: i18nextInstance } = useTranslation('UserPreferencesModal');
   const toolGroupService = (servicesManager as any)?.services?.toolGroupService;
+  const toolbarService = (servicesManager as any)?.services?.toolbarService;
+
+  // Pinned tools are already out of their dropdown, so list them too.
+  const pinnableTools = useMemo(() => {
+    const sections = toolbarService?.state?.buttonSections ?? {};
+    const ids = [...PINNABLE_SECTIONS.flatMap(key => sections[key] ?? []), ...getPinnedToolsPref()];
+    return [...new Set(ids)]
+      .map(id => ({ id, label: toolbarService.getButton(id)?.props?.label }))
+      .filter(tool => tool.label);
+  }, [toolbarService]);
 
   const { hotkeyDefinitions = {}, hotkeyDefaults = {} } = hotkeysManager;
 
@@ -182,6 +206,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     // localStorage keys at tool-group init; a reload applies the change).
     scrollWheelTool: utils.getScrollWheelTool(),
     invertScrollWheel: utils.getScrollWheelInversion(),
+    pinnedTools: getPinnedToolsPref(),
     // Radimal (3.10 parity): auto-reopen the saved multi-monitor layout when a
     // study opens (ViewerLayout reads this key on primary-window start).
     openAdditionalWindowsOnStart: (() => {
@@ -413,6 +438,36 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
           </div>
         </UserPreferencesModal.HotkeysGrid>
 
+        {pinnableTools.length > 0 && (
+          <>
+            <UserPreferencesModal.SubHeading>
+              {t('PinnedToolbarTools', { defaultValue: 'Pinned Toolbar Tools' })}
+            </UserPreferencesModal.SubHeading>
+            <UserPreferencesModal.HotkeysGrid>
+              {pinnableTools.map(tool => (
+                <div
+                  key={tool.id}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="text-foreground text-base">{tool.label}</span>
+                  <Checkbox
+                    checked={state.pinnedTools.includes(tool.id)}
+                    onCheckedChange={value =>
+                      setState(s => ({
+                        ...s,
+                        pinnedTools: value
+                          ? [...s.pinnedTools, tool.id]
+                          : s.pinnedTools.filter(id => id !== tool.id),
+                      }))
+                    }
+                    aria-label={`Pin ${tool.label}`}
+                  />
+                </div>
+              ))}
+            </UserPreferencesModal.HotkeysGrid>
+          </>
+        )}
+
         {state.crosshairModifier != null && (
           <>
             <UserPreferencesModal.SubHeading>
@@ -482,6 +537,8 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
               const wheelChanged =
                 state.scrollWheelTool !== utils.getScrollWheelTool() ||
                 state.invertScrollWheel !== utils.getScrollWheelInversion();
+              const pinnedChanged =
+                JSON.stringify(state.pinnedTools) !== JSON.stringify(getPinnedToolsPref());
               try {
                 localStorage.setItem('zoomSpeed', state.zoomSpeed);
                 localStorage.setItem(
@@ -490,20 +547,19 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                 );
                 localStorage.setItem('scrollWheelTool', state.scrollWheelTool);
                 localStorage.setItem('invertScrollWheel', String(state.invertScrollWheel));
+                localStorage.setItem(PINNED_TOOLS_KEY, JSON.stringify(state.pinnedTools));
               } catch (e) {
                 /* storage unavailable */
               }
-              if (wheelChanged) {
-                // applyWheelPreferences runs at tool-group init (mode entry);
-                // reload is how a changed wheel binding takes effect.
+              if (wheelChanged || pinnedChanged) {
+                // Wheel bindings and the toolbar layout are both built once at
+                // mode entry; reload is how a change takes effect.
                 window.location.reload();
                 return;
               }
 
               if (toolGroupService && state.crosshairModifier != null) {
-                const bindings = [
-                  { mouseButton: 1, modifierKey: Number(state.crosshairModifier) },
-                ];
+                const bindings = [{ mouseButton: 1, modifierKey: Number(state.crosshairModifier) }];
                 toolGroupService.setToolBindings('mpr', 'Crosshairs', bindings);
                 toolGroupService.applyToolBindings('mpr', 'Crosshairs', {
                   replaceExisting: true,
