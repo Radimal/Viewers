@@ -63,7 +63,8 @@ function migrateOldHotkeyDefinitions({
 
     localStorage.setItem('user-preferred-keys', JSON.stringify(userPreferredKeys));
     localStorage.setItem('hotkeys-migrated', 'true');
-    localStorage.removeItem('hotkey-definitions');
+    // Radimal: keep 3.10's key so a rollback to 3.10 still finds readers'
+    // shortcuts; 'hotkeys-migrated' stops it overwriting 3.13 edits later.
 
     console.debug('HotkeysManager: Successfully migrated hotkey definitions to new format');
   } catch (error) {
