@@ -250,7 +250,15 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
       crosshairModifier: getModifierFromBindings(defaultCrosshairBindings, 1),
     }));
 
-    setState(state => ({ ...state, mouseTools: { ...DEFAULT_MOUSE_TOOLS }, zoomSpeed: '0.1' }));
+    setState(state => ({
+      ...state,
+      mouseTools: { ...DEFAULT_MOUSE_TOOLS },
+      zoomSpeed: '0.1',
+      // 3.10 parity: reset covers the wheel too (Save then reloads to apply).
+      scrollWheelTool: 'StackScroll',
+      invertScrollWheel: false,
+      zoomTowardCursor: false,
+    }));
     MOUSE_TOOL_OPTIONS.forEach(toolName =>
       toolGroupService?.removePersistedToolBindings?.('default', toolName)
     );
