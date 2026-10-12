@@ -451,8 +451,16 @@ export default class ToolGroupService {
 
     const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
 
+    const isWheel = binding => binding?.mouseButton === Enums.MouseBindings.Wheel;
+
     for (const [toolName, bindings] of Object.entries(toolGroupBindings)) {
-      this.setToolBindings(toolGroupId, toolName, bindings as ToolBindings);
+      // Radimal: wheel ownership is decided at mode entry (applyWheelPreferences),
+      // not by persisted button bindings — keep the tool's current wheel binding.
+      const wheelBindings = (this.getToolBindings(toolGroupId, toolName) || []).filter(isWheel);
+      this.setToolBindings(toolGroupId, toolName, [
+        ...(bindings as ToolBindings).filter(b => !isWheel(b)),
+        ...wheelBindings,
+      ]);
 
       if (!toolGroup || !toolGroup.hasTool(toolName)) {
         continue;
