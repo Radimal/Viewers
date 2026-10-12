@@ -42,6 +42,23 @@ const radimalHotkeyBindings = [
   },
 ];
 
+/**
+ * 3.10's W/L presets: 1-5 apply fixed window/level on any modality. 3.13's
+ * setWindowLevelPreset is modality-keyed (no-op on DX/CR/US/MR) and drops
+ * Liver, shifting CT numbering. Same commandOptions as 3.10 so migrated
+ * custom keys still match.
+ */
+const windowLevelPresetBindings = [1, 2, 3, 4, 5].map(n => ({
+  commandName: 'setWindowLevel',
+  commandOptions: defaults.windowLevelPresets[n],
+  label: `W/L Preset ${n}`,
+  keys: [String(n)],
+}));
+
 export default {
-  'ohif.hotkeyBindings': [...defaults.hotkeyBindings, ...radimalHotkeyBindings],
+  'ohif.hotkeyBindings': [
+    ...defaults.hotkeyBindings.filter(({ commandName }) => commandName !== 'setWindowLevelPreset'),
+    ...radimalHotkeyBindings,
+    ...windowLevelPresetBindings,
+  ],
 };

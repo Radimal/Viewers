@@ -965,7 +965,13 @@ function commandsModule({
         return;
       }
 
-      actions.setViewportWindowLevel({ ...props, viewportId });
+      // 3.10 preset hotkeys pass { window, level }.
+      actions.setViewportWindowLevel({
+        ...props,
+        windowWidth: props.windowWidth ?? props.window,
+        windowCenter: props.windowCenter ?? props.level,
+        viewportId,
+      });
     },
     setWindowLevelPreset: ({ presetName, presetIndex }) => {
       const windowLevelPresets = customizationService.getCustomization(
