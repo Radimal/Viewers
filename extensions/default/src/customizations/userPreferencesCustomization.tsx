@@ -203,6 +203,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
 
   const [state, setState] = useState({
     hotkeyDefinitions: initialHotkeyDefinitions,
+    movedHotkeys: {} as Record<string, { from: string; by: string }>,
     languageValue: currentLanguage.value,
     crosshairModifier: initialCrosshairModifier,
     mouseTools: getMouseToolAssignment(toolGroupService),
@@ -229,17 +230,36 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     setState(state => ({ ...state, languageValue: value }));
   };
 
+  // Radimal: a key can only do one thing. Whatever held the new key moves to
+  // Shift+key (else a free key) and is flagged so the reader sees the change.
   const onHotkeyChangeHandler = (id: string, newKeys: string) => {
-    setState(state => ({
-      ...state,
-      hotkeyDefinitions: {
+    setState(state => {
+      const definitions = {
         ...state.hotkeyDefinitions,
-        [id]: {
-          ...state.hotkeyDefinitions[id],
-          keys: newKeys,
-        },
-      },
-    }));
+        [id]: { ...state.hotkeyDefinitions[id], keys: newKeys },
+      };
+      const target = utils.hotkeyCombo(newKeys);
+      const used = new Set(
+        Object.values(definitions)
+          .map(definition => utils.hotkeyCombo(definition.keys))
+          .filter(Boolean)
+      );
+      const movedHotkeys = { ...state.movedHotkeys };
+      delete movedHotkeys[id];
+      Object.entries(definitions).forEach(([otherId, definition]) => {
+        if (!target || otherId === id || utils.hotkeyCombo(definition.keys) !== target) {
+          return;
+        }
+        const to = utils.freeHotkey(target, used);
+        if (!to) {
+          return;
+        }
+        used.add(to);
+        definitions[otherId] = { ...definition, keys: [to] };
+        movedHotkeys[otherId] = { from: target, by: definitions[id].label };
+      });
+      return { ...state, hotkeyDefinitions: definitions, movedHotkeys };
+    });
   };
 
   const onResetHandler = () => {
@@ -247,6 +267,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
       ...state,
       languageValue: defaultLanguage.value,
       hotkeyDefinitions: resolvedHotkeyDefaults,
+      movedHotkeys: {},
       crosshairModifier: getModifierFromBindings(defaultCrosshairBindings, 1),
     }));
 
@@ -343,16 +364,30 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
 
         <UserPreferencesModal.SubHeading>{t('Hotkeys')}</UserPreferencesModal.SubHeading>
         <UserPreferencesModal.HotkeysGrid>
-          {Object.entries(state.hotkeyDefinitions).map(([id, definition]) => (
-            <UserPreferencesModal.Hotkey
-              key={id}
-              label={t(definition.label)}
-              value={definition.keys}
-              onChange={newKeys => onHotkeyChangeHandler(id, newKeys)}
-              placeholder={definition.keys}
-              hotkeys={hotkeysModule}
-            />
-          ))}
+          {Object.entries(state.hotkeyDefinitions).map(([id, definition]) => {
+            const moved = state.movedHotkeys[id];
+            return (
+              <div key={id}>
+                <UserPreferencesModal.Hotkey
+                  className={
+                    moved
+                      ? '[&_input]:border-yellow-500 [&_input]:ring-1 [&_input]:ring-yellow-500'
+                      : undefined
+                  }
+                  label={t(definition.label)}
+                  value={definition.keys}
+                  onChange={newKeys => onHotkeyChangeHandler(id, newKeys)}
+                  placeholder={definition.keys}
+                  hotkeys={hotkeysModule}
+                />
+                {moved && (
+                  <div className="mt-1 text-right text-xs text-yellow-500">
+                    Moved off {moved.from.toUpperCase()}, now used by {t(moved.by)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </UserPreferencesModal.HotkeysGrid>
 
         <UserPreferencesModal.SubHeading>

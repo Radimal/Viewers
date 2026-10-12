@@ -1,6 +1,14 @@
-const combo = keys => (Array.isArray(keys) ? keys.join('+') : keys || '').toLowerCase();
+export const hotkeyCombo = keys =>
+  (Array.isArray(keys) ? keys.join('+') : keys || '').toLowerCase();
+const combo = hotkeyCombo;
 
 const FREE_KEY_POOL = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
+
+/** Shift+<key> if free, else the first free letter/digit. */
+export const freeHotkey = (from: string, used: Set<string>) =>
+  (from.includes('+') ? FREE_KEY_POOL : [`shift+${from}`, ...FREE_KEY_POOL]).find(
+    key => !used.has(key)
+  );
 
 /**
  * Radimal: a reader's own shortcut wins its key. Any default-keyed command it
@@ -19,8 +27,7 @@ function resolveHotkeyClashes(definitions, userPreferredKeys, generateHash) {
     if (!from || isCustom(def) || !customCombos.has(from)) {
       return;
     }
-    const candidates = from.includes('+') ? FREE_KEY_POOL : [`shift+${from}`, ...FREE_KEY_POOL];
-    const to = candidates.find(key => !used.has(key));
+    const to = freeHotkey(from, used);
     if (!to) {
       return;
     }
