@@ -2,6 +2,7 @@ import objectHash from 'object-hash';
 import { hotkeys as mouseTrapAPI } from '../utils';
 import Hotkey from './Hotkey';
 import migrateOldHotkeyDefinitions from '../utils/hotkeys/migrateHotkeys';
+import resolveHotkeyClashes from '../utils/hotkeys/resolveHotkeyClashes';
 import pubSubServiceInterface from '../services/_shared/pubSubServiceInterface';
 
 /**
@@ -148,8 +149,26 @@ export class HotkeysManager {
         };
       }
 
-      return definition;
+      return { ...definition };
     });
+
+    const moved = resolveHotkeyClashes(updatedDefinitions, userPreferredKeys, this.generateHash);
+    if (moved.length) {
+      localStorage.setItem('user-preferred-keys', JSON.stringify(userPreferredKeys));
+      const format = keys =>
+        keys
+          .split('+')
+          .map(k => k[0].toUpperCase() + k.slice(1))
+          .join('+');
+      this._servicesManager.services.uiNotificationService?.show({
+        title: 'Shortcuts updated',
+        message: `Your own shortcuts are kept. Moved to avoid a clash: ${moved
+          .map(({ label, from, to }) => `${label} ${format(from)} → ${format(to)}`)
+          .join(', ')}. Change them in Preferences.`,
+        type: 'info',
+        duration: 15000,
+      });
+    }
 
     this.setHotkeys(updatedDefinitions);
   }
