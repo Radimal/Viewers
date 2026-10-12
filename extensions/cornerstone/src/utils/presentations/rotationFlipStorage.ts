@@ -7,10 +7,10 @@
  * rotated/flipped to come back that way after a reload, so the last
  * rotation/flip state per series is mirrored into localStorage.
  *
- * The key format and value shape are compatible with the 3.10 fork's
- * ViewportPersistenceService (`ohif_viewport_state_<study>-<series>` →
- * `{ rotationFlip, timestamp }`), so state saved by the old viewer carries
- * over unchanged.
+ * The value shape matches the 3.10 fork's ViewportPersistenceService
+ * (`{ rotationFlip, timestamp }`). 3.10 keyed it per instance
+ * (`ohif_viewport_state_<study>-<series>-<instance>`), so a series with no
+ * 3.13 entry falls back to its newest 3.10 entry.
  */
 
 const KEY_PREFIX = 'ohif_viewport_state_';
@@ -70,16 +70,14 @@ export function saveRotationFlip(
   }
 }
 
-export function loadRotationFlip(
-  displaySets: PersistableDisplaySet[]
-): RotationFlipState | null {
+export function loadRotationFlip(displaySets: PersistableDisplaySet[]): RotationFlipState | null {
   const key = storageKey(displaySets);
   if (!key) {
     return null;
   }
 
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(key) ?? newestLegacyEntry(key);
     if (!raw) {
       return null;
     }
@@ -92,4 +90,30 @@ export function loadRotationFlip(
     console.warn('rotationFlipStorage: load failed', e);
     return null;
   }
+}
+
+/**
+ * Moves the newest 3.10 per-instance entry (`<key>-<instance>`) for this series
+ * under the 3.13 key and drops the rest, so a later reset (which removes the
+ * 3.13 key) can't resurrect the 3.10 state.
+ */
+function newestLegacyEntry(key: string): string | null {
+  let newest: string | null = null;
+  let newestAt = -1;
+  for (const legacyKey of Object.keys(localStorage)) {
+    if (!legacyKey.startsWith(`${key}-`)) {
+      continue;
+    }
+    const raw = localStorage.getItem(legacyKey);
+    localStorage.removeItem(legacyKey);
+    const at = Number(JSON.parse(raw)?.timestamp) || 0;
+    if (at > newestAt) {
+      newest = raw;
+      newestAt = at;
+    }
+  }
+  if (newest) {
+    localStorage.setItem(key, newest);
+  }
+  return newest;
 }
