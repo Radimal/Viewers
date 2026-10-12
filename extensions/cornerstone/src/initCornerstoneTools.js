@@ -51,6 +51,7 @@ import { LabelmapSlicePropagationTool, MarkerLabelmapTool } from '@cornerstonejs
 import * as polySeg from '@cornerstonejs/polymorphic-segmentation';
 
 import CalibrationLineTool from './tools/CalibrationLineTool';
+import WheelZoomTool from './tools/WheelZoomTool';
 import ImageOverlayViewerTool from './tools/ImageOverlayViewerTool';
 
 export default function initCornerstoneTools(configuration = {}) {
@@ -77,7 +78,7 @@ export default function initCornerstoneTools(configuration = {}) {
   addTool(StackScrollTool);
   addTool(PlanarRotateTool);
   addTool(VolumeRotateTool);
-  addTool(ZoomTool);
+  addTool(WheelZoomTool); // Radimal: 3.10 wheel feel, registered as 'Zoom'
   addTool(ProbeTool);
   addTool(MIPJumpToClickTool);
   addTool(LengthTool);

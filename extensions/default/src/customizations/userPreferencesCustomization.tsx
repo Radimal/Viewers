@@ -211,6 +211,8 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     // localStorage keys at tool-group init; a reload applies the change).
     scrollWheelTool: utils.getScrollWheelTool(),
     invertScrollWheel: utils.getScrollWheelInversion(),
+    // Read by the Zoom tool on every wheel event; off = 3.10's centre zoom.
+    zoomTowardCursor: localStorage.getItem('zoomTowardCursor') === 'true',
     pinnedTools: getPinnedToolsPref(),
     // Radimal (3.10 parity): auto-reopen the saved multi-monitor layout when a
     // study opens (ViewerLayout reads this key on primary-window start).
@@ -447,6 +449,16 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-foreground text-base">
+              {t('ZoomTowardCursor', { defaultValue: 'Zoom Toward Cursor' })}
+            </span>
+            <Checkbox
+              checked={state.zoomTowardCursor}
+              onCheckedChange={value => setState(s => ({ ...s, zoomTowardCursor: !!value }))}
+              aria-label="Zoom Toward Cursor"
+            />
+          </div>
         </UserPreferencesModal.HotkeysGrid>
 
         {pinnableTools.length > 0 && (
@@ -565,6 +577,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                 );
                 localStorage.setItem('scrollWheelTool', state.scrollWheelTool);
                 localStorage.setItem('invertScrollWheel', String(state.invertScrollWheel));
+                localStorage.setItem('zoomTowardCursor', String(state.zoomTowardCursor));
                 localStorage.setItem(PINNED_TOOLS_KEY, JSON.stringify(state.pinnedTools));
               } catch (e) {
                 /* storage unavailable */

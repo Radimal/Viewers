@@ -21,6 +21,18 @@ export function setZoomSpeed(speed: number): void {
   }
 }
 
+/**
+ * Wheel zoom toward the cursor instead of the image centre (3.10 zoomed
+ * around the centre). Read on every wheel event, so no reload is needed.
+ */
+export function getZoomTowardCursor(): boolean {
+  try {
+    return localStorage.getItem('zoomTowardCursor') === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
 /** scaleBy factor for a zoom step in the given direction. */
 export function getZoomScaleFactor(direction: number): number {
   const speed = getZoomSpeed();
