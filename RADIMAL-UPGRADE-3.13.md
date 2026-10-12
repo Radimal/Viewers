@@ -203,13 +203,18 @@ origin to allowedViewerOrigins.
    autoTrimCollimationBorders defaults ON (config key only needed to
    disable).
 3. Workflow: on the final v3.13.x release branch, re-add the prod buckets
-   to the S3 sync (prod-1, veg-prod-1 — and check whether ethos-stage-1/
-   ethos-prod-1 apply to 3.13 clusters), and mirror the 3.10 workflow's
-   later additions (sha-<commit> ECR tag, *.map exclusion — already
-   excluded on 3.13? verify). Push → CI builds + syncs.
+   to the S3 sync (prod-1, veg-prod-1, ethos-prod-1 — Ethos moves to 3.13
+   too, decided 2026-10-12; ethos-stage-1 already syncs from 3.13) and
+   REMOVE each one from the 3.10 workflow in the same change, or a 3.10
+   push puts 3.10's unhashed shared files back. *.map is excluded
+   (856f947f5a); sha-<commit> ECR tag still to mirror. Push → CI builds +
+   syncs.
 4. Terraform: flip ohif_version in prod tfvars one cluster at a time
    (veg-prod after prod-1 soak, or per team preference). Plan must show
-   ONLY the ohif_http image change per cluster.
+   ONLY the ohif_http image change per cluster. Ethos: branches
+   feat/ethos-stage-313 (apply first, soak on staging) and
+   feat/ethos-prod-313 in radimal-terraform; Ethos has no blue standby, so
+   rollback is reverting ohif_version to 3.10.0.71 + re-syncing 3.10 assets.
 5. Invalidate index.html on the prod CloudFront distributions.
 6. Soak + watch PostHog (first_image_rendered baseline vs 3.10 — the
    speed-instrumentation dashboard) and error rates.
