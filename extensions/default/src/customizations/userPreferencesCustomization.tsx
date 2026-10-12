@@ -27,7 +27,10 @@ const MODIFIER_OPTIONS = [
 const DEFAULT_TOOL_BINDINGS_STORAGE_KEY = 'user-preferred-tool-bindings';
 
 // Radimal: mouse-button tool assignment + zoom speed (fork parity).
-const MOUSE_TOOL_OPTIONS = ['WindowLevel', 'Pan', 'Zoom'];
+// StackScroll and Length: 3.10 parity (wheel-zoom readers scroll on right-drag;
+// 3.10 also offered Length on a button).
+const MOUSE_TOOL_OPTIONS = ['WindowLevel', 'Pan', 'Zoom', 'StackScroll', 'Length'];
+const MOUSE_TOOL_LABELS = { WindowLevel: 'Window Level', StackScroll: 'Stack Scroll' };
 const MOUSE_BUTTONS = [
   { key: 'left', label: 'Left Click', mouseButton: 1 },
   { key: 'middle', label: 'Middle Click', mouseButton: 4 },
@@ -81,26 +84,26 @@ function getMouseToolAssignment(toolGroupService): Record<string, string> {
   return assignment;
 }
 
-/** Persist + apply the button->tool assignment on the default tool group. */
+/**
+ * Persist + apply the button->tool assignment on the default tool group. Every
+ * option is passed, so a tool left without a button loses its old one.
+ */
 function applyMouseToolAssignment(toolGroupService, assignment: Record<string, string>): void {
-  if (!toolGroupService) {
-    return;
-  }
-  MOUSE_TOOL_OPTIONS.forEach(toolName => {
-    const bindings = MOUSE_BUTTONS.filter(b => assignment[b.key] === toolName).map(b => ({
-      mouseButton: b.mouseButton,
-    }));
-    if (!bindings.length) {
-      return; // tool keeps toolbar/hotkey activation only
-    }
-    // Preserve touch bindings that button reassignment must not clobber.
-    if (toolName === 'Zoom') {
-      bindings.push({ numTouchPoints: 2 } as any);
-    }
-    toolGroupService.setToolBindings('default', toolName, bindings);
-    toolGroupService.applyToolBindings('default', toolName, { replaceExisting: true });
-    toolGroupService.persistToolBindings('default', toolName, bindings);
-  });
+  toolGroupService?.assignMouseButtons(
+    'default',
+    Object.fromEntries(
+      MOUSE_TOOL_OPTIONS.map(toolName => [
+        toolName,
+        MOUSE_BUTTONS.filter(b => assignment[b.key] === toolName).map(b => b.mouseButton),
+      ])
+    )
+  );
+}
+
+/** 3.10 parity: wheel on Zoom puts slice scrolling on right-drag, and back. */
+function swapRightDragForWheel(mouseTools: Record<string, string>, wheelTool: string) {
+  const [from, to] = wheelTool === 'Zoom' ? ['Zoom', 'StackScroll'] : ['StackScroll', 'Zoom'];
+  return mouseTools.right === from ? { ...mouseTools, right: to } : mouseTools;
 }
 
 function getToolModifier(
@@ -367,7 +370,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                       key={toolName}
                       value={toolName}
                     >
-                      {t(toolName)}
+                      {t(MOUSE_TOOL_LABELS[toolName] ?? toolName)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -394,7 +397,13 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
             </span>
             <Select
               value={state.scrollWheelTool}
-              onValueChange={val => setState(s => ({ ...s, scrollWheelTool: val }))}
+              onValueChange={val =>
+                setState(s => ({
+                  ...s,
+                  scrollWheelTool: val,
+                  mouseTools: swapRightDragForWheel(s.mouseTools, val),
+                }))
+              }
             >
               <SelectTrigger className="w-36">
                 <SelectValue />

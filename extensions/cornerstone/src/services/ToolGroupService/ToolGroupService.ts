@@ -29,6 +29,21 @@ type ApplyToolBindingsOptions = {
   replaceExisting?: boolean;
 };
 
+// Radimal: left/right/middle with no modifier — the buttons the preferences
+// modal assigns. Modifier combos (e.g. Shift+click Crosshairs), touch and the
+// wheel are owned elsewhere and never touched by button assignment.
+const PLAIN_BUTTONS = [
+  Enums.MouseBindings.Primary,
+  Enums.MouseBindings.Secondary,
+  Enums.MouseBindings.Auxiliary,
+];
+const isPlainButton = binding =>
+  PLAIN_BUTTONS.includes(binding?.mouseButton) && binding.modifierKey == null;
+
+// 3.10 saved button choices here as [{ id, commandOptions: { toolName } }].
+const LEGACY_BUTTONS_KEY = 'defaultToolBindings';
+const LEGACY_BUTTONS_MIGRATED_KEY = 'defaultToolBindings-migrated';
+
 export default class ToolGroupService {
   public static REGISTRATION = {
     name: 'toolGroupService',
@@ -340,6 +355,20 @@ export default class ToolGroupService {
     }
   }
 
+  /**
+   * Radimal: gives each listed tool exactly these plain mouse buttons, keeping
+   * its other bindings, applies that live and persists it. cs3d lets two active
+   * tools share a button (the first added wins), so callers pass every
+   * button-capable tool — an empty list takes a tool's buttons away.
+   */
+  public assignMouseButtons(toolGroupId: string, buttonsByTool: Record<string, number[]>): void {
+    for (const [toolName, buttons] of Object.entries(buttonsByTool)) {
+      const bindings = this._withPlainButtons(toolGroupId, toolName, buttons);
+      this._setPlainButtonsLive(toolGroupId, toolName, buttons);
+      this.persistToolBindings(toolGroupId, toolName, bindings);
+    }
+  }
+
   public getAllToolBindings(): Array<{
     toolGroupId: string;
     toolName: string;
@@ -443,7 +472,74 @@ export default class ToolGroupService {
     }
   }
 
+  private _withPlainButtons(toolGroupId: string, toolName: string, buttons: number[]) {
+    const bindings = [
+      ...(this.getToolBindings(toolGroupId, toolName) || []).filter(b => !isPlainButton(b)),
+      ...buttons.map(mouseButton => ({ mouseButton })),
+    ];
+    this.setToolBindings(toolGroupId, toolName, bindings);
+    return bindings;
+  }
+
+  private _setPlainButtonsLive(toolGroupId: string, toolName: string, buttons: number[]): void {
+    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+    if (!toolGroup?.hasTool(toolName)) {
+      return;
+    }
+    // Strips only plain buttons; the tool stays Active if touch/wheel remain.
+    toolGroup.setToolPassive(toolName, {
+      removeAllBindings: PLAIN_BUTTONS.map(mouseButton => ({ mouseButton })),
+    });
+    if (buttons.length) {
+      toolGroup.setToolActive(toolName, {
+        bindings: buttons.map(mouseButton => ({ mouseButton })),
+      });
+    }
+  }
+
+  /**
+   * Radimal: one-time conversion of 3.10's mouse-button choices so readers keep
+   * them when view.radimal.ai moves to 3.13. 3.10 applied them to every tool
+   * group with WindowLevel/Pan/Zoom fallbacks; 3.13's preferences cover the
+   * default group. The legacy key is left in place in case of a rollback.
+   */
+  private _migrateLegacyMouseButtons(toolGroupId: string): void {
+    if (toolGroupId !== 'default') {
+      return;
+    }
+    try {
+      if (localStorage.getItem(LEGACY_BUTTONS_MIGRATED_KEY)) {
+        return;
+      }
+      localStorage.setItem(LEGACY_BUTTONS_MIGRATED_KEY, 'true');
+
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_BUTTONS_KEY));
+      if (!Array.isArray(legacy) || this._readPersistedToolBindings()[toolGroupId]) {
+        return;
+      }
+      const toolFor = id => legacy.find(b => b?.id === id)?.commandOptions?.toolName;
+      const assignment = [
+        [Enums.MouseBindings.Primary, toolFor('leftMouseButton') || 'WindowLevel'],
+        [Enums.MouseBindings.Secondary, toolFor('rightMouseButton') || 'Pan'],
+        [Enums.MouseBindings.Auxiliary, toolFor('middleMouseButton') || 'Zoom'],
+      ];
+      const buttonsByTool = { WindowLevel: [], Pan: [], Zoom: [], StackScroll: [], Length: [] };
+      assignment.forEach(([button, toolName]) => buttonsByTool[toolName]?.push(button));
+
+      for (const [toolName, buttons] of Object.entries(buttonsByTool)) {
+        this.persistToolBindings(
+          toolGroupId,
+          toolName,
+          this._withPlainButtons(toolGroupId, toolName, buttons)
+        );
+      }
+    } catch {
+      // corrupt legacy value: keep 3.13 defaults
+    }
+  }
+
   private _loadPersistedBindings(toolGroupId: string): void {
+    this._migrateLegacyMouseButtons(toolGroupId);
     const toolGroupBindings = this._readPersistedToolBindings()[toolGroupId];
     if (!toolGroupBindings) {
       return;
@@ -466,10 +562,33 @@ export default class ToolGroupService {
         continue;
       }
 
+      // A saved button activates a Passive tool too (e.g. Length on a button).
       const { mode } = toolGroup.getToolOptions(toolName);
-      if (mode === Enums.ToolModes.Active) {
+      if (
+        mode === Enums.ToolModes.Active ||
+        (mode === Enums.ToolModes.Passive && (bindings as ToolBindings).some(isPlainButton))
+      ) {
         this.applyToolBindings(toolGroupId, toolName, { replaceExisting: true });
       }
+    }
+
+    // A saved button belongs to that tool alone: take it off tools that got it
+    // at mode entry (e.g. StackScroll's right-drag under wheel = Zoom vs a
+    // saved right-click Zoom).
+    const claimed = new Set(
+      Object.values(toolGroupBindings)
+        .flat()
+        .filter(isPlainButton)
+        .map(b => b.mouseButton)
+    );
+    for (const [toolName, bindings] of this.toolBindingsMap.get(toolGroupId) || []) {
+      const plain = bindings.filter(isPlainButton).map(b => b.mouseButton as number);
+      if (toolGroupBindings[toolName] || !plain.some(button => claimed.has(button))) {
+        continue;
+      }
+      const kept = plain.filter(button => !claimed.has(button));
+      this._withPlainButtons(toolGroupId, toolName, kept);
+      this._setPlainButtonsLive(toolGroupId, toolName, kept);
     }
   }
 
