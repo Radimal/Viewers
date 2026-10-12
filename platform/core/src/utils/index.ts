@@ -49,6 +49,7 @@ import {
   getScrollWheelTool,
   getScrollWheelInversion,
 } from './wheelPreferences';
+import { hotkeyCombo, freeHotkey } from './hotkeys/resolveHotkeyClashes';
 import * as MeasurementFilters from './measurementFilters';
 import getClosestOrientationFromIOP from './getClosestOrientationFromIOP';
 import calculateScanAxisNormal from './calculateScanAxisNormal';
@@ -117,6 +118,8 @@ const utils = {
   orthancUtils,
   applyWheelPreferences,
   getScrollWheelTool,
+  hotkeyCombo,
+  freeHotkey,
   getScrollWheelInversion,
   MeasurementFilters,
   getClosestOrientationFromIOP,
@@ -170,6 +173,8 @@ export {
   orthancUtils,
   applyWheelPreferences,
   getScrollWheelTool,
+  hotkeyCombo,
+  freeHotkey,
   getScrollWheelInversion,
   MeasurementFilters,
   getClosestOrientationFromIOP,

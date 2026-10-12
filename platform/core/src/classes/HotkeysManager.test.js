@@ -187,4 +187,19 @@ describe('HotkeysManager', () => {
       expect(hotkeys.reset.mock.calls.length).toEqual(1);
     });
   });
+
+  it('swapping keys between two commands keeps the claimed key bound', () => {
+    hotkeysManager.setHotkeys([
+      { commandName: 'zoom', keys: ['b'] },
+      { commandName: 'brush', keys: ['shift+b'] },
+    ]);
+    hotkeys.unbind.mockClear();
+
+    hotkeysManager.setHotkeys([
+      { commandName: 'brush', keys: ['b'] },
+      { commandName: 'zoom', keys: ['shift+b'] },
+    ]);
+
+    expect(hotkeys.unbind).not.toHaveBeenCalledWith('b');
+  });
 });

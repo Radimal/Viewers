@@ -2,7 +2,7 @@ import objectHash from 'object-hash';
 import { hotkeys as mouseTrapAPI } from '../utils';
 import Hotkey from './Hotkey';
 import migrateOldHotkeyDefinitions from '../utils/hotkeys/migrateHotkeys';
-import resolveHotkeyClashes from '../utils/hotkeys/resolveHotkeyClashes';
+import resolveHotkeyClashes, { hotkeyCombo } from '../utils/hotkeys/resolveHotkeyClashes';
 import pubSubServiceInterface from '../services/_shared/pubSubServiceInterface';
 
 /**
@@ -272,7 +272,15 @@ export class HotkeysManager {
     if (existingHotkey) {
       userPreferredKeys[commandHash] = keys;
       localStorage.setItem('user-preferred-keys', JSON.stringify(userPreferredKeys));
-      this._unbindHotkeys(commandName, existingHotkey.keys);
+      // Radimal: on a key swap another command may already hold the old key;
+      // unbinding it would silence that command too.
+      const oldCombo = hotkeyCombo(existingHotkey.keys);
+      const heldElsewhere = Object.entries(this.hotkeyDefinitions).some(
+        ([hash, def]) => hash !== commandHash && hotkeyCombo(def.keys) === oldCombo
+      );
+      if (!heldElsewhere) {
+        this._unbindHotkeys(commandName, existingHotkey.keys);
+      }
     }
 
     this.hotkeyDefinitions[commandHash] = { commandName, commandOptions, keys, label, isEditable };
