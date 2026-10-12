@@ -39,13 +39,12 @@ describe('wheelPreferences', () => {
 
     const stackScroll = tools.find(t => t.toolName === 'StackScroll');
     const zoom = tools.find(t => t.toolName === 'Zoom');
-    expect(stackScroll.bindings).toEqual([{ numTouchPoints: 3 }]);
-    expect(zoom.bindings).toContainEqual({ mouseButton: WHEEL });
-    // touch bindings retained
-    expect(zoom.bindings).toContainEqual({ numTouchPoints: 2 });
+    // 3.10 parity: right-drag moves from Zoom to StackScroll
+    expect(stackScroll.bindings).toEqual([{ numTouchPoints: 3 }, { mouseButton: 2 }]);
+    expect(zoom.bindings).toEqual([{ numTouchPoints: 2 }, { mouseButton: WHEEL }]);
   });
 
-  it('sets invert configuration on the wheel tool', () => {
+  it('inverts StackScroll only while it owns the wheel (3.10 parity)', () => {
     localStorage.setItem('invertScrollWheel', 'true');
 
     const tools = makeTools();
@@ -55,7 +54,7 @@ describe('wheelPreferences', () => {
     localStorage.setItem('scrollWheelTool', 'Zoom');
     const tools2 = makeTools();
     applyWheelPreferences(tools2, WHEEL);
-    expect(tools2.find(t => t.toolName === 'Zoom').configuration).toEqual({ invert: true });
+    expect(tools2.find(t => t.toolName === 'Zoom').configuration).toBeUndefined();
     expect(tools2.find(t => t.toolName === 'StackScroll').configuration).toBeUndefined();
   });
 

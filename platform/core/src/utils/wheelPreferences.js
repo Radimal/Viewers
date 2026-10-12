@@ -6,14 +6,20 @@
  *   mouse wheel drives. cs3d 5's ZoomTool implements mouseWheelCallback,
  *   so this is a plain binding swap (the fork's document-level
  *   directWheelZoom handler is obsolete).
- * - invertScrollWheel: 'true' to reverse wheel direction (both tools
- *   support configuration.invert).
+ * - invertScrollWheel: 'true' to reverse slice-scroll direction. Like 3.10,
+ *   it only applies while the wheel drives StackScroll; wheel zoom is never
+ *   inverted.
+ *
+ * 3.10 parity: with the wheel on Zoom, Zoom's right-drag moves to StackScroll
+ * so slices stay scrollable by mouse. Saved button choices load afterwards
+ * and override this.
  */
 
 const SCROLL_WHEEL_TOOL_KEY = 'scrollWheelTool';
 const INVERT_SCROLL_WHEEL_KEY = 'invertScrollWheel';
 
 const WHEEL_TOOLS = ['StackScroll', 'Zoom'];
+const RIGHT_BUTTON = 2; // cs3d MouseBindings.Secondary (stable across majors)
 
 export function getScrollWheelTool() {
   try {
@@ -49,6 +55,8 @@ export function applyWheelPreferences(activeTools, wheelButton) {
   }
 
   const isWheelBinding = binding => binding?.mouseButton === wheelButton;
+  const isRightDrag = binding =>
+    binding?.mouseButton === RIGHT_BUTTON && binding.modifierKey == null;
 
   const wheelTool = getScrollWheelTool();
   const invert = getScrollWheelInversion();
@@ -62,13 +70,16 @@ export function applyWheelPreferences(activeTools, wheelButton) {
       stackScroll.bindings = stackScroll.bindings.filter(b => !isWheelBinding(b));
       zoom.bindings = [...(zoom.bindings || []), ...wheelBindings];
     }
+
+    const rightDrag = (zoom.bindings || []).filter(isRightDrag);
+    if (rightDrag.length) {
+      zoom.bindings = zoom.bindings.filter(b => !isRightDrag(b));
+      stackScroll.bindings = [...(stackScroll.bindings || []), ...rightDrag];
+    }
   }
 
-  if (invert) {
-    const target = wheelTool === 'Zoom' ? zoom : stackScroll;
-    if (target) {
-      target.configuration = { ...(target.configuration || {}), invert: true };
-    }
+  if (invert && wheelTool === 'StackScroll' && stackScroll) {
+    stackScroll.configuration = { ...(stackScroll.configuration || {}), invert: true };
   }
 
   return activeTools;
