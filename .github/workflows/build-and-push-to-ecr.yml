@@ -97,7 +97,7 @@ jobs:
           # to test on VEG staging. Never add prod buckets here.
           # ethos-stage-1: Ethos staging runs 3.13 (radimal-terraform
           # feat/ethos-stage-313); drop it from the 3.10 workflow's list too.
-          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-ethos-stage-1; do
+          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1; do
             # Source maps stay in the docker image for debugging but are not
             # published to the CDN buckets (3.10 parity).
             # Flat copy at bucket root for serving via CloudFront
