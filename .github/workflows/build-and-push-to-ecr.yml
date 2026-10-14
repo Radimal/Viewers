@@ -70,8 +70,12 @@ jobs:
           # An unreplaced process.env.<X> read is a ReferenceError in the
           # browser (no process global) — the app dies at load. Fails the
           # build if any bundle carries one (add missing keys to
-          # .webpack/webpack.base.js defineValues).
-          if grep -l 'process\.env\.' ./dist/*.js; then
+          # .webpack/webpack.base.js defineValues). Scans the .gz files (the
+          # .js are empty placeholders, see compressDist.sh) and skips comment
+          # lines, which mention process.env in docs.
+          if for gz in ./dist/*.js.gz; do
+               gunzip -c "$gz" | grep -nE 'process\.env\.' | grep -vE '^[0-9]+:[[:space:]]*(//|/?\*)' | sed "s|^|$gz:|"
+             done | grep .; then
             echo "::error::Literal process.env found in production bundle"
             exit 1
           fi
