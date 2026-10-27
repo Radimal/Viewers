@@ -6,12 +6,16 @@
   </head>
   <body>
     <script>
-      // Loaded in a hidden iframe by view.radimal.ai on a reader's first 3.13
+      // Loaded in a hidden iframe by view.radimal.ai / veg-view on a reader's first 3.13
       // visit (src/utils/importCanarySettings.js). Posts this origin's viewer
       // preferences to the parent. postMessage's targetOrigin makes the
       // browser drop the message unless the parent is one of these origins.
       (function () {
-        var PARENTS = ['https://view.radimal.ai', 'http://localhost:3000'];
+        var PARENTS = [
+          'https://view.radimal.ai',
+          'https://veg-view.prod-1.radimal.ai',
+          'http://localhost:3000',
+        ];
         // Keep in sync with src/utils/canarySettingKeys.js.
         var KEYS = [
           'user-preferred-keys', 'hotkeys-migrated', 'user-preferred-tool-bindings',

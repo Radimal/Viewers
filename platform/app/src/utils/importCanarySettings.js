@@ -3,14 +3,16 @@ import migrateOldHotkeyDefinitions from '@ohif/core/src/utils/hotkeys/migrateHot
 import { CANARY_SETTING_KEYS } from './canarySettingKeys';
 
 /**
- * Viewer host -> the canary origin its readers may have used. At cutover,
- * readers on view.radimal.ai who were routed to the 3.13 canary carry their
- * newer preferences from there (localStorage is per-origin). Remove the entry
- * once the canary deployment is destroyed. VEG and Ethos keep their own origin
- * across the flip, so 3.13 reads their 3.10 settings directly — no import.
+ * Viewer host -> the 3.13 canary origin its readers may have used (radimal-vet
+ * routes flagged readers there: viewer-313-canary / viewer-313-canary-veg). At
+ * cutover those readers carry their newer preferences from the canary
+ * (localStorage is per-origin). Everyone else on the host keeps their own 3.10
+ * settings, which 3.13 reads directly — same origin. Remove an entry once its
+ * canary deployment is destroyed. Ethos had no canary.
  */
 const CANARY_SOURCE_BY_HOST = {
   'view.radimal.ai': 'https://view-blue.prod-1.radimal.ai',
+  'veg-view.prod-1.radimal.ai': 'https://veg-viewer-blue.prod-1.radimal.ai',
 };
 
 const STATE_KEY = 'canarySettingsImport';

@@ -68,13 +68,38 @@ describe('applyCanarySettings', () => {
 });
 
 describe('importCanarySettings', () => {
-  it('does nothing on VEG / Ethos hosts (same origin across the flip)', async () => {
+  it('does nothing on hosts without a canary (Ethos, staging)', async () => {
     const storage = memoryStorage();
-    for (const host of ['veg-view.prod-1.radimal.ai', 'ethos-view.radimal.ai']) {
+    for (const host of ['ethos-view.radimal.ai', 'viewer.stage-1.radimal.ai']) {
       await expect(importCanarySettings({ location: { host }, storage })).resolves.toEqual([]);
     }
     expect(storage.data).toEqual({});
     expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('VEG reads only from the VEG canary, never the main one', async () => {
+    const storage = memoryStorage();
+    const pending = importCanarySettings({
+      location: { host: 'veg-view.prod-1.radimal.ai' },
+      storage,
+    });
+    expect(document.querySelector('iframe').src).toBe(
+      'https://veg-viewer-blue.prod-1.radimal.ai/settings-export.html'
+    );
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://view-blue.prod-1.radimal.ai',
+        data: { type: 'radimal-settings-export', settings: { zoomSpeed: '0.4' } },
+      })
+    );
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://veg-viewer-blue.prod-1.radimal.ai',
+        data: { type: 'radimal-settings-export', settings: { zoomSpeed: '0.2' } },
+      })
+    );
+    await expect(pending).resolves.toEqual(['zoomSpeed']);
+    expect(storage.data.zoomSpeed).toBe('0.2');
   });
 
   it('imports from the canary origin once, then never again', async () => {
