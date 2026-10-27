@@ -127,6 +127,7 @@ function Header({
                     variant="ghost"
                     size="icon"
                     className="text-highlight hover:bg-muted mt-2 h-full w-full"
+                    data-cy="header-settings-menu"
                   >
                     <Icons.GearSettings />
                   </Button>
