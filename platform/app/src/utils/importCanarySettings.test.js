@@ -3,11 +3,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import importCanarySettings, {
-  applyCanarySettings,
-  canaryIsNewer,
-  lastLegacyActivity,
-} from './importCanarySettings';
+import importCanarySettings, { applyCanarySettings } from './importCanarySettings';
 import { CANARY_SETTING_KEYS } from './canarySettingKeys';
 
 jest.mock('@ohif/core', () => ({ HotkeysManager: { prototype: { generateHash: () => 'h' } } }), {
@@ -19,25 +15,12 @@ const memoryStorage = (initial = {}) => {
   const data = { ...initial };
   return {
     data,
-    get length() {
-      return Object.keys(data).length;
-    },
-    key: i => Object.keys(data)[i] ?? null,
     getItem: k => (k in data ? data[k] : null),
     setItem: (k, v) => {
       data[k] = String(v);
     },
   };
 };
-
-const exportMessage = (origin, settings, lastUsedAt) =>
-  new MessageEvent('message', {
-    origin,
-    data: { type: 'radimal-settings-export', settings, lastUsedAt },
-  });
-
-const BLUE = 'https://view-blue.prod-1.radimal.ai';
-const VEG_BLUE = 'https://veg-viewer-blue.prod-1.radimal.ai';
 
 describe('applyCanarySettings', () => {
   it('runs the 3.10 hotkey migration first, then layers canary hotkeys on top', () => {
@@ -103,8 +86,18 @@ describe('importCanarySettings', () => {
     expect(document.querySelector('iframe').src).toBe(
       'https://veg-viewer-blue.prod-1.radimal.ai/settings-export.html'
     );
-    window.dispatchEvent(exportMessage(BLUE, { zoomSpeed: '0.4' }, String(Date.now())));
-    window.dispatchEvent(exportMessage(VEG_BLUE, { zoomSpeed: '0.2' }, String(Date.now())));
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://view-blue.prod-1.radimal.ai',
+        data: { type: 'radimal-settings-export', settings: { zoomSpeed: '0.4' } },
+      })
+    );
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://veg-viewer-blue.prod-1.radimal.ai',
+        data: { type: 'radimal-settings-export', settings: { zoomSpeed: '0.2' } },
+      })
+    );
     await expect(pending).resolves.toEqual(['zoomSpeed']);
     expect(storage.data.zoomSpeed).toBe('0.2');
   });
@@ -116,7 +109,12 @@ describe('importCanarySettings', () => {
       'https://view-blue.prod-1.radimal.ai/settings-export.html'
     );
 
-    window.dispatchEvent(exportMessage(BLUE, { zoomSpeed: '0.3' }, String(Date.now())));
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://view-blue.prod-1.radimal.ai',
+        data: { type: 'radimal-settings-export', settings: { zoomSpeed: '0.3' } },
+      })
+    );
     await expect(pending).resolves.toEqual(['zoomSpeed']);
     expect(storage.data.zoomSpeed).toBe('0.3');
     expect(document.querySelector('iframe')).toBeNull();
@@ -151,56 +149,6 @@ describe('importCanarySettings', () => {
     expect(JSON.parse(storage.data.canarySettingsImport).done).toBe(false);
     await importCanarySettings(opts);
     expect(JSON.parse(storage.data.canarySettingsImport).done).toBe(true);
-  });
-});
-
-describe('whichever viewer was used most recently wins', () => {
-  const T310 = Date.UTC(2026, 9, 20); // reader last read on 3.10
-  const legacyState = ts => JSON.stringify({ type: 'rotation_flip_only', timestamp: ts });
-
-  it('finds the newest 3.10 activity from its timestamped viewport entries', () => {
-    const storage = memoryStorage({
-      'ohif_viewport_state_1-2-3': legacyState(T310 - 5000),
-      'ohif_viewport_state_1-2-4': legacyState(T310),
-      zoomSpeed: '0.1',
-      'ohif_viewport_state_bad': '{not json',
-    });
-    expect(lastLegacyActivity(storage)).toBe(T310);
-    expect(lastLegacyActivity(memoryStorage())).toBe(0);
-  });
-
-  it('canary wins only when it is newer and stamped', () => {
-    expect(canaryIsNewer(String(T310 + 1), T310)).toBe(true);
-    expect(canaryIsNewer(String(T310 - 1), T310)).toBe(false);
-    // no stamp: the reader left the canary before stamping shipped, or never used it
-    expect(canaryIsNewer(null, T310)).toBe(false);
-    expect(canaryIsNewer(null, 0)).toBe(false);
-    // stamped canary, never used 3.10 on this origin
-    expect(canaryIsNewer(String(T310), 0)).toBe(true);
-  });
-
-  it('keeps more recent 3.10 settings: no import, 3.10 migration proceeds', async () => {
-    const storage = memoryStorage({
-      'ohif_viewport_state_1-2-3': legacyState(T310),
-      zoomSpeed: '0.1',
-    });
-    const pending = importCanarySettings({ location: { host: 'view.radimal.ai' }, storage });
-    window.dispatchEvent(exportMessage(BLUE, { zoomSpeed: '0.4' }, String(T310 - 86400000)));
-    await expect(pending).resolves.toEqual([]);
-    expect(storage.data.zoomSpeed).toBe('0.1');
-    // decided: never asked again
-    expect(JSON.parse(storage.data.canarySettingsImport).done).toBe(true);
-  });
-
-  it('imports when the reader used the canary after their last 3.10 read', async () => {
-    const storage = memoryStorage({
-      'ohif_viewport_state_1-2-3': legacyState(T310),
-      zoomSpeed: '0.1',
-    });
-    const pending = importCanarySettings({ location: { host: 'view.radimal.ai' }, storage });
-    window.dispatchEvent(exportMessage(BLUE, { zoomSpeed: '0.4' }, String(T310 + 86400000)));
-    await expect(pending).resolves.toEqual(['zoomSpeed']);
-    expect(storage.data.zoomSpeed).toBe('0.4');
   });
 });
 
