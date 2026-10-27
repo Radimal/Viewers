@@ -2,13 +2,14 @@ name: Build and Push OHIF container
 
 # v3.13 baseline branch (vanilla OHIF 3.13.3 + Radimal CI only).
 #
-# STAGING ONLY — this branch's asset sync must NEVER include the prod buckets
-# (radimal-viewer-assets-prod-1, radimal-viewer-assets-veg-prod-1). CloudFront
-# serves *.js/*.css/fonts/images for every cluster in a stack from that stack's
-# bucket root, so syncing here overwrites unhashed shared files
-# (init-service-worker.js, sw.js, assets/*, logos) for whatever version is live
-# on the stack. To restore 3.10 assets after testing, re-run the build on the
-# current v3.10.* branch.
+# Syncs to prod-1 (view.radimal.ai) and veg-prod-1 (veg-view) as of the 3.13
+# cutover. CloudFront serves *.js/*.css/fonts/images for every cluster in a
+# stack from that stack's bucket root, so syncing here overwrites unhashed
+# shared files (init-service-worker.js, sw.js, assets/*, logos) for whatever
+# version is live on the stack. Merge only in the cutover window, immediately
+# before flipping orthanc-1 / orthanc-veg-prod ohif_version to 3.13.3
+# (RADIMAL-UPGRADE-3.13.md, cutover checklist). veg-stage-1 stays out: VEG
+# staging is still 3.10. Rollback: re-run the build on v3.10.0.71.radimal.
 
 on:
   push:
@@ -108,15 +109,13 @@ jobs:
             exit 1
           fi
 
-      - name: Upload static assets to S3 (staging buckets ONLY)
+      - name: Upload static assets to S3
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
 
-          # Staging only. Add s3://radimal-viewer-assets-veg-stage-1 when ready
-          # to test on VEG staging. Never add prod buckets here.
-          # ethos-stage-1: Ethos staging runs 3.13 (radimal-terraform
-          # feat/ethos-stage-313); drop it from the 3.10 workflow's list too.
-          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1; do
+          # Add s3://radimal-viewer-assets-veg-stage-1 when VEG staging moves
+          # to 3.13. Drop prod-1 / veg-prod-1 from the 3.10 workflow's list.
+          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1 s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-veg-prod-1; do
             # Source maps stay in the docker image for debugging but are not
             # published to the CDN buckets (3.10 parity).
             # Flat copy at bucket root for serving via CloudFront, plus a
