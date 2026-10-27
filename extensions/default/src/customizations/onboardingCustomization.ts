@@ -55,9 +55,9 @@ export default {
       steps: [
         {
           id: 'welcome',
-          title: i18n.t('Onboarding:Welcome to the updated viewer'),
+          title: i18n.t('Onboarding:Welcome to the updated Radimal viewer'),
           text: i18n.t(
-            'Onboarding:Your hotkeys, mouse buttons, scroll wheel and zoom settings, default layout and saved windows came over automatically. There is nothing to set up.'
+            'Onboarding:Your hotkeys, mouse buttons, scroll wheel and zoom settings, default layout and saved windows are all kept. There is nothing to set up.'
           ),
           beforeShowPromise: () => waitForElement('.viewport-element'),
           buttons: [skip, next],

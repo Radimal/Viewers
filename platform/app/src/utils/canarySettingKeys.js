@@ -6,7 +6,8 @@
  *
  * Deliberately excluded: per-study rotation/flip state (ohif_viewport_state_*,
  * keyed by study UIDs), live window geometry (windowData), window-family
- * coordination, and session flags.
+ * coordination, session flags, and shownTours (canary readers should see the
+ * cutover intro again on view.radimal.ai — it tells them their settings came over).
  *
  * Keep in sync with public/settings-export.html, which cannot import modules.
  */
@@ -26,6 +27,5 @@ export const CANARY_SETTING_KEYS = [
   'ohif:theme',
   'ohif:custom-theme-css',
   'i18nextLng',
-  'shownTours',
   'investigationalUseDialog',
 ];
