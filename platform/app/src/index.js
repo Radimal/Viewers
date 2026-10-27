@@ -18,7 +18,7 @@ import React from 'react';
  */
 import { modes as defaultModes, extensions as defaultExtensions } from './pluginImports';
 import loadDynamicConfig from './loadDynamicConfig';
-import importCanarySettings from './utils/importCanarySettings';
+import importCanarySettings, { stampViewerLastUsed } from './utils/importCanarySettings';
 export { history } from './utils/history';
 export { preserveQueryParameters, preserveQueryStrings } from './utils/preserveQueryParameters';
 export { InvalidationService } from './utils/invalidationService';
@@ -29,6 +29,8 @@ loadDynamicConfig(window.config)
   .then(config_json =>
     importCanarySettings()
       .catch(() => [])
+      // After the import decision, which compares against the canary's stamp.
+      .then(() => stampViewerLastUsed())
       .then(() => config_json)
   )
   .then(config_json => {

@@ -16,6 +16,12 @@ const CANARY_SOURCE_BY_HOST = {
 };
 
 const STATE_KEY = 'canarySettingsImport';
+// Written by every 3.13 viewer on every load, so a canary can say when the
+// reader last used it (exported by public/settings-export.html).
+export const LAST_USED_KEY = 'viewerLastUsedAt';
+// 3.10 stores a timestamped default rotation/flip entry the first time each
+// image is shown, so the newest one is when the reader last read here on 3.10.
+const LEGACY_VIEWPORT_STATE_PREFIX = 'ohif_viewport_state_';
 const MAX_ATTEMPTS = 3;
 const MESSAGE_TYPE = 'radimal-settings-export';
 
@@ -31,6 +37,45 @@ const readJson = (storage, key) => {
     return {};
   }
 };
+
+export function stampViewerLastUsed(storage = window.localStorage, now = Date.now()) {
+  try {
+    storage.setItem(LAST_USED_KEY, String(now));
+  } catch (e) {
+    // storage unavailable
+  }
+}
+
+/** Newest 3.10 activity on this origin (ms), 0 when there is none. */
+export function lastLegacyActivity(storage) {
+  let latest = 0;
+  try {
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (!key || !key.startsWith(LEGACY_VIEWPORT_STATE_PREFIX)) {
+        continue;
+      }
+      const timestamp = Number(JSON.parse(storage.getItem(key))?.timestamp);
+      if (timestamp > latest) {
+        latest = timestamp;
+      }
+    }
+  } catch (e) {
+    // unreadable entry: ignore
+  }
+  return latest;
+}
+
+/**
+ * The reader's newer settings win, wholesale: import the canary's only if
+ * they used the canary more recently than this origin's 3.10. A canary with no
+ * last-used stamp predates the stamp (or was never used) and loses, so readers
+ * who left the canary keep their 3.10 settings.
+ */
+export function canaryIsNewer(canaryLastUsedAt, legacyLastActivity) {
+  const canary = Number(canaryLastUsedAt);
+  return canary > 0 && canary > legacyLastActivity;
+}
 
 /**
  * Writes the canary origin's preferences into this origin, canary winning.
@@ -134,9 +179,13 @@ export default function importCanarySettings({
       }
       let written = [];
       try {
-        written = applyCanarySettings(storage, event.data.settings, () =>
-          migrateOldHotkeyDefinitions({ generateHash: HotkeysManager.prototype.generateHash })
-        );
+        if (canaryIsNewer(event.data.lastUsedAt, lastLegacyActivity(storage))) {
+          written = applyCanarySettings(storage, event.data.settings, () =>
+            migrateOldHotkeyDefinitions({ generateHash: HotkeysManager.prototype.generateHash })
+          );
+        } else {
+          console.info('Keeping this viewer\'s settings: used more recently than the preview viewer');
+        }
       } catch (e) {
         console.warn('Canary settings import failed', e);
       }

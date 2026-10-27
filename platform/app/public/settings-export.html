@@ -25,7 +25,9 @@
           'i18nextLng', 'shownTours', 'investigationalUseDialog',
         ];
         var settings = {};
+        var lastUsedAt = null;
         try {
+          lastUsedAt = localStorage.getItem('viewerLastUsedAt');
           KEYS.forEach(function (key) {
             var value = localStorage.getItem(key);
             if (value !== null) {
@@ -37,7 +39,10 @@
         }
         if (window.parent && window.parent !== window) {
           PARENTS.forEach(function (origin) {
-            window.parent.postMessage({ type: 'radimal-settings-export', settings: settings }, origin);
+            window.parent.postMessage(
+              { type: 'radimal-settings-export', settings: settings, lastUsedAt: lastUsedAt },
+              origin
+            );
           });
         }
       })();
