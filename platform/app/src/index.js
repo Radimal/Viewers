@@ -18,11 +18,20 @@ import React from 'react';
  */
 import { modes as defaultModes, extensions as defaultExtensions } from './pluginImports';
 import loadDynamicConfig from './loadDynamicConfig';
+import importCanarySettings from './utils/importCanarySettings';
 export { history } from './utils/history';
 export { preserveQueryParameters, preserveQueryStrings } from './utils/preserveQueryParameters';
 export { InvalidationService } from './utils/invalidationService';
 
-loadDynamicConfig(window.config).then(config_json => {
+loadDynamicConfig(window.config)
+  // Radimal: carry canary (view-blue) preferences to view.radimal.ai before any
+  // service starts, so 3.13's own 3.10-settings migrations see the merged state.
+  .then(config_json =>
+    importCanarySettings()
+      .catch(() => [])
+      .then(() => config_json)
+  )
+  .then(config_json => {
   // Reset Dynamic config if defined
   if (config_json !== null) {
     window.config = config_json;
