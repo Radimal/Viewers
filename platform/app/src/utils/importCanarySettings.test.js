@@ -152,6 +152,84 @@ describe('importCanarySettings', () => {
   });
 });
 
+describe('importCanarySettings — Safari partitioned iframe', () => {
+  const partitionedReply = () =>
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://view-blue.prod-1.radimal.ai',
+        data: { type: 'radimal-settings-export', settings: {}, partitioned: true },
+      })
+    );
+  const viewerLocation = (hash = '') => ({
+    host: 'view.radimal.ai',
+    href: 'https://view.radimal.ai/viewer/?StudyInstanceUIDs=1.2' + hash,
+    pathname: '/viewer/',
+    search: '?StudyInstanceUIDs=1.2',
+    hash,
+    replace: jest.fn(),
+  });
+
+  it('hops top-level through the export page once, with a nonce', () => {
+    const storage = memoryStorage();
+    const location = viewerLocation();
+    importCanarySettings({ location, storage });
+    partitionedReply();
+
+    const { nonce } = JSON.parse(storage.data.canarySettingsImport);
+    expect(nonce).toMatch(/^[0-9a-f]{32}$/);
+    expect(location.replace).toHaveBeenCalledWith(
+      'https://view-blue.prod-1.radimal.ai/settings-export.html?return=' +
+        encodeURIComponent(location.href) +
+        '&nonce=' +
+        nonce
+    );
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('applies settings returned in the fragment when the nonce matches', async () => {
+    const storage = memoryStorage({
+      canarySettingsImport: JSON.stringify({ nonce: 'n1', attempts: 1 }),
+    });
+    const settings = encodeURIComponent(JSON.stringify({ zoomSpeed: '0.3' }));
+    const replaceState = jest.spyOn(window.history, 'replaceState');
+
+    await expect(
+      importCanarySettings({
+        location: viewerLocation(`#radimal-settings=${settings}&nonce=n1`),
+        storage,
+      })
+    ).resolves.toEqual(['zoomSpeed']);
+    expect(storage.data.zoomSpeed).toBe('0.3');
+    expect(JSON.parse(storage.data.canarySettingsImport).done).toBe(true);
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/viewer/?StudyInstanceUIDs=1.2');
+  });
+
+  it('ignores a fragment without our nonce (a crafted link cannot plant settings)', async () => {
+    const storage = memoryStorage({
+      canarySettingsImport: JSON.stringify({ nonce: 'n1', attempts: 1 }),
+    });
+    const settings = encodeURIComponent(JSON.stringify({ zoomSpeed: '9' }));
+    await importCanarySettings({
+      location: viewerLocation(`#radimal-settings=${settings}&nonce=guess`),
+      storage,
+      timeoutMs: 5,
+    });
+    expect(storage.data.zoomSpeed).toBeUndefined();
+  });
+
+  it('never hops twice: a partitioned reply after a hop ends the import', async () => {
+    const storage = memoryStorage({
+      canarySettingsImport: JSON.stringify({ nonce: 'n1', attempts: 1 }),
+    });
+    const location = viewerLocation();
+    const pending = importCanarySettings({ location, storage });
+    partitionedReply();
+    await expect(pending).resolves.toEqual([]);
+    expect(location.replace).not.toHaveBeenCalled();
+    expect(JSON.parse(storage.data.canarySettingsImport).done).toBe(true);
+  });
+});
+
 describe('settings-export.html', () => {
   it('exports exactly the keys the importer accepts', () => {
     const html = fs.readFileSync(path.join(__dirname, '../../public/settings-export.html'), 'utf8');

@@ -207,7 +207,11 @@ origin to allowedViewerOrigins.
    preference key audited as read or migrated; tests pin each). Canary
    readers move origin, so view.radimal.ai imports from view-blue (601
    readers / 30d) and veg-view imports from veg-viewer-blue (5 readers) on
-   each reader's first 3.13 load, via public/settings-export.html. A
+   each reader's first 3.13 load, via public/settings-export.html.
+   Safari/iOS (WebKit) give that same-site iframe empty partitioned storage
+   (found 2026-10-28), so there the importer hops top-level through the
+   export page once and gets the settings back in the URL fragment, guarded
+   by a nonce it stored before hopping. A
    reader's canary settings ALWAYS win (no recency rule — 143 main-canary
    readers alternate with 3.10 by design via the 28 excluded orgs); settings
    never touched on a canary come from their 3.10 store. VEG readers never

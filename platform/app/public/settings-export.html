@@ -10,6 +10,10 @@
       // visit (src/utils/importCanarySettings.js). Posts this origin's viewer
       // preferences to the parent. postMessage's targetOrigin makes the
       // browser drop the message unless the parent is one of these origins.
+      // When the iframe's storage is partitioned (Safari) it says so; the
+      // importer then opens this page top-level with ?return=, and it
+      // redirects back with the settings in the fragment (allowed origins
+      // only, so it never hands settings to another site).
       (function () {
         var PARENTS = [
           'https://view.radimal.ai',
@@ -35,11 +39,42 @@
         } catch (e) {
           settings = {};
         }
-        if (window.parent && window.parent !== window) {
-          PARENTS.forEach(function (origin) {
-            window.parent.postMessage({ type: 'radimal-settings-export', settings: settings }, origin);
-          });
+        if (window.parent === window) {
+          var params = new URLSearchParams(location.search);
+          var target;
+          try {
+            target = new URL(params.get('return'));
+          } catch (e) {
+            return;
+          }
+          if (PARENTS.indexOf(target.origin) === -1) {
+            return;
+          }
+          target.hash =
+            'radimal-settings=' + encodeURIComponent(JSON.stringify(settings)) +
+            '&nonce=' + encodeURIComponent(params.get('nonce') || '');
+          location.replace(target.href);
+          return;
         }
+        // WebKit (Safari, every iOS browser) hands this same-site iframe an
+        // empty partitioned store — verified 2026-10-28: view-blue's keys were
+        // present top-level, absent here. Any 3.13 visit leaves keys behind, so
+        // an empty store on WebKit means "ask for a top-level hop". A WebKit
+        // reader who never used the canary just hops once and comes back empty.
+        var ua = navigator.userAgent;
+        var isWebKit = /AppleWebKit/.test(ua) && !/Chrome\/|Chromium\/|Edg\//.test(ua);
+        var partitioned = false;
+        try {
+          partitioned = isWebKit && localStorage.length === 0;
+        } catch (e) {
+          partitioned = isWebKit;
+        }
+        PARENTS.forEach(function (origin) {
+          window.parent.postMessage(
+            { type: 'radimal-settings-export', settings: settings, partitioned: partitioned },
+            origin
+          );
+        });
       })();
     </script>
   </body>
