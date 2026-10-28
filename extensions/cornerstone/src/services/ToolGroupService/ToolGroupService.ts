@@ -511,10 +511,14 @@ export default class ToolGroupService {
       if (localStorage.getItem(LEGACY_BUTTONS_MIGRATED_KEY)) {
         return;
       }
-      localStorage.setItem(LEGACY_BUTTONS_MIGRATED_KEY, 'true');
-
+      // Marked only once there is something to convert (as hotkeys do), so a
+      // 3.13 visit before the 3.10 choices exist never blocks converting them.
       const legacy = JSON.parse(localStorage.getItem(LEGACY_BUTTONS_KEY));
-      if (!Array.isArray(legacy) || this._readPersistedToolBindings()[toolGroupId]) {
+      if (!Array.isArray(legacy)) {
+        return;
+      }
+      localStorage.setItem(LEGACY_BUTTONS_MIGRATED_KEY, 'true');
+      if (this._readPersistedToolBindings()[toolGroupId]) {
         return;
       }
       const toolFor = id => legacy.find(b => b?.id === id)?.commandOptions?.toolName;

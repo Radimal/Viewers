@@ -119,6 +119,34 @@ it("activates 3.10's Length-on-a-button", () => {
   expect(live('Zoom')).toEqual([PINCH, { mouseButton: 4 }]);
 });
 
+it("activates 3.10's Length on the LEFT button and takes it off Window Level", () => {
+  localStorage.setItem(
+    'defaultToolBindings',
+    JSON.stringify([
+      { id: 'leftMouseButton', commandOptions: { toolName: 'Length' } },
+      { id: 'rightMouseButton', commandOptions: { toolName: 'Pan' } },
+      { id: 'middleMouseButton', commandOptions: { toolName: 'Zoom' } },
+    ])
+  );
+  enterMode(new ToolGroupService({ services: {} } as any));
+
+  expect(mockToolGroup.options.Length).toEqual({ mode: 'Active', bindings: [{ mouseButton: 1 }] });
+  expect(live('WindowLevel')).toEqual([]);
+});
+
+it('a 3.13 visit before any 3.10 choices exist does not block converting them later', () => {
+  enterMode(new ToolGroupService({ services: {} } as any));
+  expect(localStorage.getItem('defaultToolBindings-migrated')).toBeNull();
+
+  mockToolGroup.options = {};
+  localStorage.setItem(
+    'defaultToolBindings',
+    JSON.stringify([{ id: 'leftMouseButton', commandOptions: { toolName: 'Length' } }])
+  );
+  enterMode(new ToolGroupService({ services: {} } as any));
+  expect(mockToolGroup.options.Length).toEqual({ mode: 'Active', bindings: [{ mouseButton: 1 }] });
+});
+
 it('takes the old button off a tool left without one on save', () => {
   const service = new ToolGroupService({ services: {} } as any);
   enterMode(service);
