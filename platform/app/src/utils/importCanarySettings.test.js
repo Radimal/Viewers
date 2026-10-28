@@ -83,8 +83,8 @@ describe('importCanarySettings', () => {
       location: { host: 'veg-view.prod-1.radimal.ai' },
       storage,
     });
-    expect(document.querySelector('iframe').src).toBe(
-      'https://veg-viewer-blue.prod-1.radimal.ai/settings-export.html'
+    expect(document.querySelector('iframe').src).toMatch(
+      /^https:\/\/veg-viewer-blue\.prod-1\.radimal\.ai\/settings-export\.html\?t=\d+$/
     );
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -105,8 +105,8 @@ describe('importCanarySettings', () => {
   it('imports from the canary origin once, then never again', async () => {
     const storage = memoryStorage();
     const pending = importCanarySettings({ location: { host: 'view.radimal.ai' }, storage });
-    expect(document.querySelector('iframe').src).toBe(
-      'https://view-blue.prod-1.radimal.ai/settings-export.html'
+    expect(document.querySelector('iframe').src).toMatch(
+      /^https:\/\/view-blue\.prod-1\.radimal\.ai\/settings-export\.html\?t=\d+$/
     );
 
     window.dispatchEvent(

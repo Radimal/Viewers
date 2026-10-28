@@ -225,7 +225,10 @@ export default function importCanarySettings({
 
     window.addEventListener('message', onMessage);
     timer = setTimeout(() => finish([], false), timeoutMs);
-    iframe.src = `${source}/settings-export.html`;
+    // Unique URL: the page has no cache headers and the canary's service worker
+    // precaches it, so a fixed URL can serve a stale copy (seen 2026-10-28:
+    // Safari kept a pre-#26 page without the partitioned flag, so no hop).
+    iframe.src = `${source}/settings-export.html?t=${Date.now()}`;
     document.body.appendChild(iframe);
   });
 }
