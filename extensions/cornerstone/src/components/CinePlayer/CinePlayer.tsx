@@ -3,6 +3,10 @@ import { useCine } from '@ohif/ui-next';
 import { Enums, eventTarget, cache } from '@cornerstonejs/core';
 import { useAppConfig } from '@state';
 
+// Radimal: viewports whose cine was playing when setDisplaySetsForViewports
+// stopped it; their next new-image-set event resumes playback (3.10 parity).
+export const resumeCineAfterSwitch = new Set<string>();
+
 function WrappedCinePlayer({
   enabledVPElement,
   viewportId,
@@ -17,6 +21,7 @@ function WrappedCinePlayer({
   const [dynamicInfo, setDynamicInfo] = useState(null);
   const [appConfig] = useAppConfig();
   const isMountedRef = useRef(null);
+  const resumeRef = useRef(false);
 
   const cineHandler = () => {
     if (!cines?.[viewportId] || !enabledVPElement) {
@@ -39,7 +44,7 @@ function WrappedCinePlayer({
     const { viewports } = viewportGridService.getState();
     const { displaySetInstanceUIDs } = viewports.get(viewportId);
     let frameRate = 24;
-    let isPlaying = cines[viewportId]?.isPlaying || false;
+    let isPlaying = resumeRef.current || cines[viewportId]?.isPlaying || false;
     displaySetInstanceUIDs.forEach(displaySetInstanceUID => {
       const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUID);
 
@@ -100,24 +105,22 @@ function WrappedCinePlayer({
       return;
     }
 
-    enabledVPElement.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, newDisplaySetHandler);
+    // Only the new-image event resumes: it fires once the new series is set.
+    const onNewImageSet = () => {
+      resumeRef.current = resumeCineAfterSwitch.delete(viewportId);
+      newDisplaySetHandler();
+      resumeRef.current = false;
+    };
+
+    enabledVPElement.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, onNewImageSet);
     // this doesn't makes sense that we are listening to this event on viewport element
-    enabledVPElement.addEventListener(
-      Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME,
-      newDisplaySetHandler
-    );
+    enabledVPElement.addEventListener(Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME, onNewImageSet);
 
     return () => {
       cineService.setCine({ id: viewportId, isPlaying: false });
 
-      enabledVPElement.removeEventListener(
-        Enums.Events.VIEWPORT_NEW_IMAGE_SET,
-        newDisplaySetHandler
-      );
-      enabledVPElement.removeEventListener(
-        Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME,
-        newDisplaySetHandler
-      );
+      enabledVPElement.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, onNewImageSet);
+      enabledVPElement.removeEventListener(Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME, onNewImageSet);
     };
   }, [enabledVPElement, newDisplaySetHandler, viewportId]);
 

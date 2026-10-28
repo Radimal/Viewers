@@ -61,6 +61,7 @@ import { EasingFunctionEnum } from './utils/transitions';
 import { createSegmentationForViewport } from './utils/createSegmentationForViewport';
 import { utilities as segmentationUtilities } from '@cornerstonejs/tools/segmentation';
 import i18n from '@ohif/i18n';
+import { resumeCineAfterSwitch } from './components/CinePlayer/CinePlayer';
 
 const { add, intersect, subtract, copy } = cstUtils.contourSegmentation;
 
@@ -1816,6 +1817,10 @@ function commandsModule({
       viewportsToUpdate.forEach(viewport => {
         const state = cineService.getState();
         const currentCineState = state.cines?.[viewport.viewportId];
+        // Radimal: 3.10 parity — a playing loop keeps playing on the new series.
+        if (currentCineState?.isPlaying) {
+          resumeCineAfterSwitch.add(viewport.viewportId);
+        }
         cineService.setCine({
           id: viewport.viewportId,
           frameRate: currentCineState?.frameRate ?? state.default?.frameRate ?? 24,
