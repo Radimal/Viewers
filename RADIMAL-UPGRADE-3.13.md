@@ -223,43 +223,50 @@ origin to allowedViewerOrigins.
    https://veg-viewer-blue.prod-1.radimal.ai/settings-export.html is 200
    BEFORE flipping view.radimal.ai / veg-view. Keep each canary running
    through its target's soak; only then destroy it and remove its entry in
-   src/utils/importCanarySettings.js. Readers also get a one-time 4-step
-   intro (radimalViewerIntro2026) in place of stock OHIF's tour.
-3. Workflow (prod-1 change prepared 2026-10-14 on local branch
-   prep/prod-cutover-assets, NOT pushed): adds radimal-viewer-assets-prod-1
-   to the 3.13 S3 sync. Why it is required: view.radimal.ai serves index.html
+   src/utils/importCanarySettings.js. Readers also get a one-time 2-step
+   what's-new intro (radimalViewerIntro2026), hidden on the canary hosts and
+   NOT carried by the import, so canary readers see it at cutover too.
+   Redeploy both canaries after PR #24 so settings-export.html no longer
+   exports shownTours (`curl -s <canary>/settings-export.html | grep -c
+   shownTours` → 0).
+3. Workflow (draft PR cutover/prod-assets, 2026-10-27 — merging it IS the
+   prod action): adds radimal-viewer-assets-prod-1 AND veg-prod-1 to the
+   3.13 S3 sync (team decided Radimal + VEG flip the same day, which also
+   removes the per-case 3.10/3.13 flip-flop for mixed readers). Why it is required: view.radimal.ai serves index.html
    and app-config.js from the container but every *.js/*.css/*.svg/font/image
    from that bucket, which holds only 3.10 files today. Flipping ohif_version
    without it = blank viewer (verified 2026-10-14: the 3.13 bundle is 200 on
    view-blue, 403 on view.radimal.ai). view-blue is not a preview of this; it
    has no CloudFront and serves everything from nginx.
    a. Pre-checks: ethos-view.radimal.ai loads (proves the gzip upload fix,
-      ae52a19a45, is in the build); orthanc-1.tfvars has no
+      ae52a19a45, is in the build); orthanc-1 / orthanc-veg-prod tfvars have no
       ohif_image_digest pin (the tag v3.13.3.radimal is mutable, so new tasks
       pull the newest build = the one that just synced).
    b. Every v3.10.* branch's workflow syncs prod-1 and veg-prod-1 too. Freeze
       v3.10 pushes for the soak (or drop prod-1 from origin/v3.10.0.71.radimal's
       list), or a 3.10 push puts 3.10's unhashed sw.js / init-service-worker.js
       / assets back over 3.13's.
-   c. Quiet window: push prep/prod-cutover-assets to v3.13.3.radimal → CI
-      builds + syncs. From here until step 4 lands, 3.10 on view.radimal.ai
+   c. Quiet window: merge cutover/prod-assets into v3.13.3.radimal → CI
+      builds + syncs (~8 min). From here until step 4 lands, 3.10 on view.radimal.ai / veg-view
       runs with 3.13's unhashed shared files (same transition Ethos did
       2026-10-13 without issue). Keep the gap short.
    d. Verify before flipping: take the app.bundle.<hash>.js name from
       view-blue (after a blue restart, so it runs the new build) and curl
-      https://view.radimal.ai/app.bundle.<hash>.js → 200 and ~3.4 MB, not
-      403 or 0 bytes.
-   VEG (veg-prod-1) and the sha-<commit> ECR tag: same procedure later.
-4. Terraform: flip ohif_version in prod tfvars one cluster at a time
-   (orthanc-1.tfvars first; veg-prod after prod-1 soak, or per team
-   preference), right after 3c/3d. Plan must show ONLY the ohif_http image
+      https://view.radimal.ai/app.bundle.<hash>.js AND
+      https://veg-view.prod-1.radimal.ai/app.bundle.<hash>.js → 200 and
+      ~3.4 MB, not 403 or 0 bytes.
+4. Terraform: flip ohif_version to 3.13.3 in orthanc-1.tfvars and
+   orthanc-veg-prod.tfvars, right after 3c/3d. Plan must show ONLY the ohif_http image
    change per cluster. Then Redeploy Ohif (prod), which also invalidates
    CloudFront. Ethos: done 2026-10-13 (radimal-terraform #433).
+4b. Turn off viewer-313-canary and viewer-313-canary-veg in PostHog so
+   canary readers land on the main hosts (their settings import on first
+   load). Keep the canary CLUSTERS up — the import iframes them.
 5. Invalidate index.html on the prod CloudFront distributions.
 6. Soak + watch PostHog (first_image_rendered baseline vs 3.10 — the
    speed-instrumentation dashboard) and error rates.
 7. Rollback lever (keep warm until soak ends): revert ohif_version in
-   tfvars + apply, re-run the newest v3.10.* branch workflow to restore
+   tfvars + apply, re-run the v3.10.0.71.radimal workflow to restore
    3.10 unhashed assets in prod buckets. Reverting ohif_version alone is not
    enough; the 3.10 hashed bundles are still in the bucket, but its unhashed
    files are not.
