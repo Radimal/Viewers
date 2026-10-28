@@ -18,6 +18,8 @@ const CANARY_SOURCE_BY_HOST = {
 const STATE_KEY = 'canarySettingsImport';
 const MAX_ATTEMPTS = 3;
 const MESSAGE_TYPE = 'radimal-settings-export';
+// Fragment param the export page returns settings in after a top-level hop.
+const RETURN_PARAM = 'radimal-settings';
 
 // Migration markers never cross origins: the canary origin set them against an
 // empty 3.10 store, so importing them would make this origin skip migrating the
@@ -78,6 +80,36 @@ export function applyCanarySettings(storage, settings, migrateLegacyHotkeys) {
 }
 
 /**
+ * Settings handed back by a top-level hop through the canary's export page
+ * (Safari/WebKit, whose same-site iframes get empty partitioned storage). The
+ * fragment is stripped from the address bar either way; it is only trusted when
+ * it echoes the nonce this origin stored before hopping, so a crafted link
+ * cannot plant settings.
+ */
+function takeReturnedSettings(location, state) {
+  const params = new URLSearchParams((location.hash || '').slice(1));
+  if (!params.has(RETURN_PARAM)) {
+    return null;
+  }
+  try {
+    window.history.replaceState(null, '', location.pathname + location.search);
+  } catch (e) {
+    // cosmetic only
+  }
+  if (!state.nonce || params.get('nonce') !== state.nonce) {
+    return null;
+  }
+  try {
+    return JSON.parse(params.get(RETURN_PARAM));
+  } catch (e) {
+    return null;
+  }
+}
+
+const migrateLegacyHotkeys = () =>
+  migrateOldHotkeyDefinitions({ generateHash: HotkeysManager.prototype.generateHash });
+
+/**
  * One-time, before the app renders (so before 3.13's own migrations run):
  * reads the reader's canary preferences through a hidden same-site iframe.
  * Resolves quickly when there is nothing to do. A canary that does not answer
@@ -100,6 +132,32 @@ export default function importCanarySettings({
   } catch (e) {
     return Promise.resolve([]);
   }
+
+  const saveState = next => {
+    try {
+      storage.setItem(STATE_KEY, JSON.stringify(next));
+    } catch (e) {
+      // storage unavailable: nothing to persist
+    }
+  };
+
+  const returned = takeReturnedSettings(location, state);
+  if (returned) {
+    let written = [];
+    try {
+      written = applyCanarySettings(storage, returned, migrateLegacyHotkeys);
+    } catch (e) {
+      console.warn('Canary settings import failed', e);
+    }
+    saveState({
+      done: true,
+      attempts: state.attempts || 0,
+      imported: written,
+      at: new Date().toISOString(),
+    });
+    return Promise.resolve(written);
+  }
+
   if (state.done) {
     return Promise.resolve([]);
   }
@@ -115,31 +173,47 @@ export default function importCanarySettings({
       window.removeEventListener('message', onMessage);
       iframe.remove();
       const attempts = (state.attempts || 0) + 1;
-      try {
-        storage.setItem(
-          STATE_KEY,
-          JSON.stringify({
-            done: done || attempts >= MAX_ATTEMPTS,
-            attempts,
-            imported: written,
-            at: new Date().toISOString(),
-          })
-        );
-      } catch (e) {
-        // storage unavailable: nothing to persist
-      }
+      saveState({
+        done: done || attempts >= MAX_ATTEMPTS,
+        attempts,
+        imported: written,
+        at: new Date().toISOString(),
+      });
       resolve(written);
+    };
+
+    // The iframe only sees partitioned (empty) storage: hop top-level through
+    // the export page once, which returns here with the settings in the
+    // fragment. The promise stays pending; the page is navigating away.
+    const hop = () => {
+      clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
+      iframe.remove();
+      const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b =>
+        b.toString(16).padStart(2, '0')
+      ).join('');
+      saveState({ ...state, attempts: (state.attempts || 0) + 1, nonce });
+      location.replace(
+        `${source}/settings-export.html?return=${encodeURIComponent(location.href)}&nonce=${nonce}`
+      );
     };
 
     const onMessage = event => {
       if (event.origin !== source || event.data?.type !== MESSAGE_TYPE) {
         return;
       }
+      if (event.data.partitioned) {
+        // Hop at most once; a hop that came back empty-handed is final.
+        if (state.nonce) {
+          finish([], true);
+        } else {
+          hop();
+        }
+        return;
+      }
       let written = [];
       try {
-        written = applyCanarySettings(storage, event.data.settings, () =>
-          migrateOldHotkeyDefinitions({ generateHash: HotkeysManager.prototype.generateHash })
-        );
+        written = applyCanarySettings(storage, event.data.settings, migrateLegacyHotkeys);
       } catch (e) {
         console.warn('Canary settings import failed', e);
       }
