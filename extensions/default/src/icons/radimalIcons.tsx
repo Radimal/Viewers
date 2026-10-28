@@ -205,8 +205,41 @@ export const RadimalPdf = (props: IconProps) => {
   );
 };
 
+// Free rotate: an almost-closed circular arrow around a tilted image.
+export const ToolRotateFree = (props: IconProps) => (
+  <svg
+    width="28px"
+    height="28px"
+    viewBox="0 0 28 28"
+    {...props}
+  >
+    <g
+      id="ToolRotateFree"
+      fill="none"
+      fillRule="evenodd"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect
+        x="10"
+        y="10"
+        width="8"
+        height="8"
+        rx="1"
+        fill="currentColor"
+        transform="rotate(30 14 14)"
+      ></rect>
+      <path d="M22.5 11A9 9 0 1 1 19 6.6"></path>
+      <path d="M19.5 3.5 19 6.6 22 7.4"></path>
+    </g>
+  </svg>
+);
+
 export const radimalIcons = {
   ToolMonitor,
+  ToolRotateFree,
   CloseWindows,
   OpenSavedWindows,
   RadimalPdf,
@@ -214,4 +247,5 @@ export const radimalIcons = {
   'tool-monitor': ToolMonitor,
   'close-windows': CloseWindows,
   'open-saved-windows': OpenSavedWindows,
+  'tool-rotate-free': ToolRotateFree,
 };
