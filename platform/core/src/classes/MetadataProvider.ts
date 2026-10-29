@@ -547,7 +547,12 @@ const WADO_IMAGE_LOADER = {
     // Fallback for DX images.
     // TODO: We should use the rest of the results of this function
     // to update the UI somehow
-    const { PixelSpacing, type } = getPixelSpacingInformation(instance) || {};
+    let { PixelSpacing, type } = getPixelSpacingInformation(instance) || {};
+    // Some sensors (e.g. Progeny IO) write ImagerPixelSpacing as "1.#INF"; NaN
+    // spacing blanks the viewport, so treat unusable spacing as absent.
+    if (PixelSpacing && !toNumber([].concat(PixelSpacing)).every(v => Number.isFinite(v) && v > 0)) {
+      PixelSpacing = undefined;
+    }
 
     let rowPixelSpacing;
     let columnPixelSpacing;
