@@ -548,9 +548,12 @@ const WADO_IMAGE_LOADER = {
     // TODO: We should use the rest of the results of this function
     // to update the UI somehow
     let { PixelSpacing, type } = getPixelSpacingInformation(instance) || {};
-    // Some sensors (e.g. Progeny IO) write ImagerPixelSpacing as "1.#INF"; NaN
-    // spacing blanks the viewport, so treat unusable spacing as absent.
-    if (PixelSpacing && !toNumber([].concat(PixelSpacing)).every(v => Number.isFinite(v) && v > 0)) {
+    // Progeny IO sensors write ImagerPixelSpacing as "1.#INF"; Orthanc serves
+    // that as an empty value ([]), which is truthy. Null spacing then reaches
+    // vtk and blanks the viewport (cs3d skips its 1mm fallback because
+    // usingDefaultValues is set), so treat unusable spacing as absent.
+    const spacing = toNumber([].concat(PixelSpacing ?? []));
+    if (spacing.length < 2 || !spacing.every(v => Number.isFinite(v) && v > 0)) {
       PixelSpacing = undefined;
     }
 
