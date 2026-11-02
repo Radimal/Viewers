@@ -2,27 +2,17 @@ import { hpMN, hpMN8 } from './hangingprotocols/hpMNGrid';
 import hpMNCompare from './hangingprotocols/hpCompare';
 import hpMammography from './hangingprotocols/hpMammo';
 import hpScale from './hangingprotocols/hpScale';
+import {
+  getUserLayoutPreference,
+  getLayoutPreferenceByModality,
+  layoutGroupLabel,
+  LAYOUT_GROUP_ATTRIBUTE,
+} from './utils/layoutPreference';
 
-// Radimal: "Set NxM as Default" (layout selector) persists a preferred grid;
-// the default protocol's stage is built from it so every study opens in the
-// user's layout. Evaluated at module load — saving the preference reloads the
-// page (see toolbarButtonsCustomization's layout selector).
-const getUserLayoutPreference = () => {
-  try {
-    const saved = localStorage.getItem('userLayoutPreference');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        rows: parsed.rows || 1,
-        columns: parsed.columns || 1,
-        name: parsed.name || '1x1',
-      };
-    }
-  } catch (error) {
-    console.warn('Failed to load user layout preference:', error);
-  }
-  return { rows: 1, columns: 1, name: '1x1' };
-};
+// Radimal: "Set NxM as Default" (layout selector) persists a preferred grid,
+// for all studies and per modality group; the default protocols' stages are
+// built from it so every study opens in the user's layout. Evaluated at module
+// load — saving the preference reloads the page.
 
 const createUserPreferredViewports = (rows, columns) => {
   const totalViewports = rows * columns;
@@ -61,7 +51,15 @@ const createUserPreferredViewports = (rows, columns) => {
   return viewports;
 };
 
-const userPref = getUserLayoutPreference();
+const stageFor = ({ rows, columns, name }) => ({
+  name,
+  viewportStructure: {
+    layoutType: 'grid',
+    properties: { rows, columns },
+  },
+  viewports: createUserPreferredViewports(rows, columns),
+  createdDate: '2021-02-23T18:32:42.850Z',
+});
 
 const defaultProtocol = {
   id: 'default',
@@ -131,21 +129,28 @@ const defaultProtocol = {
       ],
     },
   },
-  stages: [
-    {
-      name: userPref.name,
-      viewportStructure: {
-        layoutType: 'grid',
-        properties: {
-          rows: userPref.rows,
-          columns: userPref.columns,
-        },
-      },
-      viewports: createUserPreferredViewports(userPref.rows, userPref.columns),
-      createdDate: '2021-02-23T18:32:42.850Z',
-    },
-  ],
+  stages: [stageFor(getUserLayoutPreference())],
 };
+
+// One protocol per modality group with a saved default; the mode runs these
+// ahead of 'default' (getDefaultProtocolIds), and a study matches the one for
+// its main modality group. No match falls back to 'default'.
+const modalityProtocols = Object.entries(getLayoutPreferenceByModality()).map(
+  ([group, layout]) => ({
+    ...defaultProtocol,
+    id: `default-${group}`,
+    name: `Default (${layoutGroupLabel(group)})`,
+    protocolMatchingRules: [
+      {
+        attribute: LAYOUT_GROUP_ATTRIBUTE,
+        constraint: { equals: { value: group } },
+        required: true,
+        weight: 10,
+      },
+    ],
+    stages: [stageFor(layout)],
+  })
+);
 
 function getHangingProtocolModule() {
   return [
@@ -153,6 +158,7 @@ function getHangingProtocolModule() {
       name: defaultProtocol.id,
       protocol: defaultProtocol,
     },
+    ...modalityProtocols.map(protocol => ({ name: protocol.id, protocol })),
     // Create a MxN comparison hanging protocol available by default
     {
       name: hpMNCompare.id,

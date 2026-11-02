@@ -8,6 +8,7 @@ import {
   registerModeToolbar,
 } from './modeCustomization';
 import { id } from './id';
+import { getDefaultProtocolIds } from '@ohif/extension-default/src/utils/layoutPreference';
 
 const { structuredCloneWithFunctions } = utils;
 
@@ -360,8 +361,10 @@ export const modeInstance = {
   isValidMode,
   routes: [basicRoute],
   extensions: extensionDependencies,
-  // Default protocol gets self-registered by default in the init
-  hangingProtocol: 'default',
+  // Default protocol gets self-registered by default in the init. Radimal:
+  // readers with per-modality default layouts also get their default-<group>
+  // protocols, matched by the study's main modality.
+  hangingProtocol: getDefaultProtocolIds(),
   // Order is important in sop class handlers when two handlers both use
   // the same sop class under different situations.  In that case, the more
   // general handler needs to come last.  For this case, the dicomvideo must

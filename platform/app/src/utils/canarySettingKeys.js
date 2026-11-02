@@ -21,6 +21,7 @@ export const CANARY_SETTING_KEYS = [
   'zoomSpeed',
   'zoomTowardCursor',
   'userLayoutPreference',
+  'userLayoutPreferenceByModality',
   'openAdditionalWindowsOnStart',
   'windowsArray',
   'pinnedToolbarTools',
