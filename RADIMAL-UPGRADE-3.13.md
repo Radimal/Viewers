@@ -15,9 +15,10 @@ deploys, and serves studies correctly.
    and pushes `668564009563.dkr.ecr.us-east-1.amazonaws.com/ohif:<branch-name>`.
 2. **The workflow file is per-branch.** Push triggers use the workflow file on
    the pushed branch, so each release line controls its own trigger filter and
-   its own S3 bucket list. The `v3.10.*` branches sync all four asset buckets
-   (both prods included); the `v3.13.*` workflow syncs **stage-1 only** and
-   must never list prod buckets.
+   its own S3 bucket list. Since the cutover the `v3.13.*` workflow syncs all
+   six asset buckets (prod-1, veg-prod-1, ethos-prod-1 and the three staging
+   buckets) on every push; the `v3.10.*` branches sync only on a manual run
+   with an explicit `s3_sync` target (2026-11-02).
 3. **terraform picks the tag.** `radimal-terraform/orthanc-cluster` composes
    `ohif:v${var.ohif_version}.radimal`; `ohif_version` lives in each cluster's
    tfvars under `orthanc-cluster/deployments/`.
@@ -41,6 +42,17 @@ deploys, and serves studies correctly.
   stack. **Restore procedure: re-run the workflow on the branch you want to
   win.** For a `v3.10.*` branch that means a manual run with an explicit
   `s3_sync` target (`staging` or `prod-rollback`); its pushes don't sync.
+- **3.10's decoder wasm is still served (`platform/app/public/*.wasm`).** 3.10
+  viewer pages kept loading after the cutover (~20-50 VEG sessions/day, mostly
+  background tabs; likely browser session restore / back-forward reopening
+  them from disk cache, which `no-cache` doesn't prevent), and 3.10's update
+  banner never reloads on its own. Those pages request 3.10's four hashed
+  decoders (`20fc4c65…`, `5004fdc0…`, `a048f840…` = the patched openjpeg 1.2.4,
+  `c22b37c3…`) from nginx; without them nginx's SPA fallback returns
+  index.html and images fail to decode ("expected magic word 00 61 73 6d,
+  found 3c 21 64 6f"). Copied byte-for-byte from the 3.10.0.71 image. Remove
+  once PostHog shows no 3.10 builds (5d9d8341a2, 2480b9e85f) loading for a
+  couple of weeks.
 - **Vanilla 3.13 does not emit `dist/version.json`** (it's a fork feature).
   The 3.13 workflow falls back to the branch name for the versioned S3 copy.
   Remove the fallback once the cache-manager feature (which owns version.json)
