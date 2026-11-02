@@ -1,7 +1,7 @@
 // Minimal stand-in for a cs3d ToolGroup: setToolActive merges bindings,
 // setToolPassive strips the listed ones, setToolDisabled clears them.
-const mockToolGroup = {
-  id: 'default',
+const mockMakeToolGroup = id => ({
+  id,
   options: {} as Record<string, { mode: string; bindings: any[] }>,
   hasTool: () => true,
   addTool() {},
@@ -26,10 +26,12 @@ const mockToolGroup = {
   setToolDisabled(toolName) {
     this.options[toolName] = { mode: 'Disabled', bindings: [] };
   },
-};
+});
+const mockToolGroup = mockMakeToolGroup('default');
+const mockGroups: Record<string, ReturnType<typeof mockMakeToolGroup>> = { default: mockToolGroup };
 
 jest.mock('@cornerstonejs/tools', () => ({
-  ToolGroupManager: { getToolGroup: () => mockToolGroup },
+  ToolGroupManager: { getToolGroup: id => mockGroups[id] },
   Enums: {
     MouseBindings: { Primary: 1, Secondary: 2, Auxiliary: 4, Wheel: 524288 },
     ToolModes: { Active: 'Active', Passive: 'Passive', Enabled: 'Enabled' },
@@ -47,8 +49,9 @@ const PINCH = { numTouchPoints: 2 };
 const STORAGE_KEY = 'user-preferred-tool-bindings';
 
 // basic mode's default group; `zoomOnWheel` mirrors applyWheelPreferences.
-function enterMode(service, { zoomOnWheel = false } = {}) {
-  service.addToolsToToolGroup('default', {
+// SR and MPR groups use the same WL/Pan/Zoom-on-L/M/R layout.
+function enterMode(service, { zoomOnWheel = false, toolGroupId = 'default' } = {}) {
+  service.addToolsToToolGroup(toolGroupId, {
     active: [
       { toolName: 'WindowLevel', bindings: [{ mouseButton: 1 }] },
       { toolName: 'Pan', bindings: [{ mouseButton: 4 }] },
@@ -72,6 +75,9 @@ const live = toolName => mockToolGroup.options[toolName].bindings;
 beforeEach(() => {
   localStorage.clear();
   mockToolGroup.options = {};
+  Object.keys(mockGroups)
+    .filter(id => id !== 'default')
+    .forEach(id => delete mockGroups[id]);
 });
 
 it('keeps the mode-entry wheel binding when persisted button bindings load', () => {
@@ -163,4 +169,47 @@ it('takes the old button off a tool left without one on save', () => {
   expect(live('WindowLevel')).toEqual([]);
   expect(live('Zoom')).toEqual([PINCH, { mouseButton: 1 }, { mouseButton: 2 }]);
   expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).default.WindowLevel).toEqual([]);
+});
+
+// 3.10 parity: button choices saved on 'default' also drive SR and MPR.
+describe('SR and MPR follow the saved mouse buttons', () => {
+  const saved = { WindowLevel: [{ mouseButton: 2 }], Zoom: [{ mouseButton: 1 }, PINCH] };
+  const liveIn = (id, toolName) => mockGroups[id].options[toolName].bindings;
+
+  it.each(['SRToolGroup', 'mpr'])('%s reads the choices saved on default when it loads', id => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ default: saved }));
+    mockGroups[id] = mockMakeToolGroup(id);
+    enterMode(new ToolGroupService({ services: {} } as any), { toolGroupId: id });
+
+    expect(liveIn(id, 'WindowLevel')).toEqual([{ mouseButton: 2 }]);
+    expect(liveIn(id, 'Zoom')).toHaveLength(2);
+    expect(liveIn(id, 'Zoom')).toEqual(expect.arrayContaining([PINCH, { mouseButton: 1 }]));
+  });
+
+  it('volume3d keeps its own buttons', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ default: saved }));
+    mockGroups.volume3d = mockMakeToolGroup('volume3d');
+    enterMode(new ToolGroupService({ services: {} } as any), { toolGroupId: 'volume3d' });
+
+    expect(liveIn('volume3d', 'WindowLevel')).toEqual([{ mouseButton: 1 }]);
+  });
+
+  it('an open SR group follows a save live, without a saved copy of its own', () => {
+    const service = new ToolGroupService({ services: {} } as any);
+    enterMode(service);
+    mockGroups.SRToolGroup = mockMakeToolGroup('SRToolGroup');
+    enterMode(service, { toolGroupId: 'SRToolGroup' });
+
+    service.assignMouseButtons('default', {
+      WindowLevel: [2],
+      Pan: [4],
+      Zoom: [1],
+      StackScroll: [],
+      Length: [],
+    });
+
+    expect(liveIn('SRToolGroup', 'WindowLevel')).toEqual([{ mouseButton: 2 }]);
+    expect(liveIn('SRToolGroup', 'Zoom')).toEqual([PINCH, { mouseButton: 1 }]);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).SRToolGroup).toBeUndefined();
+  });
 });
