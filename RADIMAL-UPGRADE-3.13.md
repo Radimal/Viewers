@@ -39,7 +39,8 @@ deploys, and serves studies correctly.
   (branding), logos, and `dicom-microscopy-viewer/*` are last-writer-wins.
   Whichever branch's CI ran last owns those files for every cluster on the
   stack. **Restore procedure: re-run the workflow on the branch you want to
-  win** (e.g. re-run the `v3.10.*` build after a 3.13 staging test).
+  win.** For a `v3.10.*` branch that means a manual run with an explicit
+  `s3_sync` target (`staging` or `prod-rollback`); its pushes don't sync.
 - **Vanilla 3.13 does not emit `dist/version.json`** (it's a fork feature).
   The 3.13 workflow falls back to the branch name for the versioned S3 copy.
   Remove the fallback once the cache-manager feature (which owns version.json)
@@ -288,9 +289,11 @@ staging, modality matrix (CR/DX/CT/MR/US/PDF) + iPad + multi-monitor verified.
 3. Update `ohif_version` in prod tfvars (`orthanc-blue-prod-1`, `orthanc-1`,
    `orthanc-veg-prod`) and apply — same one-image-change plan expectation.
 4. Invalidate `index.html` on the prod CloudFront distributions if stale.
-5. **Rollback:** revert `ohif_version` in tfvars + apply, then re-run the
-   latest `v3.10.*` branch workflow to restore 3.10 unhashed assets in the
-   prod buckets. Keep the last 3.10 branch and its ECR image until 3.13 has
+5. **Rollback:** revert `ohif_version` in tfvars + apply, then restore 3.10's
+   unhashed assets in the prod buckets: on the 3.10 branch, "Run workflow"
+   with `s3_sync=prod-rollback` (or `gh workflow run build-and-push-to-ecr.yml
+   --ref v3.10.0.71.radimal -f s3_sync=prod-rollback`). Since 2026-11-02 a
+   `v3.10.*` push builds the image only and never syncs S3. Keep the last 3.10 branch and its ECR image until 3.13 has
    soaked in prod.
 
 ## Port status

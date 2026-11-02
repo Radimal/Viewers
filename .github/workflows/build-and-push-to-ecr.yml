@@ -8,8 +8,9 @@ name: Build and Push OHIF container
 # shared files (init-service-worker.js, sw.js, assets/*, logos) for whatever
 # version is live on the stack. Merge only in the cutover window, immediately
 # before flipping orthanc-1 / orthanc-veg-prod ohif_version to 3.13.3
-# (RADIMAL-UPGRADE-3.13.md, cutover checklist). veg-stage-1 stays out: VEG
-# staging is still 3.10. Rollback: re-run the build on v3.10.0.71.radimal.
+# (RADIMAL-UPGRADE-3.13.md, cutover checklist). veg-stage-1 joined when VEG
+# staging moved to 3.13 (2026-11). Rollback: on v3.10.0.71.radimal, "Run
+# workflow" with s3_sync=prod-rollback (3.10 pushes no longer sync S3).
 
 on:
   push:
@@ -113,9 +114,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
 
-          # Add s3://radimal-viewer-assets-veg-stage-1 when VEG staging moves
-          # to 3.13. Drop prod-1 / veg-prod-1 from the 3.10 workflow's list.
-          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1 s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-veg-prod-1; do
+          # Every stack serves 3.13. The v3.10.* workflows sync only on a
+          # manual run (s3_sync input), so they no longer clobber these.
+          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1 s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-veg-prod-1; do
             # Source maps stay in the docker image for debugging but are not
             # published to the CDN buckets (3.10 parity).
             # Flat copy at bucket root for serving via CloudFront, plus a
