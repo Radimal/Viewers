@@ -227,6 +227,26 @@ const toolbarButtons: Button[] = [
       ],
     },
   },
+  // Radimal: drag to rotate to any angle. Plain buttons only, so the wheel
+  // still scrolls slices (cs3d sends the wheel only to Wheel-bound tools).
+  {
+    id: 'PlanarRotate',
+    uiType: 'ohif.toolButton',
+    props: {
+      type: 'tool',
+      icon: 'tool-rotate-free',
+      label: i18n.t('Buttons:Free Rotate'),
+      tooltip: i18n.t('Buttons:Free Rotate'),
+      commands: setToolActiveToolbar,
+      evaluate: [
+        'evaluate.cornerstoneTool',
+        {
+          name: 'evaluate.viewport.supported',
+          unsupportedViewportTypes: ['video', 'volume3d'],
+        },
+      ],
+    },
+  },
   {
     id: 'flipHorizontal',
     uiType: 'ohif.toolButton',
@@ -784,11 +804,12 @@ export const toolbarSections = {
     'LivewireContour',
   ],
 
-  // Radimal: rotate-left added; ImageSliceSync moved to primary
+  // Radimal: rotate-left and PlanarRotate added; ImageSliceSync moved to primary
   MoreTools: [
     'Reset',
     'rotate-right',
     'rotate-left',
+    'PlanarRotate',
     'flipHorizontal',
     'ReferenceLines',
     'ImageOverlayViewer',

@@ -28,9 +28,13 @@ const DEFAULT_TOOL_BINDINGS_STORAGE_KEY = 'user-preferred-tool-bindings';
 
 // Radimal: mouse-button tool assignment + zoom speed (fork parity).
 // StackScroll and Length: 3.10 parity (wheel-zoom readers scroll on right-drag;
-// 3.10 also offered Length on a button).
-const MOUSE_TOOL_OPTIONS = ['WindowLevel', 'Pan', 'Zoom', 'StackScroll', 'Length'];
-const MOUSE_TOOL_LABELS = { WindowLevel: 'Window Level', StackScroll: 'Stack Scroll' };
+// 3.10 also offered Length on a button). PlanarRotate: free rotate (JR request).
+const MOUSE_TOOL_OPTIONS = ['WindowLevel', 'Pan', 'Zoom', 'StackScroll', 'Length', 'PlanarRotate'];
+const MOUSE_TOOL_LABELS = {
+  WindowLevel: 'Window Level',
+  StackScroll: 'Stack Scroll',
+  PlanarRotate: 'Free Rotate',
+};
 const MOUSE_BUTTONS = [
   { key: 'left', label: 'Left Click', mouseButton: 1 },
   { key: 'middle', label: 'Middle Click', mouseButton: 4 },
