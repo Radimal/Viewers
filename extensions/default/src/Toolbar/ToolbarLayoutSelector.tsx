@@ -236,9 +236,12 @@ function ToolbarLayoutSelectorWithServices({
           {/* Right Side - Grid Layout */}
           <div className="bg-muted border-background flex flex-col gap-2.5 border-l-2 border-solid p-2">
             <div className="text-muted-foreground text-xs">{t('Custom')}</div>
+            {/* Radimal: the theme's accent/muted are both black, so give the
+                cells and the grid a light outline to show they're there. */}
             <LayoutSelector.GridSelector
               rows={rows}
               columns={columns}
+              className="border-foreground/30 [&>div]:border-foreground/25 w-[fit-content] rounded-sm border p-[2px] [&>div]:border"
             />
             <LayoutSelector.HelpText>
               {t('Hover to select')} <br />

@@ -190,3 +190,37 @@ describe('HangingProtocolService', () => {
     });
   });
 });
+
+// Radimal: run() without a protocol id (matching among the active protocols,
+// as when a mode lists several) must forward its options. A viewport with
+// matchedDisplaySetsIndex -1 used to throw destructuring null options.
+describe('HangingProtocolService run by matching', () => {
+  it('applies a matched protocol whose viewport uses matchedDisplaySetsIndex -1', () => {
+    const hps = new HangingProtocolService({ run: jest.fn() }, { services: {} });
+    const [stage] = testProtocol.stages;
+    const [viewport] = stage.viewports;
+    hps.addProtocol('test', {
+      ...testProtocol,
+      stages: [
+        {
+          ...stage,
+          viewports: [
+            {
+              ...viewport,
+              displaySets: [{ id: 'displaySetSelector', matchedDisplaySetsIndex: -1 }],
+            },
+          ],
+        },
+      ],
+    });
+    hps.setActiveProtocolIds(['test']);
+    expect(() =>
+      hps.run({ studies: [studyMatch], displaySets: studyMatchDisplaySets })
+    ).not.toThrow();
+    expect(hps.getActiveProtocol().protocol.id).toBe('test');
+    expect(
+      hps.getMatchDetails().viewportMatchDetails.get('ctAXIAL').displaySetsInfo[0]
+        .displaySetInstanceUID
+    ).toBe('displaySet1');
+  });
+});

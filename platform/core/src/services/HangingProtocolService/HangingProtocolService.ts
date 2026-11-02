@@ -443,7 +443,10 @@ export default class HangingProtocolService extends PubSubService {
         activeStudy,
         displaySets,
       });
-      this._setProtocol(matchedProtocol);
+      // Radimal: forward options here too (upstream passed them only for a
+      // protocol id). Without them a matched protocol whose viewport uses
+      // matchedDisplaySetsIndex -1 throws destructuring null options.
+      this._setProtocol(matchedProtocol, options);
     }
 
     if (this.protocol?.callbacks?.onProtocolEnter) {
