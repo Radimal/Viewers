@@ -387,7 +387,6 @@ const OHIFCornerstoneViewport = React.memo(
       };
     }, [viewportOptions, displaySets, dataSource]);
 
-
     const { extensionManager } = useSystem();
 
     // Radimal: auto-trim collimation borders on CR/DX once the image
@@ -526,10 +525,31 @@ const OHIFCornerstoneViewport = React.memo(
         }, 100);
       };
 
+      // A late or progressive image can land after the first trim. cs3d then
+      // re-applies the view presentation it read before swapping the image
+      // data; read against a pre-image camera (parallelScale 1) that zoom is
+      // ~1/fit and shrinks the image to a speck. STACK_NEW_IMAGE fires right
+      // after that re-apply and before the render, so re-base here the same
+      // way the visit started.
+      // ponytail: re-trim drops a manual zoom/pan made before the late image
+      // lands; carry a live delta if readers notice.
+      const handleNewImage = () => {
+        if (!trimDone) {
+          return;
+        }
+        try {
+          runTrim();
+        } catch (error) {
+          console.warn('Auto-trim re-base failed:', error);
+        }
+      };
+
       element.addEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+      element.addEventListener(Enums.Events.STACK_NEW_IMAGE, handleNewImage);
 
       return () => {
         element.removeEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+        element.removeEventListener(Enums.Events.STACK_NEW_IMAGE, handleNewImage);
         clearTimeout(safetyTimer);
         reveal();
 

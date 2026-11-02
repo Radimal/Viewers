@@ -354,6 +354,20 @@ class CornerstoneViewportService
     const { lutPresentationId, positionPresentationId, segmentationPresentationId } =
       presentationIds;
 
+    // Radimal: a view that was never established has nothing worth keeping.
+    // Leaving a series before its image rendered, or while the auto-trim gate
+    // still hides it, would save zoom/pan measured against cs3d's pre-image
+    // camera (parallelScale 1); restoring that on revisit shrank the image to
+    // a speck. Skip position/LUT so the revisit opens like a first load.
+    // (NO_DATA/LOADING = no image yet; a rendered viewport cycles through
+    // NEEDS_RENDER/PRE_RENDER on every change, so those still count.)
+    const csViewport = this.getCornerstoneViewport(viewportId);
+    const { NO_DATA, LOADING } = csEnums.ViewportStatus;
+    const viewEstablished =
+      !!csViewport &&
+      ![NO_DATA, LOADING].includes(csViewport.viewportStatus) &&
+      csViewport.element?.style.visibility !== 'hidden';
+
     const positionPresentation = this._getPositionPresentation(viewportId);
     const lutPresentation = this._getLutPresentation(viewportId);
     const segmentationPresentation = this._getSegmentationPresentation(viewportId);
@@ -363,11 +377,11 @@ class CornerstoneViewportService
     const { setSynchronizers } = useSynchronizersStore.getState();
     const { setSegmentationPresentation } = useSegmentationPresentationStore.getState();
 
-    if (lutPresentationId) {
+    if (lutPresentationId && viewEstablished) {
       setLutPresentation(lutPresentationId, lutPresentation);
     }
 
-    if (positionPresentationId) {
+    if (positionPresentationId && viewEstablished) {
       setPositionPresentation(positionPresentationId, positionPresentation);
     }
 
@@ -1366,8 +1380,9 @@ class CornerstoneViewportService
 
     const applyRepresentation = () => {
       const { predecessorImageId } = displaySet;
-      const segmentationRepresentationPromise =
-        segmentationService.addSegmentationRepresentation(viewport.id, {
+      const segmentationRepresentationPromise = segmentationService.addSegmentationRepresentation(
+        viewport.id,
+        {
           segmentationId,
           predecessorImageId,
           type: representationType,
@@ -1377,7 +1392,8 @@ class CornerstoneViewportService
                 ? BlendModes.LABELMAP_EDGE_PROJECTION_BLEND
                 : undefined,
           },
-        });
+        }
+      );
       this.storePresentation({ viewportId: viewport.id });
       return segmentationRepresentationPromise;
     };
@@ -1445,8 +1461,7 @@ class CornerstoneViewportService
 
         // Stop waiting immediately if the SEG load itself fails — otherwise the
         // loading-complete event never fires and we would idle until the timeout.
-        const loadingPromise = (displaySet as { loadingPromise?: Promise<unknown> })
-          .loadingPromise;
+        const loadingPromise = (displaySet as { loadingPromise?: Promise<unknown> }).loadingPromise;
         loadingPromise?.catch(error => {
           if (settled) {
             return;
