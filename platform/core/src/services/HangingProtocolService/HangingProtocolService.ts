@@ -443,10 +443,7 @@ export default class HangingProtocolService extends PubSubService {
         activeStudy,
         displaySets,
       });
-      // Radimal: forward options here too (upstream passed them only for a
-      // protocol id). Without them a matched protocol whose viewport uses
-      // matchedDisplaySetsIndex -1 throws destructuring null options.
-      this._setProtocol(matchedProtocol, options);
+      this._setProtocol(matchedProtocol);
     }
 
     if (this.protocol?.callbacks?.onProtocolEnter) {
@@ -1295,7 +1292,9 @@ export default class HangingProtocolService extends PubSubService {
     }
     const { matchingScores = [] } = matchDetails;
     if (offset === -1) {
-      const { inDisplay } = options;
+      // Radimal: run() by matching passes no options (a forwarded stageIndex
+      // would override auto stage selection, e.g. mnGrid); don't destructure null.
+      const { inDisplay } = options ?? {};
       if (!inDisplay) {
         return matchDetails;
       }

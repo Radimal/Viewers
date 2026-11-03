@@ -78,6 +78,11 @@ describe('per-modality default layouts', () => {
     });
   });
 
+  it('skips malformed saved entries instead of failing at startup', () => {
+    const { getDefaultProtocolIds } = loadWith({ XRAY: null, CT: 5, US: { rows: 1, columns: 2 } });
+    expect(getDefaultProtocolIds()).toEqual(['default-US', 'default']);
+  });
+
   it('groups CR and DX, picks the group with most series, ignores SR and priors', () => {
     const { studyLayoutGroup } = loadWith(undefined);
     const study = { StudyInstanceUID: 'study' };

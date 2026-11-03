@@ -224,3 +224,24 @@ describe('HangingProtocolService run by matching', () => {
     ).toBe('displaySet1');
   });
 });
+
+// Mode.tsx always passes { stageIndex: 0 } for a protocol list; matching must
+// still auto-pick the first enabled stage (e.g. mnGrid 2x2 -> 3x1 -> 2x1).
+describe('HangingProtocolService run by matching picks the enabled stage', () => {
+  it('ignores a stageIndex passed with a protocol list', () => {
+    const hps = new HangingProtocolService({ run: jest.fn() }, { services: {} });
+    const [stage] = testProtocol.stages;
+    hps.addProtocol('test', {
+      ...testProtocol,
+      stages: [
+        { ...stage, id: 'needs99', stageActivation: { enabled: { minViewportsMatched: 99 } } },
+        { ...stage, id: 'fits' },
+      ],
+    });
+    hps.setActiveProtocolIds(['test']);
+    hps.run({ studies: [studyMatch], displaySets: studyMatchDisplaySets }, undefined, {
+      stageIndex: 0,
+    });
+    expect(hps.getActiveProtocol().stageIndex).toBe(1);
+  });
+});

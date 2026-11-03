@@ -9,6 +9,7 @@ import {
   getUserLayoutPreference,
   saveUserLayoutPreference,
   getLayoutPreferenceByModality,
+  isImageModality,
   saveLayoutPreferenceForModality,
   layoutGroupFor,
   layoutGroupLabel,
@@ -47,7 +48,7 @@ function ToolbarLayoutSelectorWithServices({
       const { activeViewportId, viewports } = viewportGridService.getState();
       const [uid] = viewports.get(activeViewportId)?.displaySetInstanceUIDs ?? [];
       const modality = uid && displaySetService.getDisplaySetByUID(uid)?.Modality;
-      return modality ? layoutGroupFor(modality) : undefined;
+      return modality && isImageModality(modality) ? layoutGroupFor(modality) : undefined;
     } catch (error) {
       return undefined;
     }

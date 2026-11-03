@@ -43,6 +43,8 @@ const write = (key, value) => {
 
 export const layoutGroupFor = (modality: string) => MODALITY_GROUPS[modality] ?? modality;
 
+export const isImageModality = (modality: string) => !NON_IMAGE_MODALITIES.includes(modality);
+
 export const layoutGroupLabel = (group: string) => GROUP_LABELS[group] ?? group;
 
 /** All-studies default. Same key and JSON shape as 3.10 (rollback, VEG). */
@@ -59,8 +61,11 @@ export function getLayoutPreferenceByModality(): Record<string, Layout> {
   if (!saved || typeof saved !== 'object') {
     return {};
   }
+  // Skip hand-edited or badly imported entries rather than fail at startup.
   return Object.fromEntries(
-    Object.entries(saved).map(([group, layout]) => [group, toLayout(layout)])
+    Object.entries(saved)
+      .filter(([, layout]) => layout && typeof layout === 'object')
+      .map(([group, layout]) => [group, toLayout(layout as Layout)])
   );
 }
 
@@ -86,7 +91,7 @@ export function studyLayoutGroup(
 ): string | undefined {
   const seriesByGroup = new Map<string, Set<string>>();
   for (const { StudyInstanceUID, SeriesInstanceUID, Modality } of displaySets) {
-    if (StudyInstanceUID !== study?.StudyInstanceUID || NON_IMAGE_MODALITIES.includes(Modality)) {
+    if (StudyInstanceUID !== study?.StudyInstanceUID || !isImageModality(Modality)) {
       continue;
     }
     const group = layoutGroupFor(Modality);
