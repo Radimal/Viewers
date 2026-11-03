@@ -153,7 +153,7 @@ const DefaultFallback = ({
   const [showDetails, setShowDetails] = useState(false);
   const { show } = useNotification();
 
-  const title = `${t('Something went wrong')}${!isProduction && ` ${t('in')} ${context}`}.`;
+  const title = `${t('Something went wrong')}${isProduction ? '' : ` ${t('in')} ${context}`}.`;
   const subtitle = t('Sorry, something went wrong there. Try again.');
 
   const { errorTitle, code, firstFilename } = parseErrorStack(error);

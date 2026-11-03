@@ -43,7 +43,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc preinstall.js ./
 # (scripts/apply-openjpeg-patch.js) runs during the deps-only pnpm install.
 COPY scripts ./scripts
 COPY vendor ./vendor
-# patches/ holds pnpm patchedDependencies (cornerstone tools calibration fix);
+# patches/ holds pnpm patchedDependencies (cornerstone tools calibration fix,
+# core stack-scroll timer guard);
 # pnpm install fails if a referenced patch file is missing.
 COPY patches ./patches
 COPY --parents ./extensions/*/package.json ./modes/*/package.json ./platform/*/package.json ./

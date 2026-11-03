@@ -120,4 +120,5 @@ overrides:
   'tinypool@<2.1.2': 2.2.0
   'http-cache-semantics@<4.3.0': 4.3.0
 patchedDependencies:
+  '@cornerstonejs/core@5.6.8': patches/@cornerstonejs__core@5.6.8.patch
   '@cornerstonejs/tools@5.6.8': patches/@cornerstonejs__tools@5.6.8.patch
