@@ -1,5 +1,5 @@
 import objectHash from 'object-hash';
-import resolveHotkeyClashes from './resolveHotkeyClashes';
+import resolveHotkeyClashes, { normalizeHotkeyCombo } from './resolveHotkeyClashes';
 
 const hash = ({ commandName, commandOptions = {} }) => objectHash({ commandName, commandOptions });
 const def = (commandName, keys, label = commandName) => ({ commandName, keys, label });
@@ -36,4 +36,13 @@ it('changes nothing without a clash, and is stable on the next load', () => {
 
   const reloaded = [def('zoom', prefs[hash(zoom)]), def('brush', prefs[hash(brush)])];
   expect(resolveHotkeyClashes(reloaded, prefs, hash)).toEqual([]);
+});
+
+it('puts modifiers before the key, whatever the key name', () => {
+  expect(normalizeHotkeyCombo('down+meta')).toBe('meta+down');
+  expect(normalizeHotkeyCombo('pagedown+shift')).toBe('shift+pagedown');
+  expect(normalizeHotkeyCombo('left+shift+meta')).toBe('meta+shift+left');
+  expect(normalizeHotkeyCombo('alt+down')).toBe('alt+down');
+  expect(normalizeHotkeyCombo('j')).toBe('j');
+  expect(normalizeHotkeyCombo('+')).toBe('+');
 });

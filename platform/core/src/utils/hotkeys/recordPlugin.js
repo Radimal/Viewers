@@ -1,3 +1,5 @@
+import { normalizeHotkeyCombo } from './resolveHotkeyClashes';
+
 /**
  * This extension allows you to record a sequence using Mousetrap.
  *
@@ -122,20 +124,9 @@ export default function recordPlugin(Mousetrap, options = { timeout: 100 }) {
    */
   function _normalizeSequence(sequence) {
     for (let i = 0; i < sequence.length; ++i) {
-      sequence[i].sort(function (x, y) {
-        // modifier keys always come first, in alphabetical order
-        if (x.length > 1 && y.length === 1) {
-          return -1;
-        } else if (x.length === 1 && y.length > 1) {
-          return 1;
-        }
-
-        // character keys come next (list should contain no duplicates,
-        // so no need for equality check)
-        return x > y ? 1 : -1;
-      });
-
-      sequence[i] = sequence[i].join('+');
+      // Radimal: upstream sorted by name length, so "down"/"pagedown" counted
+      // as modifiers and Cmd+Down recorded as "down+meta".
+      sequence[i] = normalizeHotkeyCombo(sequence[i].join('+'));
     }
   }
 
