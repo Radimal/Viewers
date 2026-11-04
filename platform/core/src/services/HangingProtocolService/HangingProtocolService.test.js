@@ -190,3 +190,58 @@ describe('HangingProtocolService', () => {
     });
   });
 });
+
+// Radimal: run() without a protocol id (matching among the active protocols,
+// as when a mode lists several) must forward its options. A viewport with
+// matchedDisplaySetsIndex -1 used to throw destructuring null options.
+describe('HangingProtocolService run by matching', () => {
+  it('applies a matched protocol whose viewport uses matchedDisplaySetsIndex -1', () => {
+    const hps = new HangingProtocolService({ run: jest.fn() }, { services: {} });
+    const [stage] = testProtocol.stages;
+    const [viewport] = stage.viewports;
+    hps.addProtocol('test', {
+      ...testProtocol,
+      stages: [
+        {
+          ...stage,
+          viewports: [
+            {
+              ...viewport,
+              displaySets: [{ id: 'displaySetSelector', matchedDisplaySetsIndex: -1 }],
+            },
+          ],
+        },
+      ],
+    });
+    hps.setActiveProtocolIds(['test']);
+    expect(() =>
+      hps.run({ studies: [studyMatch], displaySets: studyMatchDisplaySets })
+    ).not.toThrow();
+    expect(hps.getActiveProtocol().protocol.id).toBe('test');
+    expect(
+      hps.getMatchDetails().viewportMatchDetails.get('ctAXIAL').displaySetsInfo[0]
+        .displaySetInstanceUID
+    ).toBe('displaySet1');
+  });
+});
+
+// Mode.tsx always passes { stageIndex: 0 } for a protocol list; matching must
+// still auto-pick the first enabled stage (e.g. mnGrid 2x2 -> 3x1 -> 2x1).
+describe('HangingProtocolService run by matching picks the enabled stage', () => {
+  it('ignores a stageIndex passed with a protocol list', () => {
+    const hps = new HangingProtocolService({ run: jest.fn() }, { services: {} });
+    const [stage] = testProtocol.stages;
+    hps.addProtocol('test', {
+      ...testProtocol,
+      stages: [
+        { ...stage, id: 'needs99', stageActivation: { enabled: { minViewportsMatched: 99 } } },
+        { ...stage, id: 'fits' },
+      ],
+    });
+    hps.setActiveProtocolIds(['test']);
+    hps.run({ studies: [studyMatch], displaySets: studyMatchDisplaySets }, undefined, {
+      stageIndex: 0,
+    });
+    expect(hps.getActiveProtocol().stageIndex).toBe(1);
+  });
+});

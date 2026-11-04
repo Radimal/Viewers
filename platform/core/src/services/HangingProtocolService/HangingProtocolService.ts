@@ -1292,7 +1292,9 @@ export default class HangingProtocolService extends PubSubService {
     }
     const { matchingScores = [] } = matchDetails;
     if (offset === -1) {
-      const { inDisplay } = options;
+      // Radimal: run() by matching passes no options (a forwarded stageIndex
+      // would override auto stage selection, e.g. mnGrid); don't destructure null.
+      const { inDisplay } = options ?? {};
       if (!inDisplay) {
         return matchDetails;
       }

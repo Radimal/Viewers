@@ -5,40 +5,21 @@ import { CommandsManager } from '@ohif/core';
 
 import { LayoutSelector, Button } from '@ohif/ui-next';
 import { useTranslation } from 'react-i18next';
+import {
+  getUserLayoutPreference,
+  saveUserLayoutPreference,
+  getLayoutPreferenceByModality,
+  isImageModality,
+  saveLayoutPreferenceForModality,
+  layoutGroupFor,
+  layoutGroupLabel,
+} from '../utils/layoutPreference';
 
-// Radimal: "Set NxM as Default". The saved preference shapes the default
-// hanging protocol's stage (getHangingProtocolModule reads it at module
-// load), so every study opens in the user's grid. Saving reloads the page
-// because the protocol is built once at startup.
-const getUserLayoutPreference = () => {
-  try {
-    const saved = localStorage.getItem('userLayoutPreference');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        rows: parsed.rows || 1,
-        columns: parsed.columns || 1,
-        name: parsed.name || '1x1',
-      };
-    }
-  } catch (error) {
-    console.warn('Failed to load user layout preference:', error);
-  }
-  return { rows: 1, columns: 1, name: '1x1' };
-};
-
-const saveUserLayoutPreference = (rows, columns) => {
-  try {
-    localStorage.setItem(
-      'userLayoutPreference',
-      JSON.stringify({ rows, columns, name: `${rows}x${columns}` })
-    );
-    return true;
-  } catch (error) {
-    console.warn('Failed to save user layout preference:', error);
-    return false;
-  }
-};
+// Radimal: "Set NxM as Default", for all studies or for the active viewport's
+// modality group. The saved preferences shape the default hanging protocols
+// (getHangingProtocolModule reads them at module load), so every study opens
+// in the user's grid. Saving reloads the page because the protocols are built
+// once at startup.
 
 function ToolbarLayoutSelectorWithServices({
   commandsManager,
@@ -47,9 +28,10 @@ function ToolbarLayoutSelectorWithServices({
   columns = 4,
   ...props
 }) {
-  const { customizationService, viewportGridService } = servicesManager.services;
+  const { customizationService, viewportGridService, displaySetService } = servicesManager.services;
   const { t } = useTranslation('ToolbarLayoutSelector');
-  const [userDefaultLayout, setUserDefaultLayout] = useState(getUserLayoutPreference());
+  const [userDefaultLayout] = useState(getUserLayoutPreference);
+  const [defaultsByModality] = useState(getLayoutPreferenceByModality);
 
   const getCurrentLayout = () => {
     try {
@@ -60,16 +42,35 @@ function ToolbarLayoutSelectorWithServices({
     }
   };
 
-  const currentLayout = getCurrentLayout();
-  const currentIsDefault =
-    currentLayout.rows === userDefaultLayout.rows &&
-    currentLayout.columns === userDefaultLayout.columns;
+  // Modality group of the active viewport's series, e.g. CR/DX -> XRAY.
+  const getActiveGroup = () => {
+    try {
+      const { activeViewportId, viewports } = viewportGridService.getState();
+      const [uid] = viewports.get(activeViewportId)?.displaySetInstanceUIDs ?? [];
+      const modality = uid && displaySetService.getDisplaySetByUID(uid)?.Modality;
+      return modality && isImageModality(modality) ? layoutGroupFor(modality) : undefined;
+    } catch (error) {
+      return undefined;
+    }
+  };
 
+  const currentLayout = getCurrentLayout();
+  const isSameLayout = layout =>
+    layout?.rows === currentLayout.rows && layout?.columns === currentLayout.columns;
+  const currentIsDefault = isSameLayout(userDefaultLayout);
+  const activeGroup = getActiveGroup();
+  const groupDefault = activeGroup && defaultsByModality[activeGroup];
+
+  // The default hanging protocols are built from the preferences at module
+  // load; a reload is how a new default takes effect.
   const handleSetAsDefault = () => {
     if (saveUserLayoutPreference(currentLayout.rows, currentLayout.columns)) {
-      setUserDefaultLayout(getUserLayoutPreference());
-      // The default hanging protocol is built from the preference at module
-      // load; a reload is how the new default takes effect.
+      window.location.reload();
+    }
+  };
+
+  const handleSetAsGroupDefault = () => {
+    if (saveLayoutPreferenceForModality(activeGroup, currentLayout.rows, currentLayout.columns)) {
       window.location.reload();
     }
   };
@@ -234,11 +235,14 @@ function ToolbarLayoutSelectorWithServices({
           )}
 
           {/* Right Side - Grid Layout */}
-          <div className="bg-muted flex flex-col gap-2.5 border-l-2 border-solid border-background p-2">
+          <div className="bg-muted border-background flex flex-col gap-2.5 border-l-2 border-solid p-2">
             <div className="text-muted-foreground text-xs">{t('Custom')}</div>
+            {/* Radimal: the theme's accent/muted are both black, so give the
+                cells and the grid a light outline to show they're there. */}
             <LayoutSelector.GridSelector
               rows={rows}
               columns={columns}
+              className="border-foreground/30 [&>div]:border-foreground/25 w-[fit-content] rounded-sm border p-[2px] [&>div]:border"
             />
             <LayoutSelector.HelpText>
               {t('Hover to select')} <br />
@@ -248,6 +252,7 @@ function ToolbarLayoutSelectorWithServices({
             <div className="flex flex-col gap-1">
               <span className="text-muted-foreground text-[10px]">
                 {t('Default')}: {userDefaultLayout.name}
+                {groupDefault && ` · ${layoutGroupLabel(activeGroup)}: ${groupDefault.name}`}
               </span>
               <Button
                 size="sm"
@@ -261,6 +266,21 @@ function ToolbarLayoutSelectorWithServices({
                   defaultValue: `Set ${currentLayout.rows}x${currentLayout.columns} as Default`,
                 })}
               </Button>
+              {activeGroup && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-6 px-2 py-1 text-xs"
+                  onClick={handleSetAsGroupDefault}
+                  disabled={isSameLayout(groupDefault)}
+                >
+                  {t('Set {{layout}} as Default for {{modality}}', {
+                    layout: `${currentLayout.rows}x${currentLayout.columns}`,
+                    modality: layoutGroupLabel(activeGroup),
+                    defaultValue: `Set ${currentLayout.rows}x${currentLayout.columns} as Default for ${layoutGroupLabel(activeGroup)}`,
+                  })}
+                </Button>
+              )}
             </div>
           </div>
         </LayoutSelector.Content>
