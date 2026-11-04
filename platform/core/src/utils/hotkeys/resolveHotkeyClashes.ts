@@ -2,6 +2,18 @@ export const hotkeyCombo = keys =>
   (Array.isArray(keys) ? keys.join('+') : keys || '').toLowerCase();
 const combo = hotkeyCombo;
 
+const MODIFIERS = ['alt', 'ctrl', 'meta', 'shift'];
+
+/**
+ * Radimal: modifiers first (alphabetical), then the key. Mousetrap takes the
+ * last part of a combo as the key, so a recorded "down+meta" bound to Cmd alone.
+ */
+export const normalizeHotkeyCombo = (keys: string) => {
+  const parts = keys.split('+');
+  const isModifier = key => MODIFIERS.includes(key);
+  return [...parts.filter(isModifier).sort(), ...parts.filter(key => !isModifier(key))].join('+');
+};
+
 const FREE_KEY_POOL = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
 
 /** Shift+<key> if free, else the first free letter/digit. */

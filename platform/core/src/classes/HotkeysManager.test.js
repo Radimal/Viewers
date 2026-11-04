@@ -102,6 +102,18 @@ describe('HotkeysManager', () => {
 
       expect(hotkeysManager.hotkeyDefaults).toEqual(hotkeyDefinitions);
     });
+
+    it('repairs a saved shortcut recorded with the modifier last', () => {
+      const nextImage = { commandName: 'nextImage', commandOptions: {}, keys: ['down'] };
+      const hash = objectHash({ commandName: 'nextImage', commandOptions: {} });
+      localStorage.setItem('user-preferred-keys', JSON.stringify({ [hash]: 'down+meta' }));
+
+      hotkeysManager.setDefaultHotKeys([nextImage]);
+
+      expect(hotkeysManager.hotkeyDefinitions[hash].keys).toBe('meta+down');
+      expect(JSON.parse(localStorage.getItem('user-preferred-keys'))[hash]).toBe('meta+down');
+      localStorage.removeItem('user-preferred-keys');
+    });
   });
 
   describe('registerHotkeys()', () => {

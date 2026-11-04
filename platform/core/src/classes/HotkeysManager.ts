@@ -2,7 +2,10 @@ import objectHash from 'object-hash';
 import { hotkeys as mouseTrapAPI } from '../utils';
 import Hotkey from './Hotkey';
 import migrateOldHotkeyDefinitions from '../utils/hotkeys/migrateHotkeys';
-import resolveHotkeyClashes, { hotkeyCombo } from '../utils/hotkeys/resolveHotkeyClashes';
+import resolveHotkeyClashes, {
+  hotkeyCombo,
+  normalizeHotkeyCombo,
+} from '../utils/hotkeys/resolveHotkeyClashes';
 import pubSubServiceInterface from '../services/_shared/pubSubServiceInterface';
 
 /**
@@ -138,6 +141,17 @@ export class HotkeysManager {
     // Get user preferred keys from localStorage
     const userPreferredKeys = JSON.parse(localStorage.getItem('user-preferred-keys') || '{}');
 
+    // Radimal: repair shortcuts the recorder saved in the wrong order
+    // ("down+meta" -> "meta+down") before they're bound or clash-checked.
+    let reordered = false;
+    Object.entries(userPreferredKeys).forEach(([hash, keys]) => {
+      const fixed = normalizeHotkeyCombo(hotkeyCombo(keys as string | string[]));
+      if (fixed && fixed !== hotkeyCombo(keys as string | string[])) {
+        userPreferredKeys[hash] = fixed;
+        reordered = true;
+      }
+    });
+
     // Update definitions with user preferred keys before setting
     const updatedDefinitions = definitions.map(definition => {
       const commandHash = this.generateHash(definition);
@@ -153,8 +167,10 @@ export class HotkeysManager {
     });
 
     const moved = resolveHotkeyClashes(updatedDefinitions, userPreferredKeys, this.generateHash);
-    if (moved.length) {
+    if (moved.length || reordered) {
       localStorage.setItem('user-preferred-keys', JSON.stringify(userPreferredKeys));
+    }
+    if (moved.length) {
       const format = keys =>
         keys
           .split('+')
