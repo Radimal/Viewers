@@ -186,8 +186,9 @@ function addStackInstances(instances) {
     return;
   }
 
-  // An original arriving after its lossy copy replaces it.
-  this.images.splice(0, this.images.length, ...withoutLossyCopies([...this.images, ...stackable]));
+  // An original arriving after its lossy copy replaces it. Returning `this`
+  // even when every new instance was hidden tells DisplaySetService they're handled.
+  setStackImages(this, [...this.images, ...stackable]);
   const { servicesManager, extensionManager } = appContext;
   const { customizationService } = servicesManager.services;
   this.sort(customizationService);
@@ -240,6 +241,21 @@ function withoutLossyCopies(instances) {
   );
 }
 
+/**
+ * Sets the stack's images without lossy copies, and records the copies on the
+ * display set; DisplaySetService's filterInstances treats them as claimed so
+ * live updates (which re-send the whole series) don't turn them into a new set.
+ */
+function setStackImages(displaySet, instances) {
+  const kept = withoutLossyCopies(instances);
+  const keptUids = new Set(kept.map(instance => instance.SOPInstanceUID));
+  displaySet.hiddenSOPInstanceUIDs = new Set([
+    ...(displaySet.hiddenSOPInstanceUIDs ?? []),
+    ...instances.map(instance => instance.SOPInstanceUID).filter(uid => !keptUids.has(uid)),
+  ]);
+  displaySet.images.splice(0, displaySet.images.length, ...kept);
+}
+
 function getSopClassUids(instances) {
   const uniqueSopClassUidsInSeries = new Set();
   instances.forEach(instance => {
@@ -271,6 +287,7 @@ function getDisplaySetsFromSeries(instances) {
     return [];
   }
 
+  const allInstances = instances;
   instances = withoutLossyCopies(instances);
   const displaySets = [];
   const sopClassUids = getSopClassUids(instances);
@@ -317,6 +334,15 @@ function getDisplaySetsFromSeries(instances) {
     });
     displaySet.addInstances = addStackInstances;
     displaySets.push(displaySet);
+  }
+
+  // Record the hidden copies (see setStackImages) on the stack, else the first set.
+  const hiddenOwner = displaySets.find(ds => ds.addInstances) ?? displaySets[0];
+  if (hiddenOwner && instances.length !== allInstances.length) {
+    const kept = new Set(instances);
+    hiddenOwner.hiddenSOPInstanceUIDs = new Set(
+      allInstances.filter(instance => !kept.has(instance)).map(instance => instance.SOPInstanceUID)
+    );
   }
 
   return displaySets;

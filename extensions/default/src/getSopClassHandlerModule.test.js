@@ -1,3 +1,4 @@
+import DisplaySetService from '@ohif/core/src/services/DisplaySetService/DisplaySetService';
 import getSopClassHandlerModule from './getSopClassHandlerModule';
 
 // 3.13 harness: addStackInstances re-sorts via customizationService and
@@ -122,5 +123,36 @@ describe('lossy copies of images in the same series', () => {
     ds.addInstances([instance(1)]);
     expect(ds.images.map(i => i.SOPInstanceUID)).toEqual(['sop1', 'lossy2']);
     expect(ds.numImageFrames).toBe(2);
+  });
+});
+
+describe('live updates of a series with lossy copies', () => {
+  it('re-sending the whole series adds no lossy-only display set', () => {
+    const { getSopClassHandlerModule: getModule } = getSopClassHandlerModule;
+    const [stackHandler] = (getModule ?? getSopClassHandlerModule)({
+      extensionManager,
+      servicesManager,
+      appConfig: {},
+    });
+    const service = new DisplaySetService();
+    service.init({ getModuleEntry: () => stackHandler }, [
+      '@ohif/extension-default.sopClassHandlerModule.stack',
+    ]);
+    const inSeries = (n, extra = {}) => instance(n, { SeriesInstanceUID: 'live-series', ...extra });
+    const lossyCopy = n =>
+      inSeries(n, {
+        SOPInstanceUID: `lossy${n}`,
+        LossyImageCompression: '01',
+        SourceImageSequence: [{ ReferencedSOPInstanceUID: `sop${n}` }],
+      });
+
+    const series = [inSeries(1), lossyCopy(1), inSeries(2), lossyCopy(2)];
+    service.makeDisplaySets(series);
+    // DicomMetadataStore re-sends the full series on every poll tick.
+    service.makeDisplaySets([...series, inSeries(3), lossyCopy(3)]);
+
+    const displaySets = service.getActiveDisplaySets();
+    expect(displaySets).toHaveLength(1);
+    expect(displaySets[0].images.map(i => i.SOPInstanceUID)).toEqual(['sop1', 'sop2', 'sop3']);
   });
 });

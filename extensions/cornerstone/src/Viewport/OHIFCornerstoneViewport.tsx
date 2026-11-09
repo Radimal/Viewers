@@ -313,6 +313,16 @@ const OHIFCornerstoneViewport = React.memo(
             const currentIndex = stackData?.imageIds?.indexOf(currentImageId) ?? -1;
             if (currentIndex >= 0) {
               stackData.initialImageIndex = currentIndex;
+            } else if (stackData?.imageIds?.length) {
+              // Radimal: the image on screen was replaced (an original arriving
+              // after its lossy copy) by one at the same position; keep the slice.
+              const previousIndex = (csViewport as any)?.getCurrentImageIdIndex?.();
+              if (previousIndex >= 0) {
+                stackData.initialImageIndex = Math.min(
+                  previousIndex,
+                  stackData.imageIds.length - 1
+                );
+              }
             }
 
             const keepCamera = true;

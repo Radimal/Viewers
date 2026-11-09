@@ -21,6 +21,9 @@ const filterInstances = (
     } else {
       dsInstances.forEach(instance => dsInstancesSOP.add(instance.SOPInstanceUID));
     }
+    // Radimal: instances a handler deliberately left out (e.g. lossy duplicate
+    // copies) are claimed too, or every live update offers them as new.
+    ds.hiddenSOPInstanceUIDs?.forEach(uid => dsInstancesSOP.add(uid));
   });
 
   return instances.filter(instance => !dsInstancesSOP.has(instance.SOPInstanceUID));
