@@ -425,6 +425,7 @@ const OHIFCornerstoneViewport = React.memo(
       const safetyTimer = setTimeout(reveal, 10000);
 
       let trimDone = false;
+      let trimmedImageId = null;
       let attempts = 0;
       const MAX_ATTEMPTS = 10;
       const displaySetKey = displaySets.map(ds => ds.displaySetInstanceUID).join(',');
@@ -496,6 +497,9 @@ const OHIFCornerstoneViewport = React.memo(
           return false;
         }
         trimDone = true;
+        trimmedImageId =
+          cornerstoneViewportService.getCornerstoneViewport(viewportId)?.getCurrentImageId?.() ??
+          null;
         // Baseline first (the untouched post-trim view), then the user's
         // manual delta on top — so the leave-time comparison measures only
         // what the user changed relative to this visit's baseline.
@@ -526,10 +530,36 @@ const OHIFCornerstoneViewport = React.memo(
         }, 100);
       };
 
+      // A late or progressive copy of the trimmed image can land after the
+      // first trim. cs3d then re-applies the view presentation it read before
+      // swapping the image data; read against a pre-image camera
+      // (parallelScale 1) that zoom is ~1/fit and shrinks the image to a
+      // speck. STACK_NEW_IMAGE fires right after that re-apply and before the
+      // render, so re-base here the same way the visit started. Only for that
+      // image: STACK_NEW_IMAGE also fires on every scroll, which must keep
+      // the reader's zoom/pan — and once the reader scrolls away, coming back
+      // to the trimmed image is a scroll too (cs3d drops a late copy of an
+      // image that's no longer current, so nothing is left to re-base).
+      // ponytail: re-trim drops a manual zoom/pan made before the late image
+      // lands; carry a live delta if readers notice.
+      const handleNewImage = evt => {
+        if (evt.detail?.imageId !== trimmedImageId) {
+          trimmedImageId = null;
+          return;
+        }
+        try {
+          runTrim();
+        } catch (error) {
+          console.warn('Auto-trim re-base failed:', error);
+        }
+      };
+
       element.addEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+      element.addEventListener(Enums.Events.STACK_NEW_IMAGE, handleNewImage);
 
       return () => {
         element.removeEventListener(Enums.Events.IMAGE_RENDERED, handleImageRendered);
+        element.removeEventListener(Enums.Events.STACK_NEW_IMAGE, handleNewImage);
         clearTimeout(safetyTimer);
         reveal();
 

@@ -354,6 +354,18 @@ class CornerstoneViewportService
     const { lutPresentationId, positionPresentationId, segmentationPresentationId } =
       presentationIds;
 
+    // Radimal: a view that never showed an image of its current stack has
+    // nothing worth keeping. Leaving a series before its image arrived would
+    // save zoom/pan measured against cs3d's pre-image camera (parallelScale
+    // 1); restoring that on revisit shrank the image to a speck. Skip
+    // position/LUT so the revisit opens like a first load. Judged by content:
+    // viewportStatus reads RENDERED after any placeholder render, and
+    // csImage still holds the previous series' image until the new one lands.
+    const csViewport = this.getCornerstoneViewport(viewportId) as Types.IStackViewport;
+    const shownImageId = csViewport?.getCornerstoneImage?.()?.imageId;
+    const viewEstablished =
+      !!csViewport && (!csViewport.getCornerstoneImage || csViewport.hasImageId(shownImageId));
+
     const positionPresentation = this._getPositionPresentation(viewportId);
     const lutPresentation = this._getLutPresentation(viewportId);
     const segmentationPresentation = this._getSegmentationPresentation(viewportId);
@@ -363,11 +375,11 @@ class CornerstoneViewportService
     const { setSynchronizers } = useSynchronizersStore.getState();
     const { setSegmentationPresentation } = useSegmentationPresentationStore.getState();
 
-    if (lutPresentationId) {
+    if (lutPresentationId && viewEstablished) {
       setLutPresentation(lutPresentationId, lutPresentation);
     }
 
-    if (positionPresentationId) {
+    if (positionPresentationId && viewEstablished) {
       setPositionPresentation(positionPresentationId, positionPresentation);
     }
 
