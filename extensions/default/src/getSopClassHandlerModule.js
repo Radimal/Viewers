@@ -186,7 +186,8 @@ function addStackInstances(instances) {
     return;
   }
 
-  this.images.push(...stackable);
+  // An original arriving after its lossy copy replaces it.
+  this.images.splice(0, this.images.length, ...withoutLossyCopies([...this.images, ...stackable]));
   const { servicesManager, extensionManager } = appContext;
   const { customizationService } = servicesManager.services;
   this.sort(customizationService);
@@ -205,6 +206,38 @@ function addStackInstances(instances) {
     messages: getDisplaySetMessages(this.images, isReconstructable, this.isDynamicVolume),
   });
   return this;
+}
+
+/**
+ * Radimal: some PACS (seen: CoActiv) forward a lossy JPEG 2000 copy of every
+ * image alongside the original, in the same series and at the same position.
+ * The doubled slices scroll twice and block MPR. Drop a lossy image only when
+ * its Source Image Sequence points at a non-lossy image in the series with the
+ * same position and instance number, i.e. a true duplicate; anything else is kept.
+ */
+const isLossy = instance => instance.LossyImageCompression === '01';
+const samePosition = (a, b) =>
+  a?.length === 3 &&
+  b?.length === 3 &&
+  a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 1e-3);
+
+function withoutLossyCopies(instances) {
+  const bySopUid = new Map(instances.map(instance => [instance.SOPInstanceUID, instance]));
+  return instances.filter(
+    instance =>
+      !isLossy(instance) ||
+      ![]
+        .concat(instance.SourceImageSequence ?? [])
+        .map(source => bySopUid.get(source?.ReferencedSOPInstanceUID))
+        .some(
+          original =>
+            original &&
+            original !== instance &&
+            !isLossy(original) &&
+            original.InstanceNumber === instance.InstanceNumber &&
+            samePosition(original.ImagePositionPatient, instance.ImagePositionPatient)
+        )
+  );
 }
 
 function getSopClassUids(instances) {
@@ -238,6 +271,7 @@ function getDisplaySetsFromSeries(instances) {
     return [];
   }
 
+  instances = withoutLossyCopies(instances);
   const displaySets = [];
   const sopClassUids = getSopClassUids(instances);
 
