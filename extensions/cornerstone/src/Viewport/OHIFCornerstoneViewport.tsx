@@ -537,11 +537,14 @@ const OHIFCornerstoneViewport = React.memo(
       // speck. STACK_NEW_IMAGE fires right after that re-apply and before the
       // render, so re-base here the same way the visit started. Only for that
       // image: STACK_NEW_IMAGE also fires on every scroll, which must keep
-      // the reader's zoom/pan.
+      // the reader's zoom/pan — and once the reader scrolls away, coming back
+      // to the trimmed image is a scroll too (cs3d drops a late copy of an
+      // image that's no longer current, so nothing is left to re-base).
       // ponytail: re-trim drops a manual zoom/pan made before the late image
       // lands; carry a live delta if readers notice.
       const handleNewImage = evt => {
-        if (!trimDone || evt.detail?.imageId !== trimmedImageId) {
+        if (evt.detail?.imageId !== trimmedImageId) {
+          trimmedImageId = null;
           return;
         }
         try {
