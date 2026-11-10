@@ -40,6 +40,13 @@ const PLAIN_BUTTONS = [
 const isPlainButton = binding =>
   PLAIN_BUTTONS.includes(binding?.mouseButton) && binding.modifierKey == null;
 
+// 3.10 parity: the reader's button choices (saved on 'default') also drive
+// these groups, which share default's WL/Pan/Zoom-on-L/M/R layout. MPR's
+// Crosshairs sits on a modifier combo, so plain-button assignment leaves it.
+// volume3d is left out: its left button is the 3D rotate.
+const MOUSE_PREF_SOURCE_GROUP = 'default';
+const MOUSE_PREF_MIRROR_GROUPS = ['SRToolGroup', 'mpr'];
+
 // 3.10 saved button choices here as [{ id, commandOptions: { toolName } }].
 const LEGACY_BUTTONS_KEY = 'defaultToolBindings';
 const LEGACY_BUTTONS_MIGRATED_KEY = 'defaultToolBindings-migrated';
@@ -367,6 +374,20 @@ export default class ToolGroupService {
       this._setPlainButtonsLive(toolGroupId, toolName, buttons);
       this.persistToolBindings(toolGroupId, toolName, bindings);
     }
+    // Mirror groups already open this session follow live; on load they read
+    // the source group's saved choices (_loadPersistedBindings).
+    if (toolGroupId === MOUSE_PREF_SOURCE_GROUP) {
+      for (const mirrorId of MOUSE_PREF_MIRROR_GROUPS) {
+        if (!ToolGroupManager.getToolGroup(mirrorId)) {
+          continue;
+        }
+        for (const [toolName, buttons] of Object.entries(buttonsByTool)) {
+          this._addMissingMirrorTool(mirrorId, toolName, buttons);
+          this._withPlainButtons(mirrorId, toolName, buttons);
+          this._setPlainButtonsLive(mirrorId, toolName, buttons);
+        }
+      }
+    }
   }
 
   public getAllToolBindings(): Array<{
@@ -481,6 +502,25 @@ export default class ToolGroupService {
     return bindings;
   }
 
+  /**
+   * Radimal (3.10 parity): SR and MPR groups lack some button tools (no
+   * PlanarRotate; SR has SRLength, not Length). Add the reader's chosen tool,
+   * or the button they gave it has no owner in that group.
+   */
+  private _addMissingMirrorTool(toolGroupId: string, toolName: string, buttons: unknown[]): void {
+    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+    if (
+      buttons.length &&
+      MOUSE_PREF_MIRROR_GROUPS.includes(toolGroupId) &&
+      toolGroup &&
+      !toolGroup.hasTool(toolName)
+    ) {
+      toolGroup.addTool(toolName);
+      // cs3d's addTool sets no mode, and getToolOptions is undefined until one is.
+      toolGroup.setToolPassive(toolName);
+    }
+  }
+
   private _setPlainButtonsLive(toolGroupId: string, toolName: string, buttons: number[]): void {
     const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
     if (!toolGroup?.hasTool(toolName)) {
@@ -544,8 +584,13 @@ export default class ToolGroupService {
 
   private _loadPersistedBindings(toolGroupId: string): void {
     this._migrateLegacyMouseButtons(toolGroupId);
-    const toolGroupBindings = this._readPersistedToolBindings()[toolGroupId];
-    if (!toolGroupBindings) {
+    const persisted = this._readPersistedToolBindings();
+    // Mirror groups take the reader's button choices from the source group,
+    // with anything saved for the group itself (e.g. mpr Crosshairs) on top.
+    const toolGroupBindings = MOUSE_PREF_MIRROR_GROUPS.includes(toolGroupId)
+      ? { ...persisted[MOUSE_PREF_SOURCE_GROUP], ...persisted[toolGroupId] }
+      : persisted[toolGroupId];
+    if (!toolGroupBindings || !Object.keys(toolGroupBindings).length) {
       return;
     }
 
@@ -562,12 +607,17 @@ export default class ToolGroupService {
         ...wheelBindings,
       ]);
 
+      this._addMissingMirrorTool(
+        toolGroupId,
+        toolName,
+        (bindings as ToolBindings).filter(isPlainButton)
+      );
       if (!toolGroup || !toolGroup.hasTool(toolName)) {
         continue;
       }
 
       // A saved button activates a Passive tool too (e.g. Length on a button).
-      const { mode } = toolGroup.getToolOptions(toolName);
+      const { mode } = toolGroup.getToolOptions(toolName) ?? {};
       if (
         mode === Enums.ToolModes.Active ||
         (mode === Enums.ToolModes.Passive && (bindings as ToolBindings).some(isPlainButton))
