@@ -85,6 +85,45 @@ describe('lossy copies of images in the same series', () => {
     expect(ds.images.map(i => i.SOPInstanceUID)).toEqual(['sop1', 'sop2']);
   });
 
+  it('drops a lossy copy of a radiograph, which has no image position', () => {
+    const dx = { Modality: 'DX', ImagePositionPatient: undefined };
+    const displaySets = stackHandler.getDisplaySetsFromSeries([
+      instance(1, dx),
+      { ...lossyCopyOf(1), ...dx },
+      { ...lossyCopyOf(2), ...dx }, // original never arrived: kept
+    ]);
+    expect(displaySets.map(ds => ds.images[0].SOPInstanceUID)).toEqual(['sop1', 'lossy2']);
+  });
+
+  // Anything that is not provably the same picture must stay visible.
+  it.each([
+    ['a different size', { Rows: 256 }],
+    ['a different acquisition time', { AcquisitionTime: '120001' }],
+    ['a different window', { WindowCenter: 40 }],
+    ['a different pixel spacing', { PixelSpacing: [0.5, 0.5] }],
+    ['a position its source lacks', { ImagePositionPatient: [0, 0, 1] }],
+    ['no source reference', { SourceImageSequence: undefined }],
+    ['a source outside the series', { SourceImageSequence: [{ ReferencedSOPInstanceUID: 'x' }] }],
+    [
+      'more than one source',
+      {
+        SourceImageSequence: [
+          { ReferencedSOPInstanceUID: 'sop1' },
+          { ReferencedSOPInstanceUID: 'sop2' },
+        ],
+      },
+    ],
+    ['no lossy flag', { LossyImageCompression: '00' }],
+  ])('keeps a radiograph derived image with %s', (_name, change) => {
+    const dx = { Modality: 'DX', ImagePositionPatient: undefined };
+    const displaySets = stackHandler.getDisplaySetsFromSeries([
+      instance(1, dx),
+      instance(2, dx),
+      { ...lossyCopyOf(1), ...dx, ...change },
+    ]);
+    expect(displaySets).toHaveLength(3);
+  });
+
   it('keeps lossy derived images at a different position than their source', () => {
     const derived = instance(3, {
       SOPInstanceUID: 'derived3',

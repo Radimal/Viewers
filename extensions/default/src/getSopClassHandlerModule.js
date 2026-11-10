@@ -210,35 +210,72 @@ function addStackInstances(instances) {
 }
 
 /**
- * Radimal: some PACS (seen: CoActiv) forward a lossy JPEG 2000 copy of every
- * image alongside the original, in the same series and at the same position.
- * The doubled slices scroll twice and block MPR. Drop a lossy image only when
- * its Source Image Sequence points at a non-lossy image in the series with the
- * same position and instance number, i.e. a true duplicate; anything else is kept.
+ * Radimal: some PACS (seen: CoActiv CT, IDEXX-PACS DX) send a lossy JPEG 2000
+ * copy of every image alongside the original, in the same series, under a new
+ * SOP Instance UID. The doubled images scroll twice and block MPR.
+ *
+ * Hiding a real image is far worse than showing a duplicate, so every check
+ * below must pass and any doubt keeps the image. A lossy image is hidden only
+ * when:
+ *  - its Source Image Sequence names exactly one image, and
+ *  - that image is in this series and is not lossy (so the original always
+ *    stays on screen), and
+ *  - both describe the same picture: every tag in SAME_PICTURE_TAGS is equal
+ *    and the positions match (radiographs have none; then both must lack it).
  */
 const isLossy = instance => instance.LossyImageCompression === '01';
+
+// Tags a re-compression leaves untouched. A reprocessed, cropped, resampled or
+// re-windowed derivative differs in at least one and is therefore kept.
+const SAME_PICTURE_TAGS = [
+  'SOPClassUID',
+  'InstanceNumber',
+  'Rows',
+  'Columns',
+  'NumberOfFrames',
+  'SamplesPerPixel',
+  'PhotometricInterpretation',
+  'BitsAllocated',
+  'BitsStored',
+  'PixelRepresentation',
+  'AcquisitionDate',
+  'AcquisitionTime',
+  'AcquisitionNumber',
+  'ContentDate',
+  'ContentTime',
+  'ImageOrientationPatient',
+  'PixelSpacing',
+  'ImagerPixelSpacing',
+  'ViewPosition',
+  'ImageLaterality',
+  'WindowCenter',
+  'WindowWidth',
+  'RescaleIntercept',
+  'RescaleSlope',
+];
+
 const samePosition = (a, b) =>
-  a?.length === 3 &&
-  b?.length === 3 &&
-  a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 1e-3);
+  (!a && !b) ||
+  (a?.length === 3 &&
+    b?.length === 3 &&
+    a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 1e-3));
+
+const isSamePicture = (a, b) =>
+  SAME_PICTURE_TAGS.every(tag => String(a[tag]) === String(b[tag])) &&
+  samePosition(a.ImagePositionPatient, b.ImagePositionPatient);
 
 function withoutLossyCopies(instances) {
   const bySopUid = new Map(instances.map(instance => [instance.SOPInstanceUID, instance]));
-  return instances.filter(
-    instance =>
-      !isLossy(instance) ||
-      ![]
-        .concat(instance.SourceImageSequence ?? [])
-        .map(source => bySopUid.get(source?.ReferencedSOPInstanceUID))
-        .some(
-          original =>
-            original &&
-            original !== instance &&
-            !isLossy(original) &&
-            original.InstanceNumber === instance.InstanceNumber &&
-            samePosition(original.ImagePositionPatient, instance.ImagePositionPatient)
-        )
-  );
+  return instances.filter(instance => {
+    if (!isLossy(instance)) {
+      return true;
+    }
+    const sources = [].concat(instance.SourceImageSequence ?? []);
+    const original = sources.length === 1 && bySopUid.get(sources[0]?.ReferencedSOPInstanceUID);
+    const isCopy =
+      original && original !== instance && !isLossy(original) && isSamePicture(original, instance);
+    return !isCopy;
+  });
 }
 
 /**
