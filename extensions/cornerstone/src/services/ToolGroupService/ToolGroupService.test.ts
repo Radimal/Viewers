@@ -12,10 +12,12 @@ const mockMakeToolGroup = (id, tools?: string[]) => ({
     this.tools?.add(toolName);
   },
   getToolOptions(toolName) {
-    return this.options[toolName] || { mode: 'Passive', bindings: [] };
+    // Like cs3d, a group with a real tool list has no options for a tool
+    // until a mode is set.
+    return this.options[toolName] || (this.tools ? undefined : { mode: 'Passive', bindings: [] });
   },
   setToolActive(toolName, { bindings = [] } = {} as any) {
-    const merged = [...this.getToolOptions(toolName).bindings];
+    const merged = [...(this.getToolOptions(toolName)?.bindings ?? [])];
     bindings.forEach(b => {
       if (!merged.some(m => JSON.stringify(m) === JSON.stringify(b))) {
         merged.push(b);
@@ -24,7 +26,7 @@ const mockMakeToolGroup = (id, tools?: string[]) => ({
     this.options[toolName] = { mode: 'Active', bindings: merged };
   },
   setToolPassive(toolName, { removeAllBindings = [] } = {} as any) {
-    const bindings = this.getToolOptions(toolName).bindings.filter(
+    const bindings = (this.getToolOptions(toolName)?.bindings ?? []).filter(
       b => !removeAllBindings.some(r => r.mouseButton === b.mouseButton && b.modifierKey == null)
     );
     this.options[toolName] = { mode: bindings.length ? 'Active' : 'Passive', bindings };

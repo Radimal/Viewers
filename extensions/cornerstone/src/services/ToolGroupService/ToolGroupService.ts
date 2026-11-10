@@ -516,6 +516,8 @@ export default class ToolGroupService {
       !toolGroup.hasTool(toolName)
     ) {
       toolGroup.addTool(toolName);
+      // cs3d's addTool sets no mode, and getToolOptions is undefined until one is.
+      toolGroup.setToolPassive(toolName);
     }
   }
 
@@ -615,7 +617,7 @@ export default class ToolGroupService {
       }
 
       // A saved button activates a Passive tool too (e.g. Length on a button).
-      const { mode } = toolGroup.getToolOptions(toolName);
+      const { mode } = toolGroup.getToolOptions(toolName) ?? {};
       if (
         mode === Enums.ToolModes.Active ||
         (mode === Enums.ToolModes.Passive && (bindings as ToolBindings).some(isPlainButton))
