@@ -186,7 +186,9 @@ function addStackInstances(instances) {
     return;
   }
 
-  this.images.push(...stackable);
+  // An original arriving after its lossy copy replaces it. Returning `this`
+  // even when every new instance was hidden tells DisplaySetService they're handled.
+  setStackImages(this, [...this.images, ...stackable]);
   const { servicesManager, extensionManager } = appContext;
   const { customizationService } = servicesManager.services;
   this.sort(customizationService);
@@ -205,6 +207,53 @@ function addStackInstances(instances) {
     messages: getDisplaySetMessages(this.images, isReconstructable, this.isDynamicVolume),
   });
   return this;
+}
+
+/**
+ * Radimal: some PACS (seen: CoActiv) forward a lossy JPEG 2000 copy of every
+ * image alongside the original, in the same series and at the same position.
+ * The doubled slices scroll twice and block MPR. Drop a lossy image only when
+ * its Source Image Sequence points at a non-lossy image in the series with the
+ * same position and instance number, i.e. a true duplicate; anything else is kept.
+ */
+const isLossy = instance => instance.LossyImageCompression === '01';
+const samePosition = (a, b) =>
+  a?.length === 3 &&
+  b?.length === 3 &&
+  a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 1e-3);
+
+function withoutLossyCopies(instances) {
+  const bySopUid = new Map(instances.map(instance => [instance.SOPInstanceUID, instance]));
+  return instances.filter(
+    instance =>
+      !isLossy(instance) ||
+      ![]
+        .concat(instance.SourceImageSequence ?? [])
+        .map(source => bySopUid.get(source?.ReferencedSOPInstanceUID))
+        .some(
+          original =>
+            original &&
+            original !== instance &&
+            !isLossy(original) &&
+            original.InstanceNumber === instance.InstanceNumber &&
+            samePosition(original.ImagePositionPatient, instance.ImagePositionPatient)
+        )
+  );
+}
+
+/**
+ * Sets the stack's images without lossy copies, and records the copies on the
+ * display set; DisplaySetService's filterInstances treats them as claimed so
+ * live updates (which re-send the whole series) don't turn them into a new set.
+ */
+function setStackImages(displaySet, instances) {
+  const kept = withoutLossyCopies(instances);
+  const keptUids = new Set(kept.map(instance => instance.SOPInstanceUID));
+  displaySet.hiddenSOPInstanceUIDs = new Set([
+    ...(displaySet.hiddenSOPInstanceUIDs ?? []),
+    ...instances.map(instance => instance.SOPInstanceUID).filter(uid => !keptUids.has(uid)),
+  ]);
+  displaySet.images.splice(0, displaySet.images.length, ...kept);
 }
 
 function getSopClassUids(instances) {
@@ -238,6 +287,8 @@ function getDisplaySetsFromSeries(instances) {
     return [];
   }
 
+  const allInstances = instances;
+  instances = withoutLossyCopies(instances);
   const displaySets = [];
   const sopClassUids = getSopClassUids(instances);
 
@@ -283,6 +334,15 @@ function getDisplaySetsFromSeries(instances) {
     });
     displaySet.addInstances = addStackInstances;
     displaySets.push(displaySet);
+  }
+
+  // Record the hidden copies (see setStackImages) on the stack, else the first set.
+  const hiddenOwner = displaySets.find(ds => ds.addInstances) ?? displaySets[0];
+  if (hiddenOwner && instances.length !== allInstances.length) {
+    const kept = new Set(instances);
+    hiddenOwner.hiddenSOPInstanceUIDs = new Set(
+      allInstances.filter(instance => !kept.has(instance)).map(instance => instance.SOPInstanceUID)
+    );
   }
 
   return displaySets;

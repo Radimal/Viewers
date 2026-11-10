@@ -30,6 +30,8 @@ export type DisplaySet = {
   isDerived?: boolean;
   /** flag indicating if it supports window level */
   supportsWindowLevel?: boolean;
+  /** Radimal: SOP instances the handler left out on purpose (lossy duplicate copies) */
+  hiddenSOPInstanceUIDs?: Set<string>;
 
   // Details about how to display:
   /**
