@@ -52,6 +52,7 @@ import * as polySeg from '@cornerstonejs/polymorphic-segmentation';
 
 import CalibrationLineTool from './tools/CalibrationLineTool';
 import WheelZoomTool from './tools/WheelZoomTool';
+import { applyAnnotationColor } from './utils/annotationColor';
 import ImageOverlayViewerTool from './tools/ImageOverlayViewerTool';
 
 export default function initCornerstoneTools(configuration = {}) {
@@ -133,6 +134,7 @@ export default function initCornerstoneTools(configuration = {}) {
       ...annotationStyle,
     },
   });
+  applyAnnotationColor();
 }
 
 const toolNames = {
