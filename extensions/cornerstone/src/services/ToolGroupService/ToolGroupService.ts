@@ -382,6 +382,7 @@ export default class ToolGroupService {
           continue;
         }
         for (const [toolName, buttons] of Object.entries(buttonsByTool)) {
+          this._addMissingMirrorTool(mirrorId, toolName, buttons);
           this._withPlainButtons(mirrorId, toolName, buttons);
           this._setPlainButtonsLive(mirrorId, toolName, buttons);
         }
@@ -501,6 +502,23 @@ export default class ToolGroupService {
     return bindings;
   }
 
+  /**
+   * Radimal (3.10 parity): SR and MPR groups lack some button tools (no
+   * PlanarRotate; SR has SRLength, not Length). Add the reader's chosen tool,
+   * or the button they gave it has no owner in that group.
+   */
+  private _addMissingMirrorTool(toolGroupId: string, toolName: string, buttons: unknown[]): void {
+    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+    if (
+      buttons.length &&
+      MOUSE_PREF_MIRROR_GROUPS.includes(toolGroupId) &&
+      toolGroup &&
+      !toolGroup.hasTool(toolName)
+    ) {
+      toolGroup.addTool(toolName);
+    }
+  }
+
   private _setPlainButtonsLive(toolGroupId: string, toolName: string, buttons: number[]): void {
     const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
     if (!toolGroup?.hasTool(toolName)) {
@@ -563,9 +581,7 @@ export default class ToolGroupService {
   }
 
   private _loadPersistedBindings(toolGroupId: string): void {
-    if (toolGroupId === MOUSE_PREF_SOURCE_GROUP) {
-      this._migrateLegacyMouseButtons(toolGroupId);
-    }
+    this._migrateLegacyMouseButtons(toolGroupId);
     const persisted = this._readPersistedToolBindings();
     // Mirror groups take the reader's button choices from the source group,
     // with anything saved for the group itself (e.g. mpr Crosshairs) on top.
@@ -589,6 +605,11 @@ export default class ToolGroupService {
         ...wheelBindings,
       ]);
 
+      this._addMissingMirrorTool(
+        toolGroupId,
+        toolName,
+        (bindings as ToolBindings).filter(isPlainButton)
+      );
       if (!toolGroup || !toolGroup.hasTool(toolName)) {
         continue;
       }

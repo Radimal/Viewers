@@ -1,10 +1,16 @@
 // Minimal stand-in for a cs3d ToolGroup: setToolActive merges bindings,
 // setToolPassive strips the listed ones, setToolDisabled clears them.
-const mockMakeToolGroup = id => ({
+// `tools` limits hasTool to the group's real tool list (addTool extends it).
+const mockMakeToolGroup = (id, tools?: string[]) => ({
   id,
+  tools: tools && new Set(tools),
   options: {} as Record<string, { mode: string; bindings: any[] }>,
-  hasTool: () => true,
-  addTool() {},
+  hasTool(toolName) {
+    return !this.tools || this.tools.has(toolName);
+  },
+  addTool(toolName) {
+    this.tools?.add(toolName);
+  },
   getToolOptions(toolName) {
     return this.options[toolName] || { mode: 'Passive', bindings: [] };
   },
@@ -50,7 +56,10 @@ const STORAGE_KEY = 'user-preferred-tool-bindings';
 
 // basic mode's default group; `zoomOnWheel` mirrors applyWheelPreferences.
 // SR and MPR groups use the same WL/Pan/Zoom-on-L/M/R layout.
-function enterMode(service, { zoomOnWheel = false, toolGroupId = 'default' } = {}) {
+function enterMode(
+  service,
+  { zoomOnWheel = false, toolGroupId = 'default', passive = [{ toolName: 'Length' }] } = {}
+) {
   service.addToolsToToolGroup(toolGroupId, {
     active: [
       { toolName: 'WindowLevel', bindings: [{ mouseButton: 1 }] },
@@ -66,7 +75,7 @@ function enterMode(service, { zoomOnWheel = false, toolGroupId = 'default' } = {
           : [{ mouseButton: WHEEL }, { numTouchPoints: 3 }],
       },
     ],
-    passive: [{ toolName: 'Length' }],
+    passive,
   } as any);
 }
 
@@ -211,5 +220,57 @@ describe('SR and MPR follow the saved mouse buttons', () => {
     expect(liveIn('SRToolGroup', 'WindowLevel')).toEqual([{ mouseButton: 2 }]);
     expect(liveIn('SRToolGroup', 'Zoom')).toEqual([PINCH, { mouseButton: 1 }]);
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).SRToolGroup).toBeUndefined();
+  });
+
+  // Real tool lists: basic mode's mpr and SRToolGroup have no PlanarRotate,
+  // and SR measures with SRLength, not Length.
+  const MPR_TOOLS = ['WindowLevel', 'Pan', 'Zoom', 'StackScroll', 'Crosshairs'];
+  const SR_TOOLS = ['WindowLevel', 'Pan', 'Zoom', 'StackScroll', 'SRLength'];
+  const buttonOwners = (id, button) =>
+    Object.entries(mockGroups[id].options)
+      .filter(([, o]) => o.mode === 'Active' && o.bindings.some(b => b.mouseButton === button))
+      .map(([toolName]) => toolName);
+
+  it('mpr gets a saved Free Rotate on the left button even though it lacks the tool', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ default: { WindowLevel: [], PlanarRotate: [{ mouseButton: 1 }] } })
+    );
+    mockGroups.mpr = mockMakeToolGroup('mpr', MPR_TOOLS);
+    enterMode(new ToolGroupService({ services: {} } as any), { toolGroupId: 'mpr', passive: [] });
+
+    expect(buttonOwners('mpr', 1)).toEqual(['PlanarRotate']);
+  });
+
+  it('SR gets a saved Length on the left button even though it only has SRLength', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ default: { WindowLevel: [], Length: [{ mouseButton: 1 }] } })
+    );
+    mockGroups.SRToolGroup = mockMakeToolGroup('SRToolGroup', SR_TOOLS);
+    enterMode(new ToolGroupService({ services: {} } as any), {
+      toolGroupId: 'SRToolGroup',
+      passive: [],
+    });
+
+    expect(buttonOwners('SRToolGroup', 1)).toEqual(['Length']);
+  });
+
+  it('an open SR group follows a live save of a tool it lacks', () => {
+    const service = new ToolGroupService({ services: {} } as any);
+    enterMode(service);
+    mockGroups.SRToolGroup = mockMakeToolGroup('SRToolGroup', SR_TOOLS);
+    enterMode(service, { toolGroupId: 'SRToolGroup', passive: [] });
+
+    service.assignMouseButtons('default', {
+      WindowLevel: [],
+      Pan: [4],
+      Zoom: [2],
+      StackScroll: [],
+      Length: [],
+      PlanarRotate: [1],
+    });
+
+    expect(buttonOwners('SRToolGroup', 1)).toEqual(['PlanarRotate']);
   });
 });
