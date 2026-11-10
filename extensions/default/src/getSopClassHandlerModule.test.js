@@ -72,6 +72,7 @@ describe('lossy copies of images in the same series', () => {
     instance(n, {
       SOPInstanceUID: `lossy${n}`,
       LossyImageCompression: '01',
+      DerivationDescription: 'Lossy JPEG 2000 compression',
       SourceImageSequence: [{ ReferencedSOPInstanceUID: `sop${n}` }],
     });
 
@@ -114,6 +115,60 @@ describe('lossy copies of images in the same series', () => {
       },
     ],
     ['no lossy flag', { LossyImageCompression: '00' }],
+    // Roy's review: derived-from is not safe-to-hide. Same 24 headers, but processed.
+    [
+      'edge enhancement before the lossy compression',
+      {
+        DerivationDescription: 'Edge enhancement followed by lossy compression',
+        DerivationCodeSequence: [
+          { CodeValue: '113086', CodingSchemeDesignator: 'DCM', CodeMeaning: 'Edge enhancement' },
+          { CodeValue: '113040', CodingSchemeDesignator: 'DCM', CodeMeaning: 'Lossy Compression' },
+        ],
+        ConvolutionKernel: 'SHARP',
+      },
+    ],
+    [
+      'a processing derivation code only',
+      {
+        DerivationDescription: undefined,
+        DerivationCodeSequence: [{ CodeValue: '113086', CodingSchemeDesignator: 'DCM' }],
+      },
+    ],
+    [
+      'a compression description but a processing code',
+      {
+        DerivationCodeSequence: [{ CodeValue: '113086', CodingSchemeDesignator: 'DCM' }],
+      },
+    ],
+    [
+      'a compression code but another description',
+      {
+        DerivationDescription: 'Sharpened',
+        DerivationCodeSequence: [{ CodeValue: '113040', CodingSchemeDesignator: 'DCM' }],
+      },
+    ],
+    [
+      'text appended to the compression description',
+      {
+        DerivationDescription: 'Lossy JPEG 2000 compression [Contrast and frequency enhanced]',
+      },
+    ],
+    ['no stated provenance at all', { DerivationDescription: undefined }],
+    [
+      'a source referenced for another purpose',
+      {
+        SourceImageSequence: [
+          {
+            ReferencedSOPInstanceUID: 'sop1',
+            PurposeOfReferenceCodeSequence: [
+              { CodeValue: '121322', CodingSchemeDesignator: 'DCM' },
+            ],
+          },
+        ],
+      },
+    ],
+    ['a different convolution kernel', { ConvolutionKernel: 'SHARP' }],
+    ['a different image type beyond ORIGINAL/DERIVED', { ImageType: ['DERIVED', 'SECONDARY'] }],
   ])('keeps a radiograph derived image with %s', (_name, change) => {
     const dx = { Modality: 'DX', ImagePositionPatient: undefined };
     const displaySets = stackHandler.getDisplaySetsFromSeries([
@@ -122,6 +177,21 @@ describe('lossy copies of images in the same series', () => {
       { ...lossyCopyOf(1), ...dx, ...change },
     ]);
     expect(displaySets).toHaveLength(3);
+  });
+
+  it('drops a copy whose only provenance is the DCM lossy-compression code', () => {
+    const dx = { Modality: 'DX', ImagePositionPatient: undefined };
+    const copy = {
+      ...lossyCopyOf(1),
+      ...dx,
+      DerivationDescription: undefined,
+      DerivationCodeSequence: { CodeValue: '113040', CodingSchemeDesignator: 'DCM' },
+      SourceImageSequence: {
+        ReferencedSOPInstanceUID: 'sop1',
+        PurposeOfReferenceCodeSequence: { CodeValue: '121320', CodingSchemeDesignator: 'DCM' },
+      },
+    };
+    expect(stackHandler.getDisplaySetsFromSeries([instance(1, dx), copy])).toHaveLength(1);
   });
 
   it('keeps lossy derived images at a different position than their source', () => {
@@ -182,6 +252,7 @@ describe('live updates of a series with lossy copies', () => {
       inSeries(n, {
         SOPInstanceUID: `lossy${n}`,
         LossyImageCompression: '01',
+        DerivationDescription: 'Lossy JPEG 2000 compression',
         SourceImageSequence: [{ ReferencedSOPInstanceUID: `sop${n}` }],
       });
 

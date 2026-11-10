@@ -214,19 +214,57 @@ function addStackInstances(instances) {
  * copy of every image alongside the original, in the same series, under a new
  * SOP Instance UID. The doubled images scroll twice and block MPR.
  *
- * Hiding a real image is far worse than showing a duplicate, so every check
- * below must pass and any doubt keeps the image. A lossy image is hidden only
- * when:
+ * Hiding a real image is far worse than showing a duplicate. A Source Image
+ * Sequence only says "derived from"; an edge-enhanced or otherwise processed
+ * image can reference its source and keep the same size, timing and geometry.
+ * So a lossy image is hidden only when its own headers state that lossy
+ * compression is the ONLY thing done to it, and any doubt keeps it:
  *  - its Source Image Sequence names exactly one image, and
  *  - that image is in this series and is not lossy (so the original always
  *    stays on screen), and
- *  - both describe the same picture: every tag in SAME_PICTURE_TAGS is equal
- *    and the positions match (radiographs have none; then both must lack it).
+ *  - its provenance is compression-only (isCompressionOnly), and
+ *  - nothing else contradicts that: every tag in SAME_PICTURE_TAGS is equal,
+ *    Image Type differs at most in ORIGINAL -> DERIVED, and the positions
+ *    match (radiographs have none; then both must lack it).
+ *
+ * This trusts what the sender wrote; pixels are not compared.
  */
 const isLossy = instance => instance.LossyImageCompression === '01';
+const asArray = value => [].concat(value ?? []);
 
-// Tags a re-compression leaves untouched. A reprocessed, cropped, resampled or
-// re-windowed derivative differs in at least one and is therefore kept.
+// Exactly what a compression-only copy says about itself, nothing appended
+// (seen verbatim from CoActiv and IDEXX-PACS: "Lossy JPEG 2000 compression").
+const COMPRESSION_ONLY_DESCRIPTION = /^lossy jpeg( 2000|-ls)? compression$/i;
+// DCM 113040 "Lossy Compression"; DCM 121320 "Uncompressed predecessor".
+const isDcmCode = (item, value) =>
+  String(item?.CodeValue) === value && item?.CodingSchemeDesignator === 'DCM';
+
+/**
+ * True only when the image positively states lossy compression as its sole
+ * derivation: a description and/or derivation code must say so, and every
+ * provenance statement present must agree. Missing or mixed provenance
+ * (e.g. "Edge enhancement followed by lossy compression") is not verified.
+ */
+function isCompressionOnly(instance, sourceItem) {
+  const description = instance.DerivationDescription;
+  const derivationCodes = asArray(instance.DerivationCodeSequence);
+  const purposeCodes = asArray(sourceItem?.PurposeOfReferenceCodeSequence);
+
+  const hasDescription = description !== undefined && description !== null && description !== '';
+  const descriptionOk =
+    hasDescription && COMPRESSION_ONLY_DESCRIPTION.test(String(description).trim());
+  const codesOk = derivationCodes.length > 0 && derivationCodes.every(c => isDcmCode(c, '113040'));
+
+  return (
+    (descriptionOk || codesOk) &&
+    (!hasDescription || descriptionOk) &&
+    (derivationCodes.length === 0 || codesOk) &&
+    purposeCodes.every(c => isDcmCode(c, '121320'))
+  );
+}
+
+// Consistency checks on top of the provenance: tags a re-compression leaves
+// untouched. Equal tags do NOT prove a copy; a difference vetoes hiding.
 const SAME_PICTURE_TAGS = [
   'SOPClassUID',
   'InstanceNumber',
@@ -252,6 +290,14 @@ const SAME_PICTURE_TAGS = [
   'WindowWidth',
   'RescaleIntercept',
   'RescaleSlope',
+  // Processing descriptors: a differently processed image differs here.
+  'ConvolutionKernel',
+  'FilterType',
+  'AcquisitionDeviceProcessingDescription',
+  'AcquisitionDeviceProcessingCode',
+  'PresentationLUTShape',
+  'VOILUTFunction',
+  'BurnedInAnnotation',
 ];
 
 const samePosition = (a, b) =>
@@ -260,8 +306,13 @@ const samePosition = (a, b) =>
     b?.length === 3 &&
     a.every((value, index) => Math.abs(Number(value) - Number(b[index])) < 1e-3));
 
+// ORIGINAL\PRIMARY\AXIAL -> DERIVED\PRIMARY\AXIAL is the only allowed change.
+const sameImageTypeBeyondFirst = (a, b) =>
+  String(asArray(a.ImageType).slice(1)) === String(asArray(b.ImageType).slice(1));
+
 const isSamePicture = (a, b) =>
   SAME_PICTURE_TAGS.every(tag => String(a[tag]) === String(b[tag])) &&
+  sameImageTypeBeyondFirst(a, b) &&
   samePosition(a.ImagePositionPatient, b.ImagePositionPatient);
 
 function withoutLossyCopies(instances) {
@@ -270,10 +321,14 @@ function withoutLossyCopies(instances) {
     if (!isLossy(instance)) {
       return true;
     }
-    const sources = [].concat(instance.SourceImageSequence ?? []);
+    const sources = asArray(instance.SourceImageSequence);
     const original = sources.length === 1 && bySopUid.get(sources[0]?.ReferencedSOPInstanceUID);
     const isCopy =
-      original && original !== instance && !isLossy(original) && isSamePicture(original, instance);
+      original &&
+      original !== instance &&
+      !isLossy(original) &&
+      isCompressionOnly(instance, sources[0]) &&
+      isSamePicture(original, instance);
     return !isCopy;
   });
 }
