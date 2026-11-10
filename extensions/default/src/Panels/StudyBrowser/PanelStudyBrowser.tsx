@@ -386,7 +386,20 @@ function PanelStudyBrowser({
     customMapDisplaySets,
   ]);
 
-  const tabs = createStudyBrowserTabs(StudyInstanceUIDs, studyDisplayList, displaySets);
+  // Radimal: lossy duplicate copies hidden by the SOP class handler (see
+  // withoutLossyCopies) aren't shown, so they don't count in the study header.
+  const hiddenByStudy = {};
+  displaySetService.getActiveDisplaySets().forEach(ds => {
+    hiddenByStudy[ds.StudyInstanceUID] =
+      (hiddenByStudy[ds.StudyInstanceUID] ?? 0) + (ds.hiddenSOPInstanceUIDs?.size ?? 0);
+  });
+  const shownStudyDisplayList = studyDisplayList.map(study =>
+    hiddenByStudy[study.studyInstanceUid]
+      ? { ...study, numInstances: study.numInstances - hiddenByStudy[study.studyInstanceUid] }
+      : study
+  );
+
+  const tabs = createStudyBrowserTabs(StudyInstanceUIDs, shownStudyDisplayList, displaySets);
 
   // TODO: Should not fire this on "close"
   function _handleStudyClick(StudyInstanceUID) {
