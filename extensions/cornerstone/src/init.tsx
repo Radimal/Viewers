@@ -141,6 +141,15 @@ export default async function init({
 
   if (cornerstone.getShouldUseCPURendering()) {
     dropVolumeProtocolFromUrl();
+    reportCPURendering(
+      renderBackend === 'cpu'
+        ? 'url_override'
+        : appConfig.useCPURendering
+          ? 'app_config'
+          : !webgl
+            ? 'no_webgl'
+            : 'gpu_lacks_16bit_textures'
+    );
   }
 
   cornerstone.setConfiguration({
@@ -466,6 +475,35 @@ function dropVolumeProtocolFromUrl() {
     }
   } catch {
     // No window/URL (non-browser) - nothing to drop.
+  }
+}
+
+/**
+ * Radimal: one PostHog event per page load that renders on the CPU, so we can
+ * see how many sessions fall back and on which graphics chips. `reason` is
+ * url_override (?viewportRendering=cpu), app_config, no_webgl, or
+ * gpu_lacks_16bit_textures (the automatic smart-TV fallback). The renderer is
+ * the GPU model string (e.g. "Mali-G51"); no user data. Booleans arrive in
+ * PostHog as the strings 'true'/'false'.
+ */
+function reportCPURendering(reason: string) {
+  try {
+    const capabilities = cornerstone.getRenderingCapabilities();
+    (window as any).__capturePostHogEvent?.('cpu_rendering_fallback', {
+      reason,
+      gpu_renderer: capabilities.renderer || undefined,
+      webgl: capabilities.webgl,
+      webgl2: capabilities.webgl2,
+      norm16: capabilities.norm16,
+      norm16_linear: capabilities.norm16Linear,
+      float: capabilities.float,
+      float_linear: capabilities.floatLinear,
+      half_float_linear: capabilities.halfFloatLinear,
+      software_rasterizer: capabilities.softwareRasterizer,
+      cluster: window.location.host,
+    });
+  } catch (e) {
+    console.warn('[PostHog] cpu_rendering_fallback capture failed', e);
   }
 }
 
