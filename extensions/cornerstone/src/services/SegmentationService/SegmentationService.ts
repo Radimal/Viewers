@@ -116,6 +116,7 @@ class SegmentationService extends PubSubService implements ISegmentationServiceI
   };
 
   private _segmentationIdToColorLUTIndexMap: Map<string, number>;
+  private _warnedSegmentationOnCPU = false;
   private _segmentationGroupStatsMap: Map<string, any>;
   private readonly _legacySegBackend: ISegmentationBackend;
   private readonly _nextSegBackend: ISegmentationBackend;
@@ -345,6 +346,24 @@ class SegmentationService extends PubSubService implements ISegmentationServiceI
     const csViewport = this.getAndValidateViewport(viewportId);
 
     if (!csViewport) {
+      return;
+    }
+
+    // Radimal: segmentation overlays render through GPU (vtk) actors. On a
+    // CPU-rendered viewport (the fallback for GPUs that can't draw 16-bit
+    // images, e.g. smart TVs) cornerstone throws on every render, so don't
+    // add one there; say why once per session.
+    if ((csViewport as { useCPURendering?: boolean }).useCPURendering) {
+      if (!this._warnedSegmentationOnCPU) {
+        this._warnedSegmentationOnCPU = true;
+        this.servicesManager.services.uiNotificationService?.show({
+          title: i18n.t('SegmentationPanel:Segmentation'),
+          message: i18n.t(
+            'SegmentationPanel:Segmentations cannot be displayed on this device because its graphics do not support them.'
+          ),
+          type: 'warning',
+        });
+      }
       return;
     }
 

@@ -1,5 +1,5 @@
 diff --git a/dist/esm/RenderingEngine/StackViewport.js b/dist/esm/RenderingEngine/StackViewport.js
-index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..a5b1a3d407bcd4818f2408b32272467c2ae4ec82 100644
+index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90c2cde716 100644
 --- a/dist/esm/RenderingEngine/StackViewport.js
 +++ b/dist/esm/RenderingEngine/StackViewport.js
 @@ -931,10 +931,20 @@ class StackViewport extends Viewport {
@@ -49,7 +49,46 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..a5b1a3d407bcd4818f2408b32272467c
          const eventDetail = {
              viewportId: this.id,
              range: voiRange,
-@@ -1795,6 +1811,9 @@ class StackViewport extends Viewport {
+@@ -1191,9 +1207,10 @@ class StackViewport extends Viewport {
+         this.VOILUTFunction = voiLUTFunctionEnum;
+         this.calibration = calibration;
+         let imagePlaneModule = this._getImagePlaneModule(imageId);
+-        if (!this.useCPURendering) {
+-            imagePlaneModule = this.calibrateIfNecessary(imageId, imagePlaneModule);
+-        }
++        // Radimal patch: calibrate in CPU rendering too. Upstream skipped this
++        // for CPU, so hasPixelSpacing stayed unset (lengths read "px" instead
++        // of mm) and a user calibration was never applied.
++        imagePlaneModule = this.calibrateIfNecessary(imageId, imagePlaneModule);
+         return {
+             bitsAllocated: imagePixelModule.bitsAllocated,
+             numberOfComponents,
+@@ -1594,6 +1611,12 @@ class StackViewport extends Viewport {
+     }
+     _updateToDisplayImageCPU(image) {
+         const metadata = this.getImageDataMetadata(image);
++        // Radimal patch: the GPU path re-reads the image plane module after
++        // calibrating (_updateVTKImageDataFromCornerstoneImage), which leaves
++        // hasPixelSpacing true for images whose spacing comes from a
++        // calibration module (e.g. DX Imager Pixel Spacing, "Proj"). Do the
++        // same here so CPU lengths read mm, not px.
++        this._getImagePlaneModule(image.imageId);
+         const viewport = getDefaultViewport(this.canvas, image, this.modality, this._cpuFallbackEnabledElement.viewport.colormap);
+         const { windowCenter, windowWidth, voiLUTFunction } = viewport.voi;
+         this.voiRange = getVOIRangeFromWindowLevel(windowWidth, windowCenter, voiLUTFunction);
+@@ -1609,6 +1632,11 @@ class StackViewport extends Viewport {
+         this.stackInvalidated = false;
+         this.cpuRenderingInvalidated = true;
+         this._cpuFallbackEnabledElement.transform = calculateTransform(this._cpuFallbackEnabledElement);
++        // Radimal patch: like the GPU path, tell tools the spacing changed so
++        // existing measurements recompute after a calibration.
++        if (this._publishCalibratedEvent) {
++            this.triggerCalibrationEvent();
++        }
+     }
+     getSliceViewInfo() {
+         throw new Error('Method not implemented.');
+@@ -1795,6 +1823,9 @@ class StackViewport extends Viewport {
          else {
              clearTimeout(this.debouncedTimeout);
              this.debouncedTimeout = window.setTimeout(() => {
@@ -59,3 +98,13 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..a5b1a3d407bcd4818f2408b32272467c
                  this.setImageIdIndex(newTargetImageIdIndex);
              }, 40);
          }
+@@ -1841,7 +1872,8 @@ class StackViewport extends Viewport {
+             renderingEngineId: this.renderingEngineId,
+             imageId: this.getCurrentImageId(),
+             imageData: imageData,
+-            worldToIndex: imageData.getWorldToIndex(),
++            // Radimal patch: CPU image data has no getWorldToIndex.
++            worldToIndex: imageData.getWorldToIndex?.(),
+             ...this._calibrationEvent,
+         };
+         if (!this.suppressEvents) {

@@ -374,6 +374,23 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
       },
     },
     {
+      // Tools that need GPU (vtk) rendering, e.g. AdvancedMagnify, throw on a
+      // CPU-rendered viewport (the fallback for GPUs that can't draw 16-bit
+      // images, such as some smart TVs).
+      name: 'evaluate.viewport.gpuRendering',
+      evaluate: ({ viewportId, disabledText }) => {
+        const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId) as {
+          useCPURendering?: boolean;
+        };
+
+        if (viewport?.useCPURendering) {
+          return getDisabledState(disabledText ?? i18n.t('Buttons:Not available on this device'));
+        }
+
+        return undefined;
+      },
+    },
+    {
       name: 'evaluate.modality.supported',
       evaluate: ({ viewportId, unsupportedModalities, supportedModalities, disabledText }) => {
         const displaySetUIDs = viewportGridService.getDisplaySetsUIDsForViewport(viewportId);
