@@ -89,20 +89,86 @@ it('adds a user bearer only after a correlated response and refuses cookie/serve
   expect(options.redirect).toBe('error');
 });
 
-it('ignores a forged origin, source and request id', async () => {
-  const win = viewer();
+it.each(['', '_blank', 'secondary-1794438300000'])(
+  'authenticates a Vet opener without requiring a specific window name: %s',
+  async name => {
+    const win = viewer({ name });
+    const auth = createReporterAuthentication(win);
+    const done = auth.getAccessToken();
+    expect(win.opener.postMessage).toHaveBeenCalledWith(
+      { type: 'RADIMAL_AUTH_REQUEST', requestId: 'request-1' },
+      VET
+    );
+    reply(win);
+    await expect(done).resolves.toBe('synthetic-user-token');
+    expect(win.open).not.toHaveBeenCalled();
+  }
+);
+
+it.each(['viewerWindow', '', 'secondary-1794438300000'])(
+  'ignores a forged origin, source and request id for window name %s',
+  async name => {
+    const win = viewer({ name });
+    const auth = createReporterAuthentication(win);
+    const done = auth.fetch(`${REPORTER}/case/1.2.3`, {}, REPORTER);
+    reply(win, 'bad', { origin: 'https://attacker.test' });
+    reply(win, 'bad', { source: {} });
+    reply(win, 'bad', {
+      data: { type: 'RADIMAL_AUTH_RESPONSE', requestId: 'other', accessToken: 'bad' },
+    });
+    await Promise.resolve();
+    expect(win.fetch).not.toHaveBeenCalled();
+    reply(win, 'correct');
+    await done;
+    expect(win.fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer correct');
+  }
+);
+
+it('never sends a bearer or private request when an untrusted opener cannot authenticate', async () => {
+  const win = viewer({ name: '' });
   const auth = createReporterAuthentication(win);
   const done = auth.fetch(`${REPORTER}/case/1.2.3`, {}, REPORTER);
-  reply(win, 'bad', { origin: 'https://attacker.test' });
-  reply(win, 'bad', { source: {} });
-  reply(win, 'bad', {
-    data: { type: 'RADIMAL_AUTH_RESPONSE', requestId: 'other', accessToken: 'bad' },
-  });
-  await Promise.resolve();
+  const rejected = expect(done).rejects.toBeInstanceOf(ReporterAuthenticationError);
+  reply(win, 'forged-token', { origin: 'https://attacker.test' });
+  jest.advanceTimersByTime(15000);
+  await rejected;
   expect(win.fetch).not.toHaveBeenCalled();
-  reply(win, 'correct');
-  await done;
-  expect(win.fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer correct');
+  expect(win.opener.postMessage).toHaveBeenCalledTimes(1);
+  expect(win.opener.postMessage).toHaveBeenCalledWith(
+    { type: 'RADIMAL_AUTH_REQUEST', requestId: 'request-1' },
+    VET
+  );
+});
+
+it('keeps a monitor token request bound to its Viewer opener origin', async () => {
+  const win = viewer({ name: 'viewerWindow-2' });
+  const auth = createReporterAuthentication(win);
+  const done = auth.getAccessToken();
+  expect(win.opener.postMessage).toHaveBeenCalledWith(
+    { type: 'RADIMAL_AUTH_REQUEST', requestId: 'request-1' },
+    win.location.origin
+  );
+  reply(win, 'wrong-vet-origin');
+  reply(win, 'monitor-token', { origin: win.location.origin });
+  await expect(done).resolves.toBe('monitor-token');
+});
+
+it('keeps an embedded Viewer token request bound to its parent window', async () => {
+  const win = viewer({ name: '', opener: null });
+  const parent = { postMessage: jest.fn(), closed: false };
+  win.parent = parent;
+  const auth = createReporterAuthentication(win);
+  const done = auth.getAccessToken();
+  expect(parent.postMessage).toHaveBeenCalledWith(
+    { type: 'RADIMAL_AUTH_REQUEST', requestId: 'request-1' },
+    VET
+  );
+  win.emit({
+    source: parent,
+    origin: VET,
+    data: { type: 'RADIMAL_AUTH_RESPONSE', requestId: 'request-1', accessToken: 'parent-token' },
+  });
+  await expect(done).resolves.toBe('parent-token');
 });
 
 it('deduplicates simultaneous requests but asks the owner again for later calls', async () => {
