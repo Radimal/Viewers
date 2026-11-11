@@ -519,6 +519,11 @@ export default function PanelStudyBrowserTracking({
       <StudyBrowser
         tabs={tabs}
         servicesManager={servicesManager}
+        reporterOrigin={utils.orthancUtils.reporterOriginFor(window.location.origin)}
+        reporterFetch={utils.orthancUtils.reporterFetch}
+        authenticateReporter={utils.orthancUtils.authenticateReporter}
+        openReporterReport={utils.orthancUtils.openReporterReport}
+        closeReporterReport={utils.orthancUtils.closeReporterReport}
         activeTabName={activeTabName}
         expandedStudyInstanceUIDs={expandedStudyInstanceUIDs}
         onClickStudy={_handleStudyClick}

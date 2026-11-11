@@ -1,3 +1,5 @@
+import { reporterAuthentication } from './reporterAuth';
+
 /**
  * Orthanc utility functions for generating UUIDs and handling downloads
  */
@@ -37,6 +39,39 @@ export async function generateOrthancStudyUUID(patientId, studyInstanceUID) {
   return formattedUUID;
 }
 
+export function reporterOriginFor(origin) {
+  if (origin === 'http://localhost:3000') {
+    return 'http://localhost:5007';
+  }
+  if (
+    origin.endsWith('.stage-1.radimal.ai') ||
+    origin === 'https://green-view-stage-2.radimal.ai'
+  ) {
+    return 'https://reporter-staging.onrender.com';
+  }
+  return 'https://radimal-reporter.onrender.com';
+}
+
+export function reporterFetch(url, options) {
+  return reporterAuthentication().fetch(url, options, reporterOriginFor(window.location.origin));
+}
+
+export function registerReporterAuthChild(childWindow) {
+  reporterAuthentication().registerChild(childWindow);
+}
+
+export function authenticateReporter(intent) {
+  return reporterAuthentication().signIn(intent);
+}
+
+export function openReporterReport(url) {
+  return reporterAuthentication().openReport(url);
+}
+
+export function closeReporterReport() {
+  reporterAuthentication().closeReport();
+}
+
 /**
  * Downloads a study from the Orthanc server using the study UUID
  *
@@ -46,7 +81,7 @@ export async function generateOrthancStudyUUID(patientId, studyInstanceUID) {
  */
 export async function downloadOrthancStudy(
   orthancStudyUUID,
-  baseUrl = 'http://radimal-reporter.onrender.com',
+  baseUrl = reporterOriginFor(window.location.origin),
   userId = null
 ) {
   if (!orthancStudyUUID) {
@@ -64,10 +99,8 @@ export async function downloadOrthancStudy(
 
   const downloadUrl = `${baseUrl}/orthanc/study/download?${params.toString()}`;
 
-  console.log('Attempting download with:', { orthancStudyUUID, baseUrl, userId, downloadUrl });
-
   try {
-    const response = await fetch(downloadUrl, {
+    const response = await reporterFetch(downloadUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -82,7 +115,6 @@ export async function downloadOrthancStudy(
     }
 
     const data = await response.json();
-    console.log('Server response:', data);
 
     if (!data.success) {
       throw new Error(data.error || 'Download failed');

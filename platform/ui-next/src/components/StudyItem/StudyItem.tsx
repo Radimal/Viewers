@@ -25,6 +25,11 @@ const StudyItem = ({
   servicesManager,
   hasRadimalCase,
   isRadimalCaseChecked,
+  reporterOrigin,
+  reporterFetch,
+  authenticateReporter,
+  openReporterReport,
+  closeReporterReport,
 }) => {
   return (
     <Accordion
@@ -45,39 +50,42 @@ const StudyItem = ({
                   <div className="text-white">{date}</div>
                   <div
                     className="relative z-20"
-                    style={{ pointerEvents: hasRadimalCase ? 'auto' : 'none' }}
+                    style={{
+                      pointerEvents: hasRadimalCase || !isRadimalCaseChecked ? 'auto' : 'none',
+                    }}
                     onClick={async e => {
                       e.stopPropagation();
                       e.preventDefault();
 
-                      if (!hasRadimalCase) {
+                      if (isRadimalCaseChecked && !hasRadimalCase) {
                         return;
                       }
 
-                      const origin = window.location.origin;
-                      let apiEndpoint;
-
-                      if (origin === 'http://localhost:3000') {
-                        apiEndpoint = 'http://localhost:5007';
-                      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-                        apiEndpoint = 'https://reporter-staging.onrender.com';
-                      } else if (origin === 'https://view.radimal.ai') {
-                        apiEndpoint = 'https://radimal-reporter.onrender.com';
-                      } else {
-                        apiEndpoint = 'https://radimal-reporter.onrender.com';
-                      }
-
                       try {
-                        const response = await fetch(`${apiEndpoint}/case/${studyInstanceUid}`);
+                        if (!reporterFetch || !authenticateReporter || !reporterOrigin) {
+                          throw new Error(
+                            'Sign in to Radimal and reopen this study to view reports.'
+                          );
+                        }
+                        await authenticateReporter('report');
+                        const response = await reporterFetch(
+                          `${reporterOrigin}/case/${encodeURIComponent(studyInstanceUid)}`
+                        );
+                        if (!response.ok) {
+                          throw new Error('Unable to load the report for this study.');
+                        }
                         const caseData = await response.json();
                         const platformUrl = caseData.platform_url;
-                        const s3_url = caseData.cases[0].consultations[0].s3_url;
+                        const s3_url = caseData?.cases?.[0]?.consultations?.[0]?.s3_url;
 
                         if (s3_url) {
                           const key = s3_url.split('s3.amazonaws.com/')[1];
-                          const flaskResponse = await fetch(
-                            `${apiEndpoint}/consultation/pdf?key=${key}`
+                          const flaskResponse = await reporterFetch(
+                            `${reporterOrigin}/consultation/pdf?key=${encodeURIComponent(key)}`
                           );
+                          if (!flaskResponse.ok) {
+                            throw new Error('Unable to open this report.');
+                          }
                           let presignedUrl = await flaskResponse.text();
                           presignedUrl = presignedUrl.trim();
                           if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
@@ -86,16 +94,28 @@ const StudyItem = ({
                           presignedUrl = presignedUrl.trim();
 
                           const consultationUrl = `${platformUrl}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
-                          window.open(consultationUrl, '_blank');
+                          openReporterReport(consultationUrl);
+                        } else {
+                          closeReporterReport?.();
+                          throw new Error('No report is available for this study.');
                         }
                       } catch (error) {
+                        closeReporterReport?.();
                         console.error('Error opening report:', error);
+                        servicesManager?.services?.uiNotificationService?.show({
+                          title: 'View Report',
+                          message: error.message || 'Unable to open this report.',
+                          type: 'error',
+                          duration: 5000,
+                        });
                       }
                     }}
                   >
                     <Icons.RadimalPdf
                       className={`h-4 w-4 transition-opacity ${
-                        hasRadimalCase ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                        hasRadimalCase || !isRadimalCaseChecked
+                          ? 'cursor-pointer hover:opacity-80'
+                          : 'cursor-default'
                       }`}
                       hasCase={hasRadimalCase}
                       isChecked={isRadimalCaseChecked}
@@ -140,6 +160,11 @@ const StudyItem = ({
 };
 
 StudyItem.propTypes = {
+  reporterOrigin: PropTypes.string,
+  reporterFetch: PropTypes.func,
+  authenticateReporter: PropTypes.func,
+  openReporterReport: PropTypes.func,
+  closeReporterReport: PropTypes.func,
   studyInstanceUid: PropTypes.string,
   date: PropTypes.string.isRequired,
   description: PropTypes.string,

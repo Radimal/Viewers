@@ -32,46 +32,42 @@ const StudyBrowser = ({
   showSettings,
   viewPresets,
   onThumbnailContextMenu,
+  reporterOrigin,
+  reporterFetch,
+  authenticateReporter,
+  openReporterReport,
+  closeReporterReport,
 }) => {
   const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
   const [checkedStudies, setCheckedStudies] = useState<Set<string>>(new Set());
 
   const checkStudyForCases = async (studyInstanceUid: string) => {
     try {
-      const origin = window.location.origin;
-      let apiEndpoint;
-      
-      if (origin === 'http://localhost:3000') {
-        apiEndpoint = 'http://localhost:5007';
-      } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-        apiEndpoint = 'https://reporter-staging.onrender.com';
-      } else if (origin === 'https://view.radimal.ai') {
-        apiEndpoint = 'https://radimal-reporter.onrender.com';
-      } else {
-        apiEndpoint = 'https://radimal-reporter.onrender.com';
+      if (!reporterFetch || !reporterOrigin) {
+        return undefined;
       }
-      
-      const apiUrl = `${apiEndpoint}/case/${studyInstanceUid}`;
+      const apiUrl = `${reporterOrigin}/case/${encodeURIComponent(studyInstanceUid)}`;
 
-      const response = await fetch(apiUrl, {
+      const response = await reporterFetch(apiUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
-        return false;
+        return undefined;
       }
 
       const caseData = await response.json();
 
-      const hasCase = caseData?.cases?.length > 0 &&
-                     caseData.cases[0]?.consultations?.length > 0 &&
-                     caseData.cases[0]?.consultations[0]?.s3_url;
+      const hasCase =
+        caseData?.cases?.length > 0 &&
+        caseData.cases[0]?.consultations?.length > 0 &&
+        caseData.cases[0]?.consultations[0]?.s3_url;
 
       return hasCase;
     } catch (error) {
       console.error(`StudyBrowser: Error checking case for ${studyInstanceUid}:`, error);
-      return false;
+      return undefined;
     }
   };
 
@@ -80,31 +76,33 @@ const StudyBrowser = ({
     const checkAllStudies = async () => {
       const tabData = tabs.find(tab => tab.name === activeTabName);
       if (!tabData?.studies) return;
-      
+
       // Filter out studies we've already checked
-      const studiesToCheck = tabData.studies.filter(study => 
-        !checkedStudies.has(study.studyInstanceUid)
+      const studiesToCheck = tabData.studies.filter(
+        study => !checkedStudies.has(study.studyInstanceUid)
       );
-      
+
       if (studiesToCheck.length === 0) {
         return;
       }
-      
-      
+
       // Then check each study and update the map
       for (const study of studiesToCheck) {
         try {
           const hasCase = await checkStudyForCases(study.studyInstanceUid);
-          
+          if (hasCase === undefined) {
+            continue;
+          }
+
           setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
-          
+
           setCheckedStudies(prev => new Set(prev.add(study.studyInstanceUid)));
         } catch (error) {
           setCheckedStudies(prev => new Set(prev.add(study.studyInstanceUid)));
         }
       }
     };
-    
+
     checkAllStudies();
   }, [tabs, activeTabName]);
 
@@ -166,6 +164,11 @@ const StudyBrowser = ({
               servicesManager={servicesManager}
               hasRadimalCase={hasRadimalCase}
               isRadimalCaseChecked={isChecked}
+              reporterOrigin={reporterOrigin}
+              reporterFetch={reporterFetch}
+              authenticateReporter={authenticateReporter}
+              openReporterReport={openReporterReport}
+              closeReporterReport={closeReporterReport}
             />
           </React.Fragment>
         );
@@ -196,6 +199,11 @@ const StudyBrowser = ({
 };
 
 StudyBrowser.propTypes = {
+  reporterOrigin: PropTypes.string,
+  reporterFetch: PropTypes.func,
+  authenticateReporter: PropTypes.func,
+  openReporterReport: PropTypes.func,
+  closeReporterReport: PropTypes.func,
   onClickTab: PropTypes.func.isRequired,
   onClickStudy: PropTypes.func,
   onClickThumbnail: PropTypes.func,

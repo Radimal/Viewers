@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 import { LoadingIndicatorProgress, InvestigationalUseDialog } from '@ohif/ui';
-import { HangingProtocolService, CommandsManager } from '@ohif/core';
+import { HangingProtocolService, CommandsManager, utils } from '@ohif/core';
 import { useAppConfig } from '@state';
 import ViewerHeader from './ViewerHeader';
 import SidePanelWithServices from '../Components/SidePanelWithServices';
@@ -144,12 +144,17 @@ function ViewerLayout({
         let origin;
         if (window.location.origin === 'http://localhost:3000') {
           origin = 'http://localhost:8000';
-        } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
+        } else if (
+          window.location.origin.endsWith('.stage-1.radimal.ai') ||
+          window.location.origin === 'https://green-view-stage-2.radimal.ai'
+        ) {
           origin = 'https://radimal-vet-staging.onrender.com';
         } else if (window.location.origin === 'https://view.radimal.ai') {
           origin = 'https://vet.radimal.ai';
         }
-        window.opener?.postMessage(windowData, origin);
+        if (origin) {
+          window.opener?.postMessage(windowData, origin);
+        }
       }
     };
 
@@ -178,6 +183,12 @@ function ViewerLayout({
     const channel = new BroadcastChannel('window_channel');
     setFade(false);
     const handleMessage = (event: MessageEvent) => {
+      if (
+        event.data?.type === 'RADIMAL_AUTH_REQUEST' ||
+        event.data?.type === 'RADIMAL_AUTH_RESPONSE'
+      ) {
+        return;
+      }
       const allowedOrigins = [
         'http://localhost:8000',
         'https://radimal-vet-staging.onrender.com',
@@ -239,11 +250,12 @@ function ViewerLayout({
       windows.forEach((win, index) => {
         if (win.id === 'viewerWindow') return;
         setTimeout(() => {
-          window.open(
+          const childWindow = window.open(
             window.location.href,
             win.id,
             `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
           );
+          utils.orthancUtils.registerReporterAuthChild(childWindow);
         }, index * 200);
       });
     }

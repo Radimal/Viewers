@@ -19,18 +19,21 @@ on:
   workflow_dispatch:
     inputs:
       s3_sync:
-        description: 'Sync this build to S3: none, staging (stage-1 + veg-stage-1, clobbers 3.13 staging), or prod-rollback (prod-1 + veg-prod-1)'
+        description:
+          'Sync this build to S3: none, green-stage-2, staging (clobbers 3.13 staging), or
+          prod-rollback'
         type: choice
         default: none
         options:
           - none
+          - green-stage-2
           - staging
           - prod-rollback
 #    tags:
 #      - 'v3.9.*'
 
 env:
-  ECR: ${{secrets.ECR_OHIF_LOCATION}} 
+  ECR: ${{secrets.ECR_OHIF_LOCATION}}
   AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID_GH_ORTHANC }}
   AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY_GH_ORTHANC }}
   AWS_DEFAULT_REGION: us-east-1
@@ -64,6 +67,7 @@ jobs:
           file: Dockerfile
           tags: |
             "${{ env.ECR }}:${{ github.ref_name }}"
+            "${{ env.ECR }}:sha-${{ github.sha }}"
           push: true
           provenance: false
           cache-from: type=gha
@@ -89,13 +93,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.s3_sync != 'none'
         run: |
           case "${{ inputs.s3_sync }}" in
+            green-stage-2) BUCKETS="s3://radimal-viewer-assets-green-stage-2" ;;
             staging) BUCKETS="s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1" ;;
             prod-rollback) BUCKETS="s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-veg-prod-1" ;;
             *) echo "::error::unknown s3_sync target"; exit 1 ;;
           esac
           echo "Syncing to: $BUCKETS"
           VERSION="${{ steps.version.outputs.VERSION }}"
-          SYNC_ARGS='--exclude "index.html" --exclude "app-config.js" --exclude "google.js" --cache-control "public, max-age=31536000, immutable"'
 
           for BUCKET in $BUCKETS; do
             # Flat copy at bucket root for serving via CloudFront
@@ -103,6 +107,7 @@ jobs:
               --exclude "index.html" \
               --exclude "app-config.js" \
               --exclude "google.js" \
+              --exclude "*.map" \
               --cache-control "public, max-age=31536000, immutable"
 
             # Versioned copy for tracking deployed builds
@@ -110,5 +115,6 @@ jobs:
               --exclude "index.html" \
               --exclude "app-config.js" \
               --exclude "google.js" \
+              --exclude "*.map" \
               --cache-control "public, max-age=31536000, immutable"
           done

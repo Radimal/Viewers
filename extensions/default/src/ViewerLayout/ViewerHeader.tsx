@@ -29,16 +29,7 @@ function ViewerHeader({
   const { uiNotificationService } = servicesManager.services;
 
   const handleDownloadStudy = async () => {
-    let reporterOrigin;
-    if (window.location.origin === 'http://localhost:3000') {
-      reporterOrigin = 'http://localhost:5007';
-    } else if (window.location.origin === 'https://viewer.stage-1.radimal.ai') {
-      reporterOrigin = 'https://reporter-staging.onrender.com';
-    } else if (window.location.origin === 'https://view.radimal.ai') {
-      reporterOrigin = 'https://radimal-reporter.onrender.com';
-    } else {
-      reporterOrigin = 'https://radimal-reporter.onrender.com';
-    }
+    const reporterOrigin = orthancUtils.reporterOriginFor(window.location.origin);
 
     // Resolve which copy to download, in order of decreasing certainty:
     //   1. `?studyId=` — Orthanc study UUID from the vet app (unambiguous).
@@ -51,6 +42,7 @@ function ViewerHeader({
     const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
 
     try {
+      await orthancUtils.authenticateReporter();
       uiNotificationService.show({
         title: 'Download Started',
         message: 'Preparing study download...',
@@ -249,7 +241,6 @@ function ViewerHeader({
   const commitHash = process.env.COMMIT_HASH;
   const buildTime = process.env.BUILD_TIME;
 
-
   useEffect(() => {
     if (!servicesManager?._commandsManager) {
       return;
@@ -260,17 +251,20 @@ function ViewerHeader({
         const saved = localStorage.getItem('defaultToolBindings');
         if (saved) {
           const savedBindings = JSON.parse(saved);
-          const primaryTool = savedBindings.find(b => b.id === 'leftMouseButton')?.commandOptions?.toolName;
-          const secondaryTool = savedBindings.find(b => b.id === 'rightMouseButton')?.commandOptions?.toolName;
-          const auxiliaryTool = savedBindings.find(b => b.id === 'middleMouseButton')?.commandOptions?.toolName;
-          
+          const primaryTool = savedBindings.find(b => b.id === 'leftMouseButton')?.commandOptions
+            ?.toolName;
+          const secondaryTool = savedBindings.find(b => b.id === 'rightMouseButton')?.commandOptions
+            ?.toolName;
+          const auxiliaryTool = savedBindings.find(b => b.id === 'middleMouseButton')
+            ?.commandOptions?.toolName;
+
           if (primaryTool || secondaryTool || auxiliaryTool) {
             servicesManager._commandsManager.runCommand(
               'applyMouseButtonBindings',
               {
                 primaryTool: primaryTool || 'WindowLevel',
-                secondaryTool: secondaryTool || 'Pan', 
-                auxiliaryTool: auxiliaryTool || 'Zoom'
+                secondaryTool: secondaryTool || 'Pan',
+                auxiliaryTool: auxiliaryTool || 'Zoom',
               },
               'CORNERSTONE'
             );
@@ -373,6 +367,7 @@ function ViewerHeader({
           );
 
           if (newWin) {
+            orthancUtils.registerReporterAuthChild(newWin);
             existingWindow.closed = false;
             localStorage.setItem('windowData', JSON.stringify(windows));
           }
@@ -380,6 +375,7 @@ function ViewerHeader({
           const newId = `viewerWindow-${Date.now()}`;
           const newWin = window.open(window.location.href, newId);
           if (newWin) {
+            orthancUtils.registerReporterAuthChild(newWin);
             const newWindowData = {
               id: newId,
               x: window.screenX,
@@ -403,11 +399,12 @@ function ViewerHeader({
         windows.forEach((win, index) => {
           if (win.id === 'viewerWindow') return;
           setTimeout(() => {
-            window.open(
+            const childWindow = window.open(
               window.location.href,
               win.id,
               `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
             );
+            orthancUtils.registerReporterAuthChild(childWindow);
           }, index * 200);
         });
       },

@@ -1,25 +1,15 @@
+import { utils } from '@ohif/core';
+
 export const InvalidationService = {
   async invalidatePath(studyInstanceUID) {
     try {
-      function getReporterOrigin() {
-        const origin = window.location.origin;
-
-        if (origin === 'http://localhost:3000') {
-          return 'http://localhost:5007';
-        } else if (origin === 'https://viewer.stage-1.radimal.ai') {
-          return 'https://reporter-staging.onrender.com';
-        } else if (origin === 'https://view.radimal.ai') {
-          return 'https://radimal-reporter.onrender.com';
-        } else {
-          return 'https://radimal-reporter.onrender.com';
-        }
-      }
-      const baseUrl = getReporterOrigin() + '/cdn/invalidate';
+      const baseUrl =
+        utils.orthancUtils.reporterOriginFor(window.location.origin) + '/cdn/invalidate';
       const body = {
         path: `/dicom-web/studies/${studyInstanceUID}/*`,
       };
 
-      const response = await fetch(baseUrl, {
+      const response = await utils.orthancUtils.reporterFetch(baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
