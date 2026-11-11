@@ -84,13 +84,25 @@ export default async function init({
   // store 16-bit data natively (EXT_texture_norm16) nor smooth 32-bit float
   // textures (OES_texture_float_linear), so 16-bit X-rays draw black. Fall
   // back to CPU there; `?viewportRendering=webgl` below still overrides it.
-  const { webgl, norm16Linear, floatLinear } = cornerstone.getRenderingCapabilities();
-  const gpuCannotDraw16Bit = webgl && !norm16Linear && !floatLinear;
+  //
+  // A failed capability probe (WebGL1-only device, shader failure, lost
+  // context) reports every format false while webgl stays true, which looks
+  // like "neither feature". `float` (R32F + NEAREST, core WebGL2) is true on
+  // any WebGL2 device where the probe actually ran, so require it: an unknown
+  // device keeps the GPU it uses today.
+  //
+  // `useCPURendering: false` in appConfig cannot opt out of this fallback, and
+  // no WebGL at all keeps the CPU rendering cs3DInit chose.
+  const { webgl, webgl2, float, norm16Linear, floatLinear } =
+    cornerstone.getRenderingCapabilities();
+  const gpuCannotDraw16Bit = webgl2 && float && !norm16Linear && !floatLinear;
   if (gpuCannotDraw16Bit) {
     console.warn('GPU lacks norm16 and float-linear textures; using CPU rendering');
   }
 
-  cornerstone.setUseCPURendering(Boolean(appConfig.useCPURendering) || gpuCannotDraw16Bit);
+  cornerstone.setUseCPURendering(
+    Boolean(appConfig.useCPURendering) || !webgl || gpuCannotDraw16Bit
+  );
 
   // All native ("next") Generic Viewport settings live under one config object:
   // appConfig.genericViewports = { enabled, viewportRendering }.
