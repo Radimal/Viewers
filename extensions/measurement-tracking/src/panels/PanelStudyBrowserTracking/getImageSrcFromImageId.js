@@ -8,8 +8,7 @@ function getImageSrcFromImageId(cornerstone, imageId) {
     const startTime = Date.now();
     const imagePixelModule = cornerstone.metaData.get('imagePixelModule', imageId);
     const useCPURendering =
-      imagePixelModule?.photometricInterpretation === 'MONOCHROME1' ||
-      cornerstone.getShouldUseCPURendering();
+      imagePixelModule?.photometricInterpretation === 'MONOCHROME1';
 
     cornerstone.utilities
       .loadImageToCanvas({ canvas, imageId, thumbnail: true, useCPURendering })

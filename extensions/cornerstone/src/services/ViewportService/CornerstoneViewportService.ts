@@ -9,6 +9,7 @@ import {
   cache,
   Enums as csEnums,
   metaData,
+  getShouldUseCPURendering,
 } from '@cornerstonejs/core';
 import { estimateXrayVOI, hasMetadataVOI } from '../../utils/estimateXrayVOI';
 
@@ -450,6 +451,11 @@ class CornerstoneViewportService
     const cleanProperties = properties => {
       if (properties?.isComputedVOI) {
         delete properties?.voiRange;
+        delete properties?.VOILUTFunction;
+      }
+      // CPU rendering reports VOILUTFunction 'LINEAR' but throws if it is set,
+      // so a saved one would break redisplay (setProperties) after a manual W/L.
+      if (getShouldUseCPURendering()) {
         delete properties?.VOILUTFunction;
       }
       if (properties?.colormap) {
