@@ -14,7 +14,12 @@ jest.mock('@cornerstonejs/tools', () => ({
   },
 }));
 
-import { applyAnnotationColor, saveAnnotationColor, getAnnotationColor } from './annotationColor';
+import {
+  applyAnnotationColor,
+  saveAnnotationColor,
+  getAnnotationColor,
+  followAnnotationColor,
+} from './annotationColor';
 
 describe('annotationColor', () => {
   beforeEach(() => localStorage.clear());
@@ -30,6 +35,7 @@ describe('annotationColor', () => {
       color: '#ff00ff',
       colorSelected: '#ff00ff',
       textBoxColorHighlighted: '#ff00ff',
+      colorLocked: '#ff00ff',
       lineWidth: '1.5',
     });
     expect(getAnnotationColor()).toBe('#ff00ff');
@@ -40,5 +46,16 @@ describe('annotationColor', () => {
       color: 'rgb(255, 255, 0)',
       colorSelected: 'rgb(0, 220, 0)',
     });
+  });
+
+  it('another window saving or resetting the color updates this one', () => {
+    followAnnotationColor();
+    localStorage.setItem('annotationColor', '#00ffff');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'annotationColor' }));
+    expect(mockStyles.global.colorSelected).toBe('#00ffff');
+
+    localStorage.removeItem('annotationColor');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'annotationColor' }));
+    expect(mockStyles.global.colorSelected).toBe('rgb(0, 220, 0)');
   });
 });

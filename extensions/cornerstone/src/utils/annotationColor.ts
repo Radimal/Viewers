@@ -17,6 +17,8 @@ const CS3D_COLORS = {
   textBoxColor: 'rgb(255, 255, 0)',
   textBoxColorHighlighted: 'rgb(0, 255, 0)',
   textBoxColorSelected: 'rgb(0, 255, 0)',
+  colorLocked: 'rgb(209, 193, 90)',
+  textBoxColorLocked: 'rgb(209, 193, 90)',
 };
 
 /** The reader's color, or null when they never picked one. */
@@ -38,12 +40,22 @@ function setColors(colors: Record<string, string>): void {
   getRenderingEngines()?.forEach(engine => engine.render());
 }
 
-/** Apply the saved color at startup; no-op for readers who never picked one. */
+/** Apply the saved color, or cs3d's defaults when there is none. */
 export function applyAnnotationColor(): void {
   const hex = getAnnotationColor();
-  if (hex) {
-    setColors(allStates(hex));
-  }
+  setColors(hex ? allStates(hex) : CS3D_COLORS);
+}
+
+/**
+ * Multi-monitor: each window has its own cs3d, and the storage event fires
+ * in the other windows when one saves, so they follow without a reload.
+ */
+export function followAnnotationColor(): void {
+  window.addEventListener('storage', event => {
+    if (event.key === KEY || event.key === null) {
+      applyAnnotationColor();
+    }
+  });
 }
 
 /** Save the reader's pick (null = back to cs3d's defaults) and apply it now. */

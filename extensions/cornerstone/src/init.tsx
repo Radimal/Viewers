@@ -80,7 +80,17 @@ export default async function init({
     debug: { statsOverlay },
   });
 
-  cornerstone.setUseCPURendering(Boolean(appConfig.useCPURendering));
+  // Some GPUs (e.g. Mali on Android TVs/tablets) have WebGL2 but can neither
+  // store 16-bit data natively (EXT_texture_norm16) nor smooth 32-bit float
+  // textures (OES_texture_float_linear), so 16-bit X-rays draw black. Fall
+  // back to CPU there; `?viewportRendering=webgl` below still overrides it.
+  const { webgl, norm16Linear, floatLinear } = cornerstone.getRenderingCapabilities();
+  const gpuCannotDraw16Bit = webgl && !norm16Linear && !floatLinear;
+  if (gpuCannotDraw16Bit) {
+    console.warn('GPU lacks norm16 and float-linear textures; using CPU rendering');
+  }
+
+  cornerstone.setUseCPURendering(Boolean(appConfig.useCPURendering) || gpuCannotDraw16Bit);
 
   // All native ("next") Generic Viewport settings live under one config object:
   // appConfig.genericViewports = { enabled, viewportRendering }.
