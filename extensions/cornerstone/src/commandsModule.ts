@@ -61,7 +61,7 @@ import { EasingFunctionEnum } from './utils/transitions';
 import { createSegmentationForViewport } from './utils/createSegmentationForViewport';
 import { utilities as segmentationUtilities } from '@cornerstonejs/tools/segmentation';
 import i18n from '@ohif/i18n';
-import { resumeCineAfterSwitch } from './components/CinePlayer/CinePlayer';
+import { resumeCineAfterSwitch, displaySetsKey } from './components/CinePlayer/CinePlayer';
 
 const { add, intersect, subtract, copy } = cstUtils.contourSegmentation;
 
@@ -1814,12 +1814,21 @@ function commandsModule({
       const { cineService, viewportGridService } = servicesManager.services;
       // Stopping the cine of modified viewports before changing the viewports to
       // avoid inconsistent state and lost references
+      const { viewports } = viewportGridService.getState();
       viewportsToUpdate.forEach(viewport => {
+        const target = displaySetsKey(viewport.displaySetInstanceUIDs);
+        // Radimal: same series again (double-click, drop onto itself, HP
+        // update): nothing re-renders, so leave the cine as the reader has it.
+        if (displaySetsKey(viewports.get(viewport.viewportId)?.displaySetInstanceUIDs) === target) {
+          return;
+        }
         const state = cineService.getState();
         const currentCineState = state.cines?.[viewport.viewportId];
         // Radimal: 3.10 parity — a playing loop keeps playing on the new series.
         if (currentCineState?.isPlaying) {
-          resumeCineAfterSwitch.add(viewport.viewportId);
+          resumeCineAfterSwitch.set(viewport.viewportId, target);
+        } else {
+          resumeCineAfterSwitch.delete(viewport.viewportId);
         }
         cineService.setCine({
           id: viewport.viewportId,

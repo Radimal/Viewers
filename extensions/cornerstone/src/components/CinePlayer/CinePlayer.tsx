@@ -3,9 +3,12 @@ import { useCine } from '@ohif/ui-next';
 import { Enums, eventTarget, cache } from '@cornerstonejs/core';
 import { useAppConfig } from '@state';
 
-// Radimal: viewports whose cine was playing when setDisplaySetsForViewports
-// stopped it; their next new-image-set event resumes playback (3.10 parity).
-export const resumeCineAfterSwitch = new Set<string>();
+// Radimal (3.10 parity): viewportId -> the series it was switched to while its
+// cine was playing. Playback resumes only when that series lands; any other
+// new-image event (live-study remount, a different switch) drops the entry,
+// so a cine the reader stopped never restarts on its own.
+export const resumeCineAfterSwitch = new Map<string, string>();
+export const displaySetsKey = (uids: string[] = []) => uids.join(',');
 
 function WrappedCinePlayer({
   enabledVPElement,
@@ -107,7 +110,11 @@ function WrappedCinePlayer({
 
     // Only the new-image event resumes: it fires once the new series is set.
     const onNewImageSet = () => {
-      resumeRef.current = resumeCineAfterSwitch.delete(viewportId);
+      const { displaySetInstanceUIDs } =
+        viewportGridService.getState().viewports.get(viewportId) ?? {};
+      resumeRef.current =
+        resumeCineAfterSwitch.get(viewportId) === displaySetsKey(displaySetInstanceUIDs);
+      resumeCineAfterSwitch.delete(viewportId);
       newDisplaySetHandler();
       resumeRef.current = false;
     };
@@ -124,9 +131,20 @@ function WrappedCinePlayer({
     };
   }, [enabledVPElement, newDisplaySetHandler, viewportId]);
 
+  // A viewport that unmounts (e.g. its new series is a PDF) never fires the
+  // event above, so its pending resume goes with it.
+  useEffect(() => () => void resumeCineAfterSwitch.delete(viewportId), [viewportId]);
+
   useEffect(() => {
     if (!cines || !cines[viewportId] || !enabledVPElement || !isMountedRef.current) {
       return;
+    }
+
+    // Playing by any route (the resume itself, the reader, autoplay) settles a
+    // pending resume; otherwise a play-then-pause before the series landed
+    // (first image failed) would be undone by a later live-study remount.
+    if (cines[viewportId].isPlaying) {
+      resumeCineAfterSwitch.delete(viewportId);
     }
 
     cineHandler();
