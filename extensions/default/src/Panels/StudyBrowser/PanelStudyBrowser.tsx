@@ -357,6 +357,10 @@ function PanelStudyBrowser({
       </>
 
       <StudyBrowser
+        reporterFetch={utils.orthancUtils.reporterFetch}
+        authenticateReporter={utils.orthancUtils.authenticateReporter}
+        openReporterReport={utils.orthancUtils.openReporterReport}
+        closeReporterReport={utils.orthancUtils.closeReporterReport}
         tabs={tabs}
         servicesManager={servicesManager}
         activeTabName={activeTabName}

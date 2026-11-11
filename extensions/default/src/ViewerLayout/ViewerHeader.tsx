@@ -54,6 +54,7 @@ function ViewerHeader({
     const studyInstanceUIDParam = params.get('StudyInstanceUIDs')?.split(',')[0];
 
     try {
+      await orthancUtils.authenticateReporter();
       uiNotificationService.show({
         title: 'Download Started',
         message: 'Preparing study download...',
@@ -167,7 +168,9 @@ function ViewerHeader({
       console.error('Error invalidating cache:', error);
       uiNotificationService.show({
         title: 'Invalidation Failed',
-        message: `Failed to invalidate cache: ${error.message || 'Unknown error'}. Performing hard reload...`,
+        message: `Failed to invalidate cache: ${
+          error.message || 'Unknown error'
+        }. Performing hard reload...`,
         type: 'error',
         duration: 3000,
       });
@@ -420,6 +423,7 @@ function ViewerHeader({
           : window.open(window.location.href, newId);
 
         if (newWin) {
+          orthancUtils.registerReporterAuthChild(newWin);
           // Drop the consumed entry (it may carry a legacy timestamped id) and register the
           // canonical one; the new window's own heartbeat keeps it fresh from here.
           const remaining = windows.filter(win => win !== reusable && win.id !== newId);

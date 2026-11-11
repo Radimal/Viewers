@@ -33,6 +33,10 @@ const StudyBrowser = ({
   showSettings,
   viewPresets,
   onThumbnailContextMenu,
+  reporterFetch,
+  authenticateReporter,
+  openReporterReport,
+  closeReporterReport,
 }) => {
   const [studyCaseStatusMap, setStudyCaseStatusMap] = useState<Map<string, boolean>>(new Map());
   const [checkedStudies, setCheckedStudies] = useState<Set<string>>(new Set());
@@ -41,15 +45,16 @@ const StudyBrowser = ({
     try {
       const apiEndpoint = reporterOriginFor(window.location.origin);
 
-      const apiUrl = `${apiEndpoint}/case/${studyInstanceUid}`;
+      const apiUrl = `${apiEndpoint}/case/${encodeURIComponent(studyInstanceUid)}`;
 
-      const response = await fetch(apiUrl, {
+      if (!reporterFetch) return undefined;
+      const response = await reporterFetch(apiUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
-        return false;
+        return undefined;
       }
 
       const caseData = await response.json();
@@ -61,8 +66,9 @@ const StudyBrowser = ({
 
       return hasCase;
     } catch (error) {
+      if (error?.name === 'ReporterAuthenticationError') return undefined;
       console.error(`StudyBrowser: Error checking case for ${studyInstanceUid}:`, error);
-      return false;
+      return undefined;
     }
   };
 
@@ -85,6 +91,7 @@ const StudyBrowser = ({
       for (const study of studiesToCheck) {
         try {
           const hasCase = await checkStudyForCases(study.studyInstanceUid);
+          if (hasCase === undefined) continue;
 
           setStudyCaseStatusMap(prev => new Map(prev.set(study.studyInstanceUid, hasCase)));
 
@@ -158,6 +165,10 @@ const StudyBrowser = ({
               servicesManager={servicesManager}
               hasRadimalCase={hasRadimalCase}
               isRadimalCaseChecked={isChecked}
+              reporterFetch={reporterFetch}
+              authenticateReporter={authenticateReporter}
+              openReporterReport={openReporterReport}
+              closeReporterReport={closeReporterReport}
             />
           </React.Fragment>
         );
@@ -188,6 +199,10 @@ const StudyBrowser = ({
 };
 
 StudyBrowser.propTypes = {
+  reporterFetch: PropTypes.func,
+  authenticateReporter: PropTypes.func,
+  openReporterReport: PropTypes.func,
+  closeReporterReport: PropTypes.func,
   onClickTab: PropTypes.func.isRequired,
   onClickStudy: PropTypes.func,
   onClickThumbnail: PropTypes.func,

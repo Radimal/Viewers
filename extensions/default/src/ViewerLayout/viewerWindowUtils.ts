@@ -1,3 +1,5 @@
+import { reporterAuthentication } from '@ohif/core/src/utils/reporterAuth';
+
 export const VIEWER_WINDOW_NAME = 'viewerWindow';
 
 /**
@@ -353,6 +355,7 @@ export const openSavedViewerWindows = (onBlocked?: (blockedCount: number) => voi
         `${VIEWER_WINDOW_NAME}-${index + 1}`,
         `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
       );
+      reporterAuthentication().registerChild(opened);
       if (!opened) {
         blockedCount += 1;
       }

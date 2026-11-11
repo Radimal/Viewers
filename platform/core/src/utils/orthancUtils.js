@@ -1,3 +1,5 @@
+import { reporterAuthentication } from './reporterAuth';
+
 /**
  * Orthanc utility functions for generating UUIDs and handling downloads
  */
@@ -53,6 +55,26 @@ export function reporterOriginFor(origin) {
     return 'https://reporter-staging.onrender.com';
   }
   return 'https://radimal-reporter.onrender.com';
+}
+
+export function reporterFetch(url, options) {
+  return reporterAuthentication().fetch(url, options, reporterOriginFor(window.location.origin));
+}
+
+export function registerReporterAuthChild(childWindow) {
+  reporterAuthentication().registerChild(childWindow);
+}
+
+export function authenticateReporter(intent) {
+  return reporterAuthentication().signIn(intent);
+}
+
+export function openReporterReport(url) {
+  return reporterAuthentication().openReport(url);
+}
+
+export function closeReporterReport() {
+  reporterAuthentication().closeReport();
 }
 
 /** Five dash-separated 8-char lowercase hex groups, as Orthanc renders the SHA-1 above. */
@@ -134,7 +156,7 @@ export async function resolveDownloadStudyId({ studyId, patientId, studyInstance
  */
 export async function downloadOrthancStudy(
   orthancStudyUUID,
-  baseUrl = 'http://radimal-reporter.onrender.com',
+  baseUrl = reporterOriginFor(window.location.origin),
   userId = null
 ) {
   if (!orthancStudyUUID) {
@@ -152,10 +174,8 @@ export async function downloadOrthancStudy(
 
   const downloadUrl = `${baseUrl}/orthanc/study/download?${params.toString()}`;
 
-  console.log('Attempting download with:', { orthancStudyUUID, baseUrl, userId, downloadUrl });
-
   try {
-    const response = await fetch(downloadUrl, {
+    const response = await reporterFetch(downloadUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -170,8 +190,6 @@ export async function downloadOrthancStudy(
     }
 
     const data = await response.json();
-    console.log('Server response:', data);
-
     if (!data.success) {
       throw new Error(data.error || 'Download failed');
     }

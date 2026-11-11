@@ -471,16 +471,12 @@ const commandsModule = ({
 
       const studyInstanceUID = displaySet.StudyInstanceUID;
 
-      const isProduction = window.location.origin === 'https://view.radimal.ai';
+      const apiEndpoint = utils.orthancUtils.reporterOriginFor(window.location.origin);
 
-      const apiEndpoint = isProduction
-        ? 'https://http://radimal-reporter.onrender.com'
-        : 'https://reporter-staging.onrender.com';
-
-      const apiUrl = `${apiEndpoint}/case/${studyInstanceUID}`;
+      const apiUrl = `${apiEndpoint}/case/${encodeURIComponent(studyInstanceUID)}`;
 
       try {
-        const response = await fetch(apiUrl, {
+        const response = await utils.orthancUtils.reporterFetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -548,7 +544,8 @@ const commandsModule = ({
 
       let caseData;
       try {
-        const response = await fetch(apiUrl, {
+        await utils.orthancUtils.authenticateReporter('report');
+        const response = await utils.orthancUtils.reporterFetch(apiUrl, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -560,6 +557,7 @@ const commandsModule = ({
         caseData = await response.json();
 
         if (!caseData?.cases?.length || !caseData.cases[0]?.consultations?.length) {
+          utils.orthancUtils.closeReporterReport();
           uiNotificationService.show({
             title: 'View Report',
             message: 'No case found for this study.',
@@ -569,11 +567,12 @@ const commandsModule = ({
           return;
         }
       } catch (error) {
+        utils.orthancUtils.closeReporterReport();
         console.error('Error fetching case data:', error);
         uiNotificationService.show({
           title: 'View Report',
-          message: 'No case found for this study.',
-          type: 'warning',
+          message: error.message || 'Unable to load the report for this study.',
+          type: 'error',
           duration: 3000,
         });
         return;
@@ -587,9 +586,12 @@ const commandsModule = ({
           const key = s3_url.split('s3.amazonaws.com/')[1];
           const flaskApiEndpoint = utils.orthancUtils.reporterOriginFor(window.location.origin);
 
-          const flaskResponse = await fetch(`${flaskApiEndpoint}/consultation/pdf?key=${key}`, {
-            method: 'GET',
-          });
+          const flaskResponse = await utils.orthancUtils.reporterFetch(
+            `${flaskApiEndpoint}/consultation/pdf?key=${encodeURIComponent(key)}`,
+            {
+              method: 'GET',
+            }
+          );
 
           if (!flaskResponse.ok) {
             throw new Error(`Flask API error! status: ${flaskResponse.status}`);
@@ -608,8 +610,9 @@ const commandsModule = ({
 
           const consultationUrl = `${platformUrl}/consultation/?url=${encodedPresignedUrl}`;
 
-          window.open(consultationUrl, '_blank');
+          utils.orthancUtils.openReporterReport(consultationUrl);
         } catch (error) {
+          utils.orthancUtils.closeReporterReport();
           console.error('Error getting presigned URL:', error);
           uiNotificationService.show({
             title: 'View Report',
@@ -619,6 +622,7 @@ const commandsModule = ({
           });
         }
       } else {
+        utils.orthancUtils.closeReporterReport();
         uiNotificationService.show({
           title: 'View Report',
           message: 'No report URL found for this consultation.',

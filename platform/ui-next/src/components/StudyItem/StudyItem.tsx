@@ -26,7 +26,12 @@ const StudyItem = ({
   servicesManager,
   hasRadimalCase,
   isRadimalCaseChecked,
+  reporterFetch,
+  authenticateReporter,
+  openReporterReport,
+  closeReporterReport,
 }) => {
+  const canRequestReport = hasRadimalCase || !isRadimalCaseChecked;
   return (
     <Accordion
       type="single"
@@ -46,27 +51,36 @@ const StudyItem = ({
                   <div className="text-white">{date}</div>
                   <div
                     className="relative z-20"
-                    style={{ pointerEvents: hasRadimalCase ? 'auto' : 'none' }}
+                    style={{ pointerEvents: canRequestReport ? 'auto' : 'none' }}
+                    title="View Report (sign-in may be required)"
                     onClick={async e => {
                       e.stopPropagation();
                       e.preventDefault();
-                      if (!hasRadimalCase) {
+                      if (!canRequestReport) {
                         return;
                       }
 
                       const apiEndpoint = reporterOriginFor(window.location.origin);
 
                       try {
-                        const response = await fetch(`${apiEndpoint}/case/${studyInstanceUid}`);
+                        if (!reporterFetch || !authenticateReporter)
+                          throw new Error('Reporter authentication is unavailable.');
+                        await authenticateReporter('report');
+                        const response = await reporterFetch(
+                          `${apiEndpoint}/case/${encodeURIComponent(studyInstanceUid)}`
+                        );
+                        if (!response.ok) throw new Error(`Reporter error: ${response.status}`);
                         const caseData = await response.json();
                         const platformUrl = caseData.platform_url;
                         const s3_url = caseData.cases[0].consultations[0].s3_url;
 
                         if (s3_url) {
                           const key = s3_url.split('s3.amazonaws.com/')[1];
-                          const flaskResponse = await fetch(
-                            `${apiEndpoint}/consultation/pdf?key=${key}`
+                          const flaskResponse = await reporterFetch(
+                            `${apiEndpoint}/consultation/pdf?key=${encodeURIComponent(key)}`
                           );
+                          if (!flaskResponse.ok)
+                            throw new Error(`Reporter PDF error: ${flaskResponse.status}`);
                           let presignedUrl = await flaskResponse.text();
                           presignedUrl = presignedUrl.trim();
                           if (presignedUrl.startsWith('"') && presignedUrl.endsWith('"')) {
@@ -74,17 +88,28 @@ const StudyItem = ({
                           }
                           presignedUrl = presignedUrl.trim();
 
-                          const consultationUrl = `${platformUrl}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
-                          window.open(consultationUrl, '_blank');
+                          const consultationUrl = `${platformUrl}/consultation/?url=${encodeURIComponent(
+                            presignedUrl
+                          )}`;
+                          openReporterReport(consultationUrl);
+                        } else {
+                          closeReporterReport?.();
                         }
                       } catch (error) {
+                        closeReporterReport?.();
+                        servicesManager?.services?.uiNotificationService?.show({
+                          title: 'View Report',
+                          message: error.message || 'Unable to open report.',
+                          type: 'warning',
+                          duration: 8000,
+                        });
                         console.error('Error opening report:', error);
                       }
                     }}
                   >
                     <Icons.RadimalPdf
                       className={`h-4 w-4 transition-opacity ${
-                        hasRadimalCase ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                        canRequestReport ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
                       }`}
                       hasCase={hasRadimalCase}
                       isChecked={isRadimalCaseChecked}
@@ -129,6 +154,10 @@ const StudyItem = ({
 };
 
 StudyItem.propTypes = {
+  reporterFetch: PropTypes.func,
+  authenticateReporter: PropTypes.func,
+  openReporterReport: PropTypes.func,
+  closeReporterReport: PropTypes.func,
   studyInstanceUid: PropTypes.string,
   date: PropTypes.string.isRequired,
   description: PropTypes.string,
