@@ -3,6 +3,13 @@ import { useCine } from '@ohif/ui-next';
 import { Enums, eventTarget, cache } from '@cornerstonejs/core';
 import { useAppConfig } from '@state';
 
+// Radimal (3.10 parity): viewportId -> the series it was switched to while its
+// cine was playing. Playback resumes only when that series lands; any other
+// new-image event (live-study remount, a different switch) drops the entry,
+// so a cine the reader stopped never restarts on its own.
+export const resumeCineAfterSwitch = new Map<string, string>();
+export const displaySetsKey = (uids: string[] = []) => uids.join(',');
+
 function WrappedCinePlayer({
   enabledVPElement,
   viewportId,
@@ -17,6 +24,7 @@ function WrappedCinePlayer({
   const [dynamicInfo, setDynamicInfo] = useState(null);
   const [appConfig] = useAppConfig();
   const isMountedRef = useRef(null);
+  const resumeRef = useRef(false);
 
   const cineHandler = () => {
     if (!cines?.[viewportId] || !enabledVPElement) {
@@ -39,7 +47,7 @@ function WrappedCinePlayer({
     const { viewports } = viewportGridService.getState();
     const { displaySetInstanceUIDs } = viewports.get(viewportId);
     let frameRate = 24;
-    let isPlaying = cines[viewportId]?.isPlaying || false;
+    let isPlaying = resumeRef.current || cines[viewportId]?.isPlaying || false;
     displaySetInstanceUIDs.forEach(displaySetInstanceUID => {
       const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUID);
 
@@ -100,30 +108,43 @@ function WrappedCinePlayer({
       return;
     }
 
-    enabledVPElement.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, newDisplaySetHandler);
+    // Only the new-image event resumes: it fires once the new series is set.
+    const onNewImageSet = () => {
+      const { displaySetInstanceUIDs } =
+        viewportGridService.getState().viewports.get(viewportId) ?? {};
+      resumeRef.current =
+        resumeCineAfterSwitch.get(viewportId) === displaySetsKey(displaySetInstanceUIDs);
+      resumeCineAfterSwitch.delete(viewportId);
+      newDisplaySetHandler();
+      resumeRef.current = false;
+    };
+
+    enabledVPElement.addEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, onNewImageSet);
     // this doesn't makes sense that we are listening to this event on viewport element
-    enabledVPElement.addEventListener(
-      Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME,
-      newDisplaySetHandler
-    );
+    enabledVPElement.addEventListener(Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME, onNewImageSet);
 
     return () => {
       cineService.setCine({ id: viewportId, isPlaying: false });
 
-      enabledVPElement.removeEventListener(
-        Enums.Events.VIEWPORT_NEW_IMAGE_SET,
-        newDisplaySetHandler
-      );
-      enabledVPElement.removeEventListener(
-        Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME,
-        newDisplaySetHandler
-      );
+      enabledVPElement.removeEventListener(Enums.Events.VIEWPORT_NEW_IMAGE_SET, onNewImageSet);
+      enabledVPElement.removeEventListener(Enums.Events.VOLUME_VIEWPORT_NEW_VOLUME, onNewImageSet);
     };
   }, [enabledVPElement, newDisplaySetHandler, viewportId]);
+
+  // A viewport that unmounts (e.g. its new series is a PDF) never fires the
+  // event above, so its pending resume goes with it.
+  useEffect(() => () => void resumeCineAfterSwitch.delete(viewportId), [viewportId]);
 
   useEffect(() => {
     if (!cines || !cines[viewportId] || !enabledVPElement || !isMountedRef.current) {
       return;
+    }
+
+    // Playing by any route (the resume itself, the reader, autoplay) settles a
+    // pending resume; otherwise a play-then-pause before the series landed
+    // (first image failed) would be undone by a later live-study remount.
+    if (cines[viewportId].isPlaying) {
+      resumeCineAfterSwitch.delete(viewportId);
     }
 
     cineHandler();
