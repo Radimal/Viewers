@@ -46,8 +46,7 @@ export function createReporterAuthentication(viewerWindow) {
   }
 
   const parentWindow = () =>
-    (/^viewerWindow(?:-\d+)?$/.test(viewerWindow.name) && viewerWindow.opener) ||
-    (viewerWindow.parent !== viewerWindow ? viewerWindow.parent : null);
+    viewerWindow.opener || (viewerWindow.parent !== viewerWindow ? viewerWindow.parent : null);
 
   function getAccessToken() {
     if (pendingToken) {
