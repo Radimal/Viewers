@@ -45,6 +45,11 @@ import {
 } from './services/ViewportService/adapter';
 import { isNextViewportsEnabled } from './utils/nextViewports';
 import {
+  saveAnnotationColor,
+  getAnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
+} from './utils/annotationColor';
+import {
   NEXT_FUSION_PT_OPACITY,
   NEXT_OVERLAY_OPACITY,
   getHydrationViewportTypeForModality,
@@ -302,6 +307,9 @@ export {
   isNextViewport,
   isVolumeRenderingViewport,
   isNextViewportsEnabled,
+  saveAnnotationColor,
+  getAnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
   NEXT_FUSION_PT_OPACITY,
   NEXT_OVERLAY_OPACITY,
   getHydrationViewportTypeForModality,

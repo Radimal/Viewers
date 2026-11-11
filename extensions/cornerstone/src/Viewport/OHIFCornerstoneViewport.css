@@ -44,3 +44,15 @@
   -moz-user-select: none;
   -ms-user-select: none;
 }
+
+/* Radimal: dark outline on measurement text (e.g. "14.8 mm") so the yellow
+   and green labels stay readable over white regions of a radiograph. cs3d's
+   built-in text shadow is a 0.5px offset of the same hue and vanishes on
+   bright bone. paint-order puts the stroke under the fill, so the glyphs
+   keep their full shape and color; half the stroke width shows as outline. */
+.cornerstone-viewport-element .svg-layer text {
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}

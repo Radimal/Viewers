@@ -3,6 +3,11 @@ import { useSystem, hotkeys as hotkeysModule, utils } from '@ohif/core';
 import { UserPreferencesModal, FooterAction } from '@ohif/ui-next';
 import { useTranslation } from 'react-i18next';
 import i18n from '@ohif/i18n';
+import {
+  saveAnnotationColor,
+  getAnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
+} from '@ohif/extension-cornerstone';
 
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Checkbox } from '@ohif/ui-next';
 
@@ -219,6 +224,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
     // Read by the Zoom tool on every wheel event; off = 3.10's centre zoom.
     zoomTowardCursor: localStorage.getItem('zoomTowardCursor') === 'true',
     pinnedTools: getPinnedToolsPref(),
+    annotationColor: getAnnotationColor(),
     // Radimal (3.10 parity): auto-reopen the saved multi-monitor layout when a
     // study opens (ViewerLayout reads this key on primary-window start).
     openAdditionalWindowsOnStart: (() => {
@@ -283,6 +289,7 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
       scrollWheelTool: 'StackScroll',
       invertScrollWheel: false,
       zoomTowardCursor: false,
+      annotationColor: null,
     }));
     MOUSE_TOOL_OPTIONS.forEach(toolName =>
       toolGroupService?.removePersistedToolBindings?.('default', toolName)
@@ -508,6 +515,24 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
           </div>
         </UserPreferencesModal.HotkeysGrid>
 
+        <UserPreferencesModal.SubHeading>
+          {t('Measurements', { defaultValue: 'Measurements' })}
+        </UserPreferencesModal.SubHeading>
+        <UserPreferencesModal.HotkeysGrid>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-foreground text-base">
+              {t('MeasurementColor', { defaultValue: 'Measurement Color' })}
+            </span>
+            <input
+              type="color"
+              value={state.annotationColor ?? DEFAULT_ANNOTATION_COLOR}
+              onChange={e => setState(s => ({ ...s, annotationColor: e.target.value }))}
+              className="h-8 w-16 cursor-pointer rounded border-0 bg-transparent p-0"
+              aria-label="Measurement Color"
+            />
+          </div>
+        </UserPreferencesModal.HotkeysGrid>
+
         {pinnableTools.length > 0 && (
           <>
             <UserPreferencesModal.SubHeading>
@@ -608,6 +633,9 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
                 return; // Exit early since we're reloading
               }
               hotkeysManager.setHotkeys(state.hotkeyDefinitions);
+              if (state.annotationColor !== getAnnotationColor()) {
+                saveAnnotationColor(state.annotationColor);
+              }
 
               // Radimal: mouse-button tools + zoom speed
               applyMouseToolAssignment(toolGroupService, state.mouseTools);
