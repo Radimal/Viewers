@@ -455,7 +455,12 @@ class CornerstoneViewportService
       }
       // CPU rendering reports VOILUTFunction 'LINEAR' but throws if it is set,
       // so a saved one would break redisplay (setProperties) after a manual W/L.
-      if (getShouldUseCPURendering()) {
+      // Check the viewport too: a per-viewport-type override
+      // (?stack.viewportRendering=cpu) can put one viewport on CPU alone.
+      if (
+        getShouldUseCPURendering() ||
+        (csViewport as { useCPURendering?: boolean }).useCPURendering
+      ) {
         delete properties?.VOILUTFunction;
       }
       if (properties?.colormap) {

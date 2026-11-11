@@ -70,11 +70,14 @@ export default class DICOMSRDisplayTool extends AnnotationTool {
     );
 
     // CPU rendering has no actors: getActors() returns an Error (it doesn't
-    // throw), and the image is drawn regardless, so don't skip drawing there.
+    // throw). There, draw once the image data exists; before the first image
+    // loads, CPU coordinate conversion has nothing to work with and throws.
     const actors = typeof viewport.getActors === 'function' ? viewport.getActors() : undefined;
     const hasActors = Array.isArray(actors)
       ? actors.length > 0
-      : actors instanceof Error || Boolean(viewport._actors?.size);
+      : actors instanceof Error
+        ? Boolean(viewport.getImageData?.())
+        : Boolean(viewport._actors?.size);
 
     if (!hasActors) {
       return;
