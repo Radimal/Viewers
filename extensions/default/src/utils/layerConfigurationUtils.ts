@@ -176,6 +176,20 @@ export function configureViewportForLayerRemoval(params: {
 /**
  * Check if a display set can be added as a layer to the specified viewport
  */
+/**
+ * Radimal: true when the viewport draws on the CPU, where volume (layer/MPR)
+ * rendering isn't available.
+ */
+export function isCPURenderedViewport(
+  viewportId: string,
+  servicesManager: AppTypes.ServicesManager
+): boolean {
+  const csViewport = servicesManager.services.cornerstoneViewportService?.getCornerstoneViewport(
+    viewportId
+  ) as { useCPURendering?: boolean } | undefined;
+  return !!csViewport?.useCPURendering;
+}
+
 export function canAddDisplaySetToViewport(params: {
   viewportId: string;
   displaySetInstanceUID: string;
@@ -183,6 +197,13 @@ export function canAddDisplaySetToViewport(params: {
 }): boolean {
   const { viewportId, displaySetInstanceUID, servicesManager } = params;
   const { displaySetService, viewportGridService } = servicesManager.services;
+
+  // Radimal: layers render through a volume viewport, which throws on a
+  // CPU-rendered viewport (the fallback for GPUs that can't draw 16-bit
+  // images, e.g. smart TVs).
+  if (isCPURenderedViewport(viewportId, servicesManager)) {
+    return false;
+  }
 
   // Check if the display set exists
   const displaySet = displaySetService.getDisplaySetByUID(displaySetInstanceUID);

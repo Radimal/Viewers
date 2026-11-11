@@ -47,6 +47,8 @@ import { usePositionPresentationStore } from './stores/usePositionPresentationSt
 import { useSegmentationPresentationStore } from './stores/useSegmentationPresentationStore';
 import { imageRetrieveMetadataProvider } from '@cornerstonejs/core/utilities';
 import { initializeWebWorkerProgressHandler } from './utils/initWebWorkerProgressHandler';
+import getHangingProtocolModule from './getHangingProtocolModule';
+import { protocolNeedsVolumeRendering } from './utils/protocolNeedsVolumeRendering';
 
 const { registerColormap } = csUtilities.colormap;
 
@@ -136,6 +138,10 @@ export default async function init({
     }
   }
   setViewportRenderingOverrides(renderBackendByViewportType);
+
+  if (cornerstone.getShouldUseCPURendering()) {
+    dropVolumeProtocolFromUrl();
+  }
 
   cornerstone.setConfiguration({
     ...cornerstone.getConfiguration(),
@@ -431,6 +437,37 @@ const createMetadataWrappedStrategy = (strategyFn: (args: any) => any) => {
     }
   };
 };
+
+/**
+ * Radimal: on CPU rendering (the fallback for GPUs that can't draw 16-bit
+ * images, e.g. smart TVs) volume viewports throw. A link such as
+ * ?hangingprotocolid=mpr would open straight into one, so drop that parameter
+ * when it names one of this extension's MPR/3D protocols; the route then uses
+ * the mode's default layout. Runs during extension init, before the router
+ * reads the URL. (The protocols stay registered: an unknown id makes the route
+ * fail.)
+ */
+function dropVolumeProtocolFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    const key = [...url.searchParams.keys()].find(k => k.toLowerCase() === 'hangingprotocolid');
+    const requested = key && url.searchParams.get(key)?.toLowerCase();
+    if (!requested) {
+      return;
+    }
+    const isVolumeProtocol = getHangingProtocolModule().some(
+      ({ protocol }) =>
+        protocol.id.toLowerCase() === requested && protocolNeedsVolumeRendering(protocol)
+    );
+    if (isVolumeProtocol) {
+      url.searchParams.delete(key);
+      window.history.replaceState(window.history.state, '', url.toString());
+      console.warn(`hangingprotocolid=${requested} needs GPU rendering; using the default layout`);
+    }
+  } catch {
+    // No window/URL (non-browser) - nothing to drop.
+  }
+}
 
 function CPUModal() {
   return (

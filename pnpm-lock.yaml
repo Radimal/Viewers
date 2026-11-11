@@ -226,8 +226,8 @@ overrides:
   http-cache-semantics@<4.3.0: 4.3.0
 
 patchedDependencies:
-  '@cornerstonejs/core@5.6.8': baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748
-  '@cornerstonejs/tools@5.6.8': 58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525
+  '@cornerstonejs/core@5.6.8': 99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831
+  '@cornerstonejs/tools@5.6.8': 37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa
 
 importers:
 
@@ -372,10 +372,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/adapters':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
       '@cornerstonejs/ai':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
       '@cornerstonejs/codec-charls':
         specifier: 1.2.3
         version: 1.2.3
@@ -390,22 +390,22 @@ importers:
         version: 2.4.7
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/dicom-image-loader':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)
       '@cornerstonejs/labelmap-interpolation':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       '@cornerstonejs/metadata':
         specifier: 5.6.8
         version: 5.6.8
       '@cornerstonejs/polymorphic-segmentation':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))
       '@cornerstonejs/tools':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@icr/polyseg-wasm':
         specifier: 0.4.0
         version: 0.4.0
@@ -481,10 +481,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/adapters':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@kitware/vtk.js':
         specifier: 36.4.1
         version: 36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
@@ -570,10 +570,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/adapters':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@kitware/vtk.js':
         specifier: 36.4.1
         version: 36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
@@ -619,13 +619,13 @@ importers:
         version: 7.29.7
       '@cornerstonejs/adapters':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/tools':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@ohif/core':
         specifier: workspace:*
         version: link:../../platform/core
@@ -665,10 +665,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/tools':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@ohif/core':
         specifier: workspace:*
         version: link:../../platform/core
@@ -898,10 +898,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/tools':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@ohif/core':
         specifier: workspace:*
         version: link:../../platform/core
@@ -1021,10 +1021,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/tools':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@ohif/core':
         specifier: workspace:*
         version: link:../../platform/core
@@ -1465,10 +1465,10 @@ importers:
         version: 7.29.7
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/tools':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+        version: 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@ohif/core':
         specifier: workspace:*
         version: link:../../platform/core
@@ -1553,7 +1553,7 @@ importers:
         version: 2.4.7
       '@cornerstonejs/dicom-image-loader':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)
       '@emotion/serialize':
         specifier: 1.3.3
         version: 1.3.3
@@ -1764,10 +1764,10 @@ importers:
         version: 2.4.7
       '@cornerstonejs/core':
         specifier: 5.6.8
-        version: 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+        version: 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/dicom-image-loader':
         specifier: 5.6.8
-        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)
+        version: 5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)
       '@cornerstonejs/metadata':
         specifier: 5.6.8
         version: 5.6.8
@@ -14761,21 +14761,21 @@ snapshots:
   '@colors/colors@1.5.0':
     optional: true
 
-  '@cornerstonejs/adapters@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))':
+  '@cornerstonejs/adapters@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))':
     dependencies:
       '@babel/runtime-corejs2': 7.26.10
-      '@cornerstonejs/core': 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
-      '@cornerstonejs/tools': 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+      '@cornerstonejs/core': 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+      '@cornerstonejs/tools': 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       buffer: 6.0.3
       dcmjs: 0.52.0
       gl-matrix: 3.4.3
       ndarray: 1.0.19
 
-  '@cornerstonejs/ai@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))':
+  '@cornerstonejs/ai@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))':
     dependencies:
       '@babel/runtime-corejs2': 7.26.10
-      '@cornerstonejs/core': 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
-      '@cornerstonejs/tools': 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+      '@cornerstonejs/core': 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+      '@cornerstonejs/tools': 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       buffer: 6.0.3
       dcmjs: 0.52.0
       gl-matrix: 3.4.3
@@ -14796,7 +14796,7 @@ snapshots:
 
   '@cornerstonejs/codec-openjph@2.4.7': {}
 
-  '@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)':
+  '@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)':
     dependencies:
       '@cornerstonejs/metadata': 5.6.8
       '@cornerstonejs/utils': 5.6.8
@@ -14808,13 +14808,13 @@ snapshots:
       - autoprefixer
       - wslink
 
-  '@cornerstonejs/dicom-image-loader@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)':
+  '@cornerstonejs/dicom-image-loader@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/metadata@5.6.8)(dicom-parser@1.8.21)':
     dependencies:
       '@cornerstonejs/codec-charls': 1.2.3
       '@cornerstonejs/codec-libjpeg-turbo-8bit': 1.2.2
       '@cornerstonejs/codec-openjpeg': 1.3.0
       '@cornerstonejs/codec-openjph': 2.4.7
-      '@cornerstonejs/core': 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+      '@cornerstonejs/core': 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@cornerstonejs/metadata': 5.6.8
       comlink: 4.4.2
       dicom-parser: 1.8.21
@@ -14822,10 +14822,10 @@ snapshots:
       pako: 2.1.0
       uuid: 9.0.1
 
-  '@cornerstonejs/labelmap-interpolation@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+  '@cornerstonejs/labelmap-interpolation@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
-      '@cornerstonejs/core': 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
-      '@cornerstonejs/tools': 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+      '@cornerstonejs/core': 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+      '@cornerstonejs/tools': 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@itk-wasm/morphological-contour-interpolation': 1.1.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       '@kitware/vtk.js': 36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       itk-wasm: 1.0.0-b.165(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
@@ -14840,16 +14840,16 @@ snapshots:
       dcmjs: 0.52.0
       gl-matrix: 3.4.3
 
-  '@cornerstonejs/polymorphic-segmentation@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))':
+  '@cornerstonejs/polymorphic-segmentation@5.6.8(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))':
     dependencies:
-      '@cornerstonejs/core': 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
-      '@cornerstonejs/tools': 5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
+      '@cornerstonejs/core': 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+      '@cornerstonejs/tools': 5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)
       '@icr/polyseg-wasm': 0.4.0
       '@kitware/vtk.js': 36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
 
-  '@cornerstonejs/tools@5.6.8(patch_hash=58058f485b3b8e7aea66367852ff5397b274b8f16e2a5e735bd1372880ed2525)(@cornerstonejs/core@5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)':
+  '@cornerstonejs/tools@5.6.8(patch_hash=37a96d53e2c097b2fa5ed3a7cd591673d9f383980c64f6885733fe515a1e0aaa)(@cornerstonejs/core@5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@kitware/vtk.js@36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0))(@types/d3-array@3.2.1)(@types/d3-interpolate@3.0.4)(d3-array@3.2.4)(d3-interpolate@3.0.1)(gl-matrix@3.4.3)':
     dependencies:
-      '@cornerstonejs/core': 5.6.8(patch_hash=baf684dff9d3b8f17db5f3c6a7c82727fe1222dd76aa555959a05b1998f2d748)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
+      '@cornerstonejs/core': 5.6.8(patch_hash=99fbb41b5b2fbf00ac4ba12558fb809b14d2c12aa6648a551aa206c18ab51831)(@cornerstonejs/metadata@5.6.8)(@cornerstonejs/utils@5.6.8)(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@kitware/vtk.js': 36.4.1(autoprefixer@10.4.27(postcss@8.5.26))(wslink@2.5.0)
       '@types/d3-array': 3.2.1
       '@types/d3-interpolate': 3.0.4

@@ -186,6 +186,12 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
           };
         }
 
+        // Overlays/layers need a volume viewport, which CPU rendering
+        // (e.g. the smart-TV fallback) can't draw.
+        if ((viewport as { useCPURendering?: boolean }).useCPURendering) {
+          return getDisabledState(i18n.t('Buttons:Not available on this device'));
+        }
+
         // Example: Show data overlay menu only for certain modalities
         const displaySetUIDs = viewportGridService.getDisplaySetsUIDsForViewport(viewportId);
         if (!displaySetUIDs?.length) {

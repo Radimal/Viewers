@@ -1,6 +1,7 @@
 import { utils } from '@ohif/core';
 import i18n from '@ohif/i18n';
 import { hasCase } from '../utils/radimalCaseStatus';
+import { isCPURenderedViewport } from '../utils/layerConfigurationUtils';
 const { formatDate } = utils;
 
 // Hide View Report for studies known to have no reporter case. Unknown status
@@ -46,6 +47,13 @@ export default {
       label: i18n.t('StudyBrowser:Add as Layer'),
       iconName: 'ViewportViews',
       commands: 'addDisplaySetAsLayer',
+      // Layers need GPU (volume) rendering; hide on a CPU-rendered viewport.
+      visible: ({ servicesManager }) =>
+        !servicesManager ||
+        !isCPURenderedViewport(
+          servicesManager.services.viewportGridService?.getActiveViewportId(),
+          servicesManager
+        ),
     },
   ],
   'studyBrowser.sortFunctions': [

@@ -1,14 +1,5 @@
 import { getShouldUseCPURendering } from '@cornerstonejs/core';
-
-// CPU rendering (the fallback for GPUs that can't draw 16-bit images, e.g.
-// smart TVs) only supports stack viewports; MPR/3D layouts throw there.
-const VOLUME_VIEWPORT_TYPES = ['volume', 'volume3d', 'orthographic'];
-const needsVolumeRendering = (hp: AppTypes.HangingProtocol.Protocol) =>
-  (hp.stages ?? []).some(stage =>
-    (stage.viewports ?? []).some(viewport =>
-      VOLUME_VIEWPORT_TYPES.includes(viewport.viewportOptions?.viewportType)
-    )
-  );
+import { protocolNeedsVolumeRendering } from '../utils/protocolNeedsVolumeRendering';
 
 export default {
   'layoutSelector.advancedPresetGenerator': ({
@@ -68,7 +59,7 @@ export default {
           }
 
           const areValid = _areSelectorsValid(hp, displaySets, hangingProtocolService);
-          const unsupportedOnCPU = getShouldUseCPURendering() && needsVolumeRendering(hp);
+          const unsupportedOnCPU = getShouldUseCPURendering() && protocolNeedsVolumeRendering(hp);
 
           return {
             icon: hp.icon,

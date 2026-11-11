@@ -1,5 +1,5 @@
 diff --git a/dist/esm/RenderingEngine/StackViewport.js b/dist/esm/RenderingEngine/StackViewport.js
-index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90c2cde716 100644
+index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..1ec69e4fec317ad2a9a3d62d4e143e0903a30f0b 100644
 --- a/dist/esm/RenderingEngine/StackViewport.js
 +++ b/dist/esm/RenderingEngine/StackViewport.js
 @@ -931,10 +931,20 @@ class StackViewport extends Viewport {
@@ -27,7 +27,21 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
          });
      }
      getZoomCPU() {
-@@ -1058,7 +1068,10 @@ class StackViewport extends Viewport {
+@@ -973,7 +983,12 @@ class StackViewport extends Viewport {
+     }
+     setVOILUTFunction(voiLUTFunction, suppressEvents) {
+         if (this.useCPURendering) {
+-            throw new Error('VOI LUT function is not supported in CPU rendering');
++            // Radimal patch: ignore instead of throwing. CPU getProperties()
++            // reports VOILUTFunction 'LINEAR', so any getProperties() ->
++            // setProperties() round trip (MagnifyTool, OHIF re-mounts and
++            // presentation restore) threw and skipped the rest of
++            // setProperties.
++            return;
+         }
+         const newVOILUTFunction = this._getValidVOILUTFunction(voiLUTFunction);
+         let forceRecreateLUTFunction = false;
+@@ -1058,7 +1073,10 @@ class StackViewport extends Viewport {
          }
      }
      setVOICPU(voiRange, options = {}) {
@@ -39,7 +53,7 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
          const { viewport, image } = this._cpuFallbackEnabledElement;
          if (!viewport || !image) {
              return;
-@@ -1089,6 +1102,9 @@ class StackViewport extends Viewport {
+@@ -1089,6 +1107,9 @@ class StackViewport extends Viewport {
              viewport.voi.windowCenter = windowCenter;
          }
          this.voiRange = voiRange;
@@ -49,7 +63,7 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
          const eventDetail = {
              viewportId: this.id,
              range: voiRange,
-@@ -1191,9 +1207,10 @@ class StackViewport extends Viewport {
+@@ -1191,9 +1212,10 @@ class StackViewport extends Viewport {
          this.VOILUTFunction = voiLUTFunctionEnum;
          this.calibration = calibration;
          let imagePlaneModule = this._getImagePlaneModule(imageId);
@@ -63,7 +77,7 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
          return {
              bitsAllocated: imagePixelModule.bitsAllocated,
              numberOfComponents,
-@@ -1594,6 +1611,12 @@ class StackViewport extends Viewport {
+@@ -1594,6 +1616,12 @@ class StackViewport extends Viewport {
      }
      _updateToDisplayImageCPU(image) {
          const metadata = this.getImageDataMetadata(image);
@@ -76,7 +90,7 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
          const viewport = getDefaultViewport(this.canvas, image, this.modality, this._cpuFallbackEnabledElement.viewport.colormap);
          const { windowCenter, windowWidth, voiLUTFunction } = viewport.voi;
          this.voiRange = getVOIRangeFromWindowLevel(windowWidth, windowCenter, voiLUTFunction);
-@@ -1609,6 +1632,11 @@ class StackViewport extends Viewport {
+@@ -1609,6 +1637,11 @@ class StackViewport extends Viewport {
          this.stackInvalidated = false;
          this.cpuRenderingInvalidated = true;
          this._cpuFallbackEnabledElement.transform = calculateTransform(this._cpuFallbackEnabledElement);
@@ -88,7 +102,7 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
      }
      getSliceViewInfo() {
          throw new Error('Method not implemented.');
-@@ -1795,6 +1823,9 @@ class StackViewport extends Viewport {
+@@ -1795,6 +1828,9 @@ class StackViewport extends Viewport {
          else {
              clearTimeout(this.debouncedTimeout);
              this.debouncedTimeout = window.setTimeout(() => {
@@ -98,7 +112,7 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..0d65775c8056a8af602d2090216d3f90
                  this.setImageIdIndex(newTargetImageIdIndex);
              }, 40);
          }
-@@ -1841,7 +1872,8 @@ class StackViewport extends Viewport {
+@@ -1841,7 +1877,8 @@ class StackViewport extends Viewport {
              renderingEngineId: this.renderingEngineId,
              imageId: this.getCurrentImageId(),
              imageData: imageData,
