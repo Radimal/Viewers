@@ -295,6 +295,12 @@ function ViewerLayout({
     const channel = new BroadcastChannel('window_channel');
     setFade(false);
     const handleMessage = (event: MessageEvent) => {
+      if (
+        event.data?.type === 'RADIMAL_AUTH_REQUEST' ||
+        event.data?.type === 'RADIMAL_AUTH_RESPONSE'
+      ) {
+        return;
+      }
       const allowedOrigins = [
         'http://localhost:8000',
         'https://radimal-vet-staging.onrender.com',
