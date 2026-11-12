@@ -1,3 +1,6 @@
+import { getShouldUseCPURendering } from '@cornerstonejs/core';
+import { protocolNeedsVolumeRendering } from '../utils/protocolNeedsVolumeRendering';
+
 export default {
   'layoutSelector.advancedPresetGenerator': ({
     servicesManager,
@@ -56,6 +59,7 @@ export default {
           }
 
           const areValid = _areSelectorsValid(hp, displaySets, hangingProtocolService);
+          const unsupportedOnCPU = getShouldUseCPURendering() && protocolNeedsVolumeRendering(hp);
 
           return {
             icon: hp.icon,
@@ -63,7 +67,7 @@ export default {
             commandOptions: {
               protocolId: hp.id,
             },
-            disabled: !areValid,
+            disabled: !areValid || unsupportedOnCPU,
           };
         })
         .filter(preset => preset !== null);

@@ -26,6 +26,7 @@ function viewer(overrides = {}) {
       if (type === 'message') listeners.delete(listener);
     },
     emit: event => [...listeners].forEach(listener => listener(event)),
+    resetListeners: () => listeners.clear(),
     ...overrides,
   };
   win.parent = win;
@@ -293,4 +294,152 @@ it('reuses the standalone sign-in popup as the report tab without opening a seco
   auth.openReport(`${VET}/consultation/?url=authorized-report`);
   expect(popup.location.href).toBe(`${VET}/consultation/?url=authorized-report`);
   expect(win.open).toHaveBeenCalledTimes(1);
+});
+
+it.each(['', 'secondary-1794438300000'])(
+  'recovers immediately from a closed opener: %s',
+  async name => {
+    const win = viewer({ name });
+    win.opener.closed = true;
+    const popup = { closed: false, close: jest.fn() };
+    win.open.mockReturnValue(popup);
+    const auth = createReporterAuthentication(win);
+    const done = auth.signIn();
+    const url = new URL(win.open.mock.calls[0][0]);
+    expect(url.pathname).toBe('/viewer-auth');
+    expect(win.opener.postMessage).not.toHaveBeenCalled();
+    win.emit({
+      source: popup,
+      origin: VET,
+      data: {
+        type: 'RADIMAL_AUTH_RESPONSE',
+        requestId: url.searchParams.get('requestId'),
+        accessToken: 'recovered-token',
+      },
+    });
+    await done;
+    await auth.fetch(`${REPORTER}/case/a`, {}, REPORTER);
+    expect(win.fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer recovered-token');
+  }
+);
+
+it('recovers a surviving monitor after primary navigation without adopting unknown children', async () => {
+  const primary = viewer();
+  const monitor = viewer({ name: 'viewerWindow-2', opener: primary });
+  primary.postMessage = jest.fn();
+  const original = createReporterAuthentication(primary);
+  original.registerChild(monitor);
+  expect(primary.__radimalReporterAuthChild(monitor)).toBe(true);
+  primary.resetListeners();
+  createReporterAuthentication(primary);
+  expect(primary.__radimalReporterAuthChild(monitor)).toBe(false);
+  const popup = { closed: false, close: jest.fn() };
+  monitor.open.mockReturnValue(popup);
+  const auth = createReporterAuthentication(monitor);
+  const oldRelay = auth.getAccessToken();
+  const rejected = expect(oldRelay).rejects.toBeInstanceOf(ReporterAuthenticationError);
+  const done = auth.signIn();
+  const url = new URL(monitor.open.mock.calls[0][0]);
+  expect(url.origin).toBe(VET);
+  const data = {
+    type: 'RADIMAL_AUTH_RESPONSE',
+    requestId: url.searchParams.get('requestId'),
+    accessToken: 'fresh-popup-token',
+  };
+  monitor.emit({ source: primary, origin: VET, data });
+  monitor.emit({ source: popup, origin: 'https://attacker.test', data });
+  expect(monitor.fetch).not.toHaveBeenCalled();
+  monitor.emit({ source: popup, origin: VET, data });
+  await done;
+  await auth.fetch(`${REPORTER}/case/a`, {}, REPORTER);
+  expect(monitor.fetch.mock.calls[0][1].headers.get('Authorization')).toBe(
+    'Bearer fresh-popup-token'
+  );
+  jest.advanceTimersByTime(15000);
+  await rejected;
+  await expect(auth.getAccessToken()).resolves.toBe('fresh-popup-token');
+  expect(primary.__radimalReporterAuthChild(monitor)).toBe(false);
+});
+
+it('uses popup recovery when the monitor registration query is cross-origin inaccessible', async () => {
+  const parent = { closed: false, postMessage: jest.fn() };
+  Object.defineProperty(parent, '__radimalReporterAuthChild', {
+    get() {
+      throw new Error('SecurityError');
+    },
+  });
+  const win = viewer({ name: 'viewerWindow-1', opener: parent });
+  const popup = { closed: false, close: jest.fn() };
+  win.open.mockReturnValue(popup);
+  const done = createReporterAuthentication(win).signIn();
+  const url = new URL(win.open.mock.calls[0][0]);
+  expect(parent.postMessage).not.toHaveBeenCalled();
+  win.emit({
+    source: popup,
+    origin: VET,
+    data: {
+      type: 'RADIMAL_AUTH_RESPONSE',
+      requestId: url.searchParams.get('requestId'),
+      accessToken: 'safe-token',
+    },
+  });
+  await expect(done).resolves.toBe('safe-token');
+});
+
+it('does not discard a newer popup token when an older request returns unauthorized', async () => {
+  const win = viewer();
+  let resolveOld;
+  win.fetch.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        resolveOld = resolve;
+      })
+  );
+  const auth = createReporterAuthentication(win);
+  const oldRequest = auth.fetch(`${REPORTER}/case/a`, {}, REPORTER);
+  const rejected = expect(oldRequest).rejects.toBeInstanceOf(ReporterAuthenticationError);
+  reply(win, 'old-token');
+  await Promise.resolve();
+  await Promise.resolve();
+  win.opener.closed = true;
+  const popup = { closed: false, close: jest.fn() };
+  win.open.mockReturnValue(popup);
+  const done = auth.signIn();
+  const url = new URL(win.open.mock.calls[0][0]);
+  win.emit({
+    source: popup,
+    origin: VET,
+    data: {
+      type: 'RADIMAL_AUTH_RESPONSE',
+      requestId: url.searchParams.get('requestId'),
+      accessToken: 'new-token',
+    },
+  });
+  await done;
+  resolveOld({ status: 401 });
+  await rejected;
+  await expect(auth.getAccessToken()).resolves.toBe('new-token');
+});
+
+it.each([
+  'https://green-view-stage-2.radimal.ai',
+  'https://green-main-view.stage-1.radimal.ai',
+  'https://green-main-viewer.stage-1.radimal.ai',
+])('uses staging Vet authentication for green alias %s', async origin => {
+  const win = viewer({ opener: null, location: { origin, search: '' } });
+  const popup = { closed: false, close: jest.fn() };
+  win.open.mockReturnValue(popup);
+  const done = createReporterAuthentication(win).signIn();
+  const url = new URL(win.open.mock.calls[0][0]);
+  expect(url.origin).toBe('https://radimal-vet-staging.onrender.com');
+  win.emit({
+    source: popup,
+    origin: url.origin,
+    data: {
+      type: 'RADIMAL_AUTH_RESPONSE',
+      requestId: url.searchParams.get('requestId'),
+      accessToken: 'stage-token',
+    },
+  });
+  await expect(done).resolves.toBe('stage-token');
 });

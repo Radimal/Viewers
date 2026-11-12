@@ -5,7 +5,7 @@ import {
 } from './orthancUtils';
 
 // jsdom provides neither WebCrypto nor TextEncoder, and the real SHA-1 digest is the point of
-// these tests — that hash is what makes an Orthanc study id self-certifying — so use Node's.
+// these tests - that hash is what makes an Orthanc study id self-certifying - so use Node's.
 beforeAll(() => {
   if (typeof globalThis.TextEncoder === 'undefined') {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -29,7 +29,7 @@ describe('reporterOriginFor', () => {
 
   it('routes every staging viewer origin to the staging reporter', () => {
     // veg-view.stage-1 fell through the old exact-match ladders to PRODUCTION, so VEG staging
-    // downloads asked the prod reporter about studies only staging knows — and always failed.
+    // downloads asked the prod reporter about studies only staging knows - and always failed.
     expect(reporterOriginFor('https://veg-view.stage-1.radimal.ai')).toBe(
       'https://reporter-staging.onrender.com'
     );
@@ -48,6 +48,14 @@ describe('reporterOriginFor', () => {
     expect(reporterOriginFor('https://veg-view.radimal.ai')).toBe(
       'https://radimal-reporter.onrender.com'
     );
+  });
+
+  it.each([
+    'green-view-stage-2.radimal.ai',
+    'green-main-view.stage-1.radimal.ai',
+    'green-main-viewer.stage-1.radimal.ai',
+  ])('routes green staging alias %s to staging Reporter', host => {
+    expect(reporterOriginFor(`https://${host}`)).toBe('https://reporter-staging.onrender.com');
   });
 
   it('routes local development to the local reporter', () => {
@@ -123,7 +131,7 @@ describe('resolveDownloadStudyId', () => {
     expect(result.recoveredFrom).toBe('c171e359');
   });
 
-  it('refuses a truncated studyId with nothing to derive from — the incident URL', async () => {
+  it('refuses a truncated studyId with nothing to derive from - the incident URL', async () => {
     // The single cut at the first hyphen removed the studyId tail AND the trailing patientId.
     const result = await resolveDownloadStudyId({
       studyId: 'c171e359',

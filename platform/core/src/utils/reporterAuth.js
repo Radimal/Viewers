@@ -2,6 +2,7 @@ const REQUEST_TYPE = 'RADIMAL_AUTH_REQUEST';
 const RESPONSE_TYPE = 'RADIMAL_AUTH_RESPONSE';
 const AUTH_TIMEOUT_MS = 15000;
 const SIGN_IN_TIMEOUT_MS = 120000;
+const RELAY_REGISTRATION = '__radimalReporterAuthChild';
 
 const validToken = token =>
   typeof token === 'string' && token.length > 0 && token.length <= 16384 && !/[\r\n]/.test(token);
@@ -13,9 +14,10 @@ export class ReporterAuthenticationError extends Error {
   }
 }
 
-function vetOriginFor(origin) {
+export function vetOriginFor(origin) {
   if (origin === 'http://localhost:3000') return 'http://localhost:8000';
-  if (origin.endsWith('.stage-1.radimal.ai')) return 'https://radimal-vet-staging.onrender.com';
+  if (origin.endsWith('.stage-1.radimal.ai') || origin === 'https://green-view-stage-2.radimal.ai')
+    return 'https://radimal-vet-staging.onrender.com';
   if (origin.startsWith('https://') && origin.endsWith('.radimal.ai')) {
     return 'https://vet.radimal.ai';
   }
@@ -31,24 +33,39 @@ export function createReporterAuthentication(viewerWindow) {
   let reportWindow;
   let parentUnavailable = false;
 
+  Object.defineProperty(viewerWindow, RELAY_REGISTRATION, {
+    configurable: true,
+    value: child => children.has(child),
+  });
+
   function closeReport() {
     if (reportWindow && !reportWindow.closed) reportWindow.close();
     reportWindow = undefined;
   }
 
-  const parentWindow = () =>
-    viewerWindow.opener || (viewerWindow.parent !== viewerWindow ? viewerWindow.parent : null);
+  const parentWindow = () => {
+    const source =
+      viewerWindow.opener || (viewerWindow.parent !== viewerWindow ? viewerWindow.parent : null);
+    return source && !source.closed ? source : null;
+  };
+
+  function parentCanRelay(source) {
+    if (!/^viewerWindow-\d+$/.test(viewerWindow.name)) return true;
+    try {
+      return source?.[RELAY_REGISTRATION]?.(viewerWindow) === true;
+    } catch {
+      return false;
+    }
+  }
 
   function getAccessToken() {
+    if (signedInToken && Date.now() < signedInUntil) return Promise.resolve(signedInToken);
     if (pendingToken) return pendingToken;
     const source = parentWindow();
     const isMonitor = /^viewerWindow-\d+$/.test(viewerWindow.name);
     const origin = isMonitor
       ? viewerWindow.location.origin
       : vetOriginFor(viewerWindow.location.origin);
-    if ((!source || parentUnavailable) && signedInToken && Date.now() < signedInUntil) {
-      return Promise.resolve(signedInToken);
-    }
     if (!source || source.closed || !origin || !viewerWindow.crypto?.randomUUID) {
       return Promise.reject(new ReporterAuthenticationError());
     }
@@ -95,7 +112,7 @@ export function createReporterAuthentication(viewerWindow) {
 
   function signIn(intent = 'download') {
     const isReport = intent === 'report';
-    if (parentWindow() && !parentUnavailable) {
+    if (parentWindow() && !parentUnavailable && parentCanRelay(parentWindow())) {
       if (isReport) reportWindow = viewerWindow.open('about:blank', '_blank');
       return getAccessToken().catch(error => {
         closeReport();
@@ -217,8 +234,10 @@ export function createReporterAuthentication(viewerWindow) {
         redirect: 'error',
       });
       if (response.status === 401) {
-        signedInToken = undefined;
-        signedInUntil = 0;
+        if (signedInToken === token) {
+          signedInToken = undefined;
+          signedInUntil = 0;
+        }
         throw new ReporterAuthenticationError();
       }
       return response;

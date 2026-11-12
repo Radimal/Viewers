@@ -47,6 +47,8 @@ import { usePositionPresentationStore } from './stores/usePositionPresentationSt
 import { useSegmentationPresentationStore } from './stores/useSegmentationPresentationStore';
 import { imageRetrieveMetadataProvider } from '@cornerstonejs/core/utilities';
 import { initializeWebWorkerProgressHandler } from './utils/initWebWorkerProgressHandler';
+import getHangingProtocolModule from './getHangingProtocolModule';
+import { protocolNeedsVolumeRendering } from './utils/protocolNeedsVolumeRendering';
 
 const { registerColormap } = csUtilities.colormap;
 
@@ -84,13 +86,25 @@ export default async function init({
   // store 16-bit data natively (EXT_texture_norm16) nor smooth 32-bit float
   // textures (OES_texture_float_linear), so 16-bit X-rays draw black. Fall
   // back to CPU there; `?viewportRendering=webgl` below still overrides it.
-  const { webgl, norm16Linear, floatLinear } = cornerstone.getRenderingCapabilities();
-  const gpuCannotDraw16Bit = webgl && !norm16Linear && !floatLinear;
+  //
+  // A failed capability probe (WebGL1-only device, shader failure, lost
+  // context) reports every format false while webgl stays true, which looks
+  // like "neither feature". `float` (R32F + NEAREST, core WebGL2) is true on
+  // any WebGL2 device where the probe actually ran, so require it: an unknown
+  // device keeps the GPU it uses today.
+  //
+  // `useCPURendering: false` in appConfig cannot opt out of this fallback, and
+  // no WebGL at all keeps the CPU rendering cs3DInit chose.
+  const { webgl, webgl2, float, norm16Linear, floatLinear } =
+    cornerstone.getRenderingCapabilities();
+  const gpuCannotDraw16Bit = webgl2 && float && !norm16Linear && !floatLinear;
   if (gpuCannotDraw16Bit) {
     console.warn('GPU lacks norm16 and float-linear textures; using CPU rendering');
   }
 
-  cornerstone.setUseCPURendering(Boolean(appConfig.useCPURendering) || gpuCannotDraw16Bit);
+  cornerstone.setUseCPURendering(
+    Boolean(appConfig.useCPURendering) || !webgl || gpuCannotDraw16Bit
+  );
 
   // All native ("next") Generic Viewport settings live under one config object:
   // appConfig.genericViewports = { enabled, viewportRendering }.
@@ -124,6 +138,19 @@ export default async function init({
     }
   }
   setViewportRenderingOverrides(renderBackendByViewportType);
+
+  if (cornerstone.getShouldUseCPURendering()) {
+    dropVolumeProtocolFromUrl();
+    reportCPURendering(
+      renderBackend === 'cpu'
+        ? 'url_override'
+        : appConfig.useCPURendering
+          ? 'app_config'
+          : !webgl
+            ? 'no_webgl'
+            : 'gpu_lacks_16bit_textures'
+    );
+  }
 
   cornerstone.setConfiguration({
     ...cornerstone.getConfiguration(),
@@ -419,6 +446,66 @@ const createMetadataWrappedStrategy = (strategyFn: (args: any) => any) => {
     }
   };
 };
+
+/**
+ * Radimal: on CPU rendering (the fallback for GPUs that can't draw 16-bit
+ * images, e.g. smart TVs) volume viewports throw. A link such as
+ * ?hangingprotocolid=mpr would open straight into one, so drop that parameter
+ * when it names one of this extension's MPR/3D protocols; the route then uses
+ * the mode's default layout. Runs during extension init, before the router
+ * reads the URL. (The protocols stay registered: an unknown id makes the route
+ * fail.)
+ */
+function dropVolumeProtocolFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    const key = [...url.searchParams.keys()].find(k => k.toLowerCase() === 'hangingprotocolid');
+    const requested = key && url.searchParams.get(key)?.toLowerCase();
+    if (!requested) {
+      return;
+    }
+    const isVolumeProtocol = getHangingProtocolModule().some(
+      ({ protocol }) =>
+        protocol.id.toLowerCase() === requested && protocolNeedsVolumeRendering(protocol)
+    );
+    if (isVolumeProtocol) {
+      url.searchParams.delete(key);
+      window.history.replaceState(window.history.state, '', url.toString());
+      console.warn(`hangingprotocolid=${requested} needs GPU rendering; using the default layout`);
+    }
+  } catch {
+    // No window/URL (non-browser) - nothing to drop.
+  }
+}
+
+/**
+ * Radimal: one PostHog event per page load that renders on the CPU, so we can
+ * see how many sessions fall back and on which graphics chips. `reason` is
+ * url_override (?viewportRendering=cpu), app_config, no_webgl, or
+ * gpu_lacks_16bit_textures (the automatic smart-TV fallback). The renderer is
+ * the GPU model string (e.g. "Mali-G51"); no user data. Booleans arrive in
+ * PostHog as the strings 'true'/'false'.
+ */
+function reportCPURendering(reason: string) {
+  try {
+    const capabilities = cornerstone.getRenderingCapabilities();
+    (window as any).__capturePostHogEvent?.('cpu_rendering_fallback', {
+      reason,
+      gpu_renderer: capabilities.renderer || undefined,
+      webgl: capabilities.webgl,
+      webgl2: capabilities.webgl2,
+      norm16: capabilities.norm16,
+      norm16_linear: capabilities.norm16Linear,
+      float: capabilities.float,
+      float_linear: capabilities.floatLinear,
+      half_float_linear: capabilities.halfFloatLinear,
+      software_rasterizer: capabilities.softwareRasterizer,
+      cluster: window.location.host,
+    });
+  } catch (e) {
+    console.warn('[PostHog] cpu_rendering_fallback capture failed', e);
+  }
+}
 
 function CPUModal() {
   return (

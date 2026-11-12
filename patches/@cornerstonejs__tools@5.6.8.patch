@@ -1,3 +1,20 @@
+diff --git a/dist/esm/tools/MagnifyTool.js b/dist/esm/tools/MagnifyTool.js
+index 62b1d6b95996744b9ad11521623123b49d1888b3..fede5a1af45787a8007ba8a46135e9b29c9dcf02 100644
+--- a/dist/esm/tools/MagnifyTool.js
++++ b/dist/esm/tools/MagnifyTool.js
+@@ -149,6 +149,12 @@ class MagnifyTool extends BaseTool {
+             magnifyElement.style.top = `${canvasPos[1] - this.configuration.magnifyHeight / 2}px`;
+             magnifyElement.style.left = `${canvasPos[0] - this.configuration.magnifyWidth / 2}px`;
+             const { focalPoint, position } = magnifyViewport.getCamera();
++            // Radimal patch: in CPU rendering the loupe's camera is {} until
++            // its image has loaded; skip this drag frame instead of throwing
++            // (the uncaught TypeError took down the viewer route).
++            if (!focalPoint || !position) {
++                return;
++            }
+             const updatedPosition = [
+                 position[0] + deltaPointsWorld[0],
+                 position[1] + deltaPointsWorld[1],
 diff --git a/dist/esm/utilities/getCalibratedUnits.js b/dist/esm/utilities/getCalibratedUnits.js
 index e777b443e0801ed3713a5544972cfec3eed1de57..736a55479c30c59247763b2382fdf24b6042a7b2 100644
 --- a/dist/esm/utilities/getCalibratedUnits.js

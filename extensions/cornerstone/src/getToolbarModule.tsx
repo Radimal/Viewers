@@ -186,6 +186,12 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
           };
         }
 
+        // Overlays/layers need a volume viewport, which CPU rendering
+        // (e.g. the smart-TV fallback) can't draw.
+        if ((viewport as { useCPURendering?: boolean }).useCPURendering) {
+          return getDisabledState(i18n.t('Buttons:Not available on this device'));
+        }
+
         // Example: Show data overlay menu only for certain modalities
         const displaySetUIDs = viewportGridService.getDisplaySetsUIDsForViewport(viewportId);
         if (!displaySetUIDs?.length) {
@@ -368,6 +374,23 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
 
         if (viewport && unsupportedViewportTypes?.includes(viewport.type)) {
           return getDisabledState(disabledText);
+        }
+
+        return undefined;
+      },
+    },
+    {
+      // Tools that need GPU (vtk) rendering, e.g. AdvancedMagnify, throw on a
+      // CPU-rendered viewport (the fallback for GPUs that can't draw 16-bit
+      // images, such as some smart TVs).
+      name: 'evaluate.viewport.gpuRendering',
+      evaluate: ({ viewportId, disabledText }) => {
+        const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId) as {
+          useCPURendering?: boolean;
+        };
+
+        if (viewport?.useCPURendering) {
+          return getDisabledState(disabledText ?? i18n.t('Buttons:Not available on this device'));
         }
 
         return undefined;

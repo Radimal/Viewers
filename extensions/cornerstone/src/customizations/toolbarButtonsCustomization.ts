@@ -466,6 +466,7 @@ const toolbarButtons: Button[] = [
           name: 'evaluate.viewport.supported',
           unsupportedViewportTypes: ['video'],
         },
+        'evaluate.viewport.gpuRendering',
       ],
     },
   },
