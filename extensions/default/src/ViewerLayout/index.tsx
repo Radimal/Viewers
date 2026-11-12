@@ -326,12 +326,6 @@ function ViewerLayout({
     const channel = new BroadcastChannel('window_channel');
     setFade(false);
     const handleMessage = (event: MessageEvent) => {
-      if (
-        event.data?.type === 'RADIMAL_AUTH_REQUEST' ||
-        event.data?.type === 'RADIMAL_AUTH_RESPONSE'
-      ) {
-        return;
-      }
       const allowedOrigins = [
         'http://localhost:8000',
         'https://radimal-vet-staging.onrender.com',
@@ -496,7 +490,9 @@ function ViewerLayout({
   const viewportComponents = viewports.map(getViewportComponentData);
 
   return (
-    <div className={'transition-opacity duration-1000 ' + (fade ? 'opacity-10' : 'opacity-100')}>
+    <div
+      className={'transition-opacity duration-1000 ' + (fade ? 'opacity-10' : 'opacity-100')}
+    >
       <ViewerHeader
         hotkeysManager={hotkeysManager}
         extensionManager={extensionManager}
@@ -504,13 +500,13 @@ function ViewerLayout({
         appConfig={appConfig}
       />
       <div
-        className="bg-background relative flex w-full flex-row flex-nowrap items-stretch overflow-hidden"
+        className="relative flex w-full flex-row flex-nowrap items-stretch overflow-hidden bg-background"
         style={{ height: 'calc(100vh - 52px)' }}
       >
         <React.Fragment>
           {showLoadingIndicator && (
             <LoadingIndicatorProgress
-              className="bg-background h-full w-full"
+              className="h-full w-full bg-background"
               progress={
                 // Until the first series completes there is no measurable
                 // fraction — keep it undefined so the bar animates its
@@ -553,7 +549,7 @@ function ViewerLayout({
             <ResizablePanel {...resizableViewportGridPanelProps}>
               <div className="flex h-full flex-1 flex-col">
                 <div
-                  className="bg-background relative flex h-full flex-1 items-center justify-center overflow-hidden"
+                  className="relative flex h-full flex-1 items-center justify-center overflow-hidden bg-background"
                   onMouseEnter={handleMouseEnter}
                 >
                   <ViewportGridComp

@@ -1,20 +1,15 @@
-import {
-  reporterAuthentication,
-  vetOriginFor as authenticationVetOriginFor,
-} from '@ohif/core/src/utils/reporterAuth';
-
 export const VIEWER_WINDOW_NAME = 'viewerWindow';
 
 /**
  * Identity of this window instance, regenerated on every page load. A primary viewer announces
  * itself with these on load so an older primary (e.g. one opened from a different radimal-vet
- * tab) can yield - two primaries would fight over currentStudyId.
+ * tab) can yield — two primaries would fight over currentStudyId.
  */
 export const WINDOW_INSTANCE_ID = Math.random().toString(36).slice(2);
 export const WINDOW_STARTED_AT = Date.now();
 
 /**
- * When this document's NAVIGATION began - the moment its URL was fixed - as opposed to
+ * When this document's NAVIGATION began — the moment its URL was fixed — as opposed to
  * WINDOW_STARTED_AT, which is when this module evaluated, seconds later on a slow load.
  *
  * The family-signal gates must use this one. A signal published in the gap between the two (the
@@ -47,7 +42,7 @@ export const isFamilyWindowId = (id: unknown): boolean =>
  * (ViewerHeader handleDownloadStudy). The initial series/SOP params belong to the old study's
  * series and can never resolve against the new one.
  *
- * `distinct_id` is deliberately absent - it identifies the user, not the case, and the same vet
+ * `distinct_id` is deliberately absent — it identifies the user, not the case, and the same vet
  * drives the whole window family.
  */
 export const CASE_SCOPED_PARAMS = [
@@ -115,7 +110,7 @@ export const publishFamilyStudy = (studyInstanceUid: string) => {
  *
  * Publishing must be unconditional, even when the stored study id already matches. The mount
  * reconcile's newest-wins tiebreak rests on "a family that left and came back republishes on
- * return" - publishing only on a changed id skips exactly the round trip (A -> sibling origin
+ * return" — publishing only on a changed id skips exactly the round trip (A -> sibling origin
  * -> A), leaving the pre-departure timestamp in place, so a monitor that was mid-load through
  * the round trip saw the departure note outrank the publication and followed it to the
  * abandoned origin, permanently showing the wrong patient.
@@ -136,14 +131,14 @@ export const publishFamilyArrival = (studyInstanceUid: string) => {
  * essential: localStorage outlives the session and each viewer origin keeps its own copy, so a
  * window would otherwise chase whatever study that origin was last showing.
  *
- * Publication time versus load time is the exact question - "did the family move on while I was
- * loading?" - where wall-clock freshness is only a proxy for it, and a misleading one. A regular ->
+ * Publication time versus load time is the exact question — "did the family move on while I was
+ * loading?" — where wall-clock freshness is only a proxy for it, and a misleading one. A regular ->
  * VEG -> regular switch inside a short window leaves the first origin's entry recent but obsolete,
  * and a monitor returning there would follow it back to the previous patient. Anything published
  * before this document's navigation began is by definition already reflected in the URL we were
  * handed; anything after it happened while we were blind.
  *
- * A live `storage` event needs no check at all - it is current by definition.
+ * A live `storage` event needs no check at all — it is current by definition.
  */
 export const readFamilyStudyPublishedSinceLoad = (): string | null => {
   const studyInstanceUid = localStorage.getItem(FAMILY_STUDY_KEY);
@@ -165,12 +160,12 @@ const FAMILY_DEPARTURE_KEY = 'familyDepartureTarget';
  *
  * This exists for monitor windows that are mid-load when the switch happens: they have no channel
  * listener yet, so they miss NAVIGATE_FAMILY, and once the family is gone nothing on this origin
- * will ever update again - localStorage and BroadcastChannel are both origin-partitioned. The
+ * will ever update again — localStorage and BroadcastChannel are both origin-partitioned. The
  * departure note is what such a window finds when it finishes loading.
  *
  * This replaced navigating family windows by name (window.open(url, name)): when the name lookup
- * failed - a monitor opened by an earlier primary, restored by the browser, or in another tab
- * group - window.open CREATED a new window under that name instead, so a case switch could spawn
+ * failed — a monitor opened by an earlier primary, restored by the browser, or in another tab
+ * group — window.open CREATED a new window under that name instead, so a case switch could spawn
  * an extra viewer tab while the real monitor stayed on the previous patient.
  */
 export const publishFamilyDeparture = (url: string) => {
@@ -178,7 +173,7 @@ export const publishFamilyDeparture = (url: string) => {
 };
 
 /**
- * Where the family went, if it left this origin after this document began loading - else null.
+ * Where the family went, if it left this origin after this document began loading — else null.
  * Same load-time gate as readFamilyStudyPublishedSinceLoad, and the target must report to this
  * window's own vet app, mirroring the LOAD_STUDY / NAVIGATE_FAMILY validation.
  */
@@ -219,11 +214,11 @@ export type FamilyReconcileAction =
  * so a window that was still loading when the family switched case heard nothing; this answers
  * "did the family move on while I was loading?" from the two persisted signals, newest wins:
  * a same-origin study publication, or a departure note left by a primary that switched to a
- * sibling origin (VEG <-> non-VEG) - after which nothing on this origin will ever update again,
+ * sibling origin (VEG <-> non-VEG) — after which nothing on this origin will ever update again,
  * so the note is the only way to learn the family moved.
  *
  * A departure note older than the publication is a round trip the family already completed
- * (the returning primary republishes on arrival - publishFamilyArrival); following it would
+ * (the returning primary republishes on arrival — publishFamilyArrival); following it would
  * chase the family to an origin it has abandoned.
  */
 export const reconcileFamilyOnMount = (
@@ -247,7 +242,16 @@ export const reconcileFamilyOnMount = (
  * production) that all pair with the same vet app.
  */
 export const vetOriginFor = (viewerOrigin: string): string | undefined => {
-  return authenticationVetOriginFor(viewerOrigin);
+  if (viewerOrigin === 'http://localhost:3000') {
+    return 'http://localhost:8000';
+  }
+  if (viewerOrigin.endsWith('.stage-1.radimal.ai')) {
+    return 'https://radimal-vet-staging.onrender.com';
+  }
+  if (viewerOrigin.startsWith('https://') && viewerOrigin.endsWith('.radimal.ai')) {
+    return 'https://vet.radimal.ai';
+  }
+  return undefined;
 };
 
 export const getVetOrigin = (): string | undefined => vetOriginFor(window.location.origin);
@@ -255,7 +259,7 @@ export const getVetOrigin = (): string | undefined => vetOriginFor(window.locati
 /**
  * Canonical name for the next monitor window: lowest 'viewerWindow-N' not currently open.
  * Names are positional rather than timestamped so the SAME physical window is addressable
- * from every viewer origin - windowData/windowsArray are per-origin localStorage, and a
+ * from every viewer origin — windowData/windowsArray are per-origin localStorage, and a
  * timestamped id saved on one origin can never match a monitor that followed a cross-origin
  * case switch from the other, which made "open saved windows" spawn extras beside it.
  */
@@ -316,11 +320,11 @@ export const closeAllViewerWindows = () => {
 
 /**
  * Reopen every saved secondary window from `windowsArray` at its saved geometry, staggered so
- * the browser doesn't coalesce the opens. The primary entry is skipped - the caller already is
+ * the browser doesn't coalesce the opens. The primary entry is skipped — the caller already is
  * (or stands in for) the primary. Used by the "Open Saved Windows" menu item and the
  * open-on-start preference.
  *
- * Calls `onBlocked(count)` after the last attempt if the popup blocker refused any window -
+ * Calls `onBlocked(count)` after the last attempt if the popup blocker refused any window —
  * without user activation (the on-start path) Chrome blocks window.open unless the viewer
  * origin has been granted popup permission, and silently doing nothing reads as a dead button.
  */
@@ -341,15 +345,14 @@ export const openSavedViewerWindows = (onBlocked?: (blockedCount: number) => voi
   savedSecondaryWindows.forEach((win, index) => {
     setTimeout(() => {
       // Open by canonical position, not the saved id: the saved geometry still applies, but
-      // targeting 'viewerWindow-N' reuses (and navigates) a monitor that already exists -
-      // e.g. one that followed a cross-origin case switch - instead of spawning a new window
+      // targeting 'viewerWindow-N' reuses (and navigates) a monitor that already exists —
+      // e.g. one that followed a cross-origin case switch — instead of spawning a new window
       // beside it because the per-origin saved id doesn't match its name.
       const opened = window.open(
         window.location.href,
         `${VIEWER_WINDOW_NAME}-${index + 1}`,
         `width=${win.width},height=${win.height},left=${win.x},top=${win.y}`
       );
-      reporterAuthentication().registerChild(opened);
       if (!opened) {
         blockedCount += 1;
       }
