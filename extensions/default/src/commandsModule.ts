@@ -292,10 +292,14 @@ const commandsModule = ({
 
       let caseData;
       try {
-        const response = await fetch(`${reporterOrigin}/case/${studyInstanceUID}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
+        await utils.orthancUtils.authenticateReporter('report');
+        const response = await utils.orthancUtils.reporterFetch(
+          `${reporterOrigin}/case/${encodeURIComponent(studyInstanceUID)}`,
+          {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -307,10 +311,14 @@ const commandsModule = ({
           throw new Error('No case/consultations in response');
         }
       } catch (error) {
+        utils.orthancUtils.closeReporterReport();
         console.error('Error fetching case data:', error);
         uiNotificationService.show({
           title: 'View Report',
-          message: 'No case found for this study.',
+          message:
+            error?.name === 'ReporterAuthenticationError'
+              ? error.message
+              : 'No case found for this study.',
           type: 'warning',
           duration: 3000,
         });
@@ -319,6 +327,7 @@ const commandsModule = ({
 
       const s3Url = caseData.cases[0].consultations[0].s3_url;
       if (!s3Url) {
+        utils.orthancUtils.closeReporterReport();
         uiNotificationService.show({
           title: 'View Report',
           message: 'No report URL found for this consultation.',
@@ -330,9 +339,12 @@ const commandsModule = ({
 
       try {
         const key = s3Url.split('s3.amazonaws.com/')[1];
-        const pdfResponse = await fetch(`${reporterOrigin}/consultation/pdf?key=${key}`, {
-          method: 'GET',
-        });
+        const pdfResponse = await utils.orthancUtils.reporterFetch(
+          `${reporterOrigin}/consultation/pdf?key=${encodeURIComponent(key)}`,
+          {
+            method: 'GET',
+          }
+        );
 
         if (!pdfResponse.ok) {
           throw new Error(`Reporter PDF error! status: ${pdfResponse.status}`);
@@ -344,13 +356,19 @@ const commandsModule = ({
         }
 
         // Encode so the browser doesn't split the presigned URL's own params.
-        const consultationUrl = `${caseData.platform_url}/consultation/?url=${encodeURIComponent(presignedUrl)}`;
-        window.open(consultationUrl, '_blank');
+        const consultationUrl = `${caseData.platform_url}/consultation/?url=${encodeURIComponent(
+          presignedUrl
+        )}`;
+        utils.orthancUtils.openReporterReport(consultationUrl);
       } catch (error) {
+        utils.orthancUtils.closeReporterReport();
         console.error('Error getting presigned URL:', error);
         uiNotificationService.show({
           title: 'View Report',
-          message: 'Failed to generate report URL.',
+          message:
+            error?.name === 'ReporterAuthenticationError'
+              ? error.message
+              : 'Failed to generate report URL.',
           type: 'error',
           duration: 3000,
         });
@@ -379,6 +397,7 @@ const commandsModule = ({
         instance?.StudyInstanceUID || activeDisplaySet?.StudyInstanceUID;
 
       try {
+        await utils.orthancUtils.authenticateReporter();
         uiNotificationService.show({
           title: 'Download Started',
           message: 'Preparing study download...',
@@ -408,7 +427,11 @@ const commandsModule = ({
         }
 
         if (resolved.studyId) {
-          await utils.orthancUtils.downloadOrthancStudy(resolved.studyId, reporterOrigin, distinctId);
+          await utils.orthancUtils.downloadOrthancStudy(
+            resolved.studyId,
+            reporterOrigin,
+            distinctId
+          );
         } else if (metadataPatientID && metadataStudyInstanceUID) {
           await utils.orthancUtils.downloadStudyByDICOMIds(
             metadataPatientID,
@@ -566,9 +589,9 @@ const commandsModule = ({
 
         const activeStudyChanged = hangingProtocolService.setActiveStudyUID(toUseStudyInstanceUID);
 
-        const storedHanging = `${toUseStudyInstanceUID || hangingProtocolService.getState().activeStudyUID}:${protocolId}:${
-          useStageIdx || 0
-        }`;
+        const storedHanging = `${
+          toUseStudyInstanceUID || hangingProtocolService.getState().activeStudyUID
+        }:${protocolId}:${useStageIdx || 0}`;
 
         const { viewportGridState } = useViewportGridStore.getState();
         const restoreProtocol = !reset && viewportGridState[storedHanging];
@@ -1018,9 +1041,7 @@ const commandsModule = ({
           }
           const reportBlob = datasetToDicomBlob(instances[0]);
           const type = defaultContentType || 'application/dicom';
-          await navigator.clipboard.write([
-            new ClipboardItem({ [type]: reportBlob }),
-          ]);
+          await navigator.clipboard.write([new ClipboardItem({ [type]: reportBlob })]);
         };
       }
 
