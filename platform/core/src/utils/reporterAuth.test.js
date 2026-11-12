@@ -425,7 +425,10 @@ it.each([
   'https://green-view-stage-2.radimal.ai',
   'https://green-main-view.stage-1.radimal.ai',
   'https://green-main-viewer.stage-1.radimal.ai',
-])('uses staging Vet authentication for green alias %s', async origin => {
+  'https://view-stage.radimal.ai',
+  'https://veg-view-stage.radimal.ai',
+  'https://ethos-view-stage.radimal.ai',
+])('uses staging Vet authentication for staging alias %s', async origin => {
   const win = viewer({ opener: null, location: { origin, search: '' } });
   const popup = { closed: false, close: jest.fn() };
   win.open.mockReturnValue(popup);

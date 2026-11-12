@@ -54,7 +54,10 @@ describe('reporterOriginFor', () => {
     'green-view-stage-2.radimal.ai',
     'green-main-view.stage-1.radimal.ai',
     'green-main-viewer.stage-1.radimal.ai',
-  ])('routes green staging alias %s to staging Reporter', host => {
+    'view-stage.radimal.ai',
+    'veg-view-stage.radimal.ai',
+    'ethos-view-stage.radimal.ai',
+  ])('routes staging alias %s to staging Reporter', host => {
     expect(reporterOriginFor(`https://${host}`)).toBe('https://reporter-staging.onrender.com');
   });
 

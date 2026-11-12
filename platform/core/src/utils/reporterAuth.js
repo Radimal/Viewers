@@ -16,7 +16,15 @@ export class ReporterAuthenticationError extends Error {
 
 export function vetOriginFor(origin) {
   if (origin === 'http://localhost:3000') return 'http://localhost:8000';
-  if (origin.endsWith('.stage-1.radimal.ai') || origin === 'https://green-view-stage-2.radimal.ai')
+  if (
+    origin.endsWith('.stage-1.radimal.ai') ||
+    [
+      'https://green-view-stage-2.radimal.ai',
+      'https://view-stage.radimal.ai',
+      'https://veg-view-stage.radimal.ai',
+      'https://ethos-view-stage.radimal.ai',
+    ].includes(origin)
+  )
     return 'https://radimal-vet-staging.onrender.com';
   if (origin.startsWith('https://') && origin.endsWith('.radimal.ai')) {
     return 'https://vet.radimal.ai';
