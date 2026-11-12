@@ -5,10 +5,8 @@ import { ensureCaseStatus, hasCase, subscribeCaseStatus } from '../utils/radimal
 
 /**
  * Radimal: always-visible one-click PDF affordance on the study row.
- * Renders only once the reporter confirms the study has a consultation
- * PDF (status owned by the radimalCaseStatus cache — no fetches in
- * ui-next, unlike the fork). Threaded into StudyItem via the
- * StudyItemActions slot.
+ * Unknown status keeps the action available so a standalone user can sign in.
+ * A confirmed missing report hides it.
  */
 function RadimalCaseIndicator({ StudyInstanceUID }: { StudyInstanceUID: string }) {
   const { commandsManager } = useSystem();
@@ -19,7 +17,7 @@ function RadimalCaseIndicator({ StudyInstanceUID }: { StudyInstanceUID: string }
     ensureCaseStatus(StudyInstanceUID);
   }, [StudyInstanceUID]);
 
-  if (!studyHasCase) {
+  if (studyHasCase === false) {
     return null;
   }
 

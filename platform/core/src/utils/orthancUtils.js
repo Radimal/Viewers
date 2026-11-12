@@ -1,3 +1,5 @@
+import { reporterAuthentication, vetOriginFor } from './reporterAuth';
+
 /**
  * Orthanc utility functions for generating UUIDs and handling downloads
  */
@@ -42,17 +44,37 @@ export async function generateOrthancStudyUUID(patientId, studyInstanceUID) {
  * for the same reason: the viewer is served from multiple origins per environment (view.radimal.ai
  * and veg-view.radimal.ai in production, viewer/veg-view.stage-1.radimal.ai in staging). The
  * exact-string ladders this replaces defaulted every unrecognized origin to production, so the VEG
- * staging viewer asked the production reporter about studies only staging knows — downloads there
+ * staging viewer asked the production reporter about studies only staging knows - downloads there
  * had never worked.
  */
 export function reporterOriginFor(origin) {
   if (origin === 'http://localhost:3000') {
     return 'http://localhost:5007';
   }
-  if (origin.endsWith('.stage-1.radimal.ai')) {
+  if (vetOriginFor(origin) === 'https://radimal-vet-staging.onrender.com') {
     return 'https://reporter-staging.onrender.com';
   }
   return 'https://radimal-reporter.onrender.com';
+}
+
+export function reporterFetch(url, options) {
+  return reporterAuthentication().fetch(url, options, reporterOriginFor(window.location.origin));
+}
+
+export function registerReporterAuthChild(childWindow) {
+  reporterAuthentication().registerChild(childWindow);
+}
+
+export function authenticateReporter(intent) {
+  return reporterAuthentication().signIn(intent);
+}
+
+export function openReporterReport(url) {
+  return reporterAuthentication().openReport(url);
+}
+
+export function closeReporterReport() {
+  reporterAuthentication().closeReport();
 }
 
 /** Five dash-separated 8-char lowercase hex groups, as Orthanc renders the SHA-1 above. */
@@ -64,7 +86,7 @@ export function isValidOrthancStudyId(studyId) {
 
 /**
  * Orthanc's id is derivable from the study itself, so a `?studyId=` handed to us in a URL can be
- * checked rather than trusted. Returns null when we cannot derive one — crypto.subtle needs a
+ * checked rather than trusted. Returns null when we cannot derive one - crypto.subtle needs a
  * secure context, and an unavailable digest must not block a download.
  */
 async function deriveStudyId(patientId, studyInstanceUID) {
@@ -85,7 +107,7 @@ async function deriveStudyId(patientId, studyInstanceUID) {
  * The `studyId` param is unvalidated input: a truncated one (only the first of its five segments)
  * reached production, matched no case, and crashed the download endpoint. Because Orthanc derives
  * the id as SHA-1(PatientID|StudyInstanceUID), the URL's own patientId and StudyInstanceUIDs let us
- * recompute it and compare — the id is effectively self-certifying.
+ * recompute it and compare - the id is effectively self-certifying.
  *
  * - well-formed and matching, or nothing to compare against -> use it
  * - well-formed but contradicting the derived id -> refuse. One of the two is wrong and we cannot
@@ -134,7 +156,7 @@ export async function resolveDownloadStudyId({ studyId, patientId, studyInstance
  */
 export async function downloadOrthancStudy(
   orthancStudyUUID,
-  baseUrl = 'http://radimal-reporter.onrender.com',
+  baseUrl = reporterOriginFor(window.location.origin),
   userId = null
 ) {
   if (!orthancStudyUUID) {
@@ -152,10 +174,8 @@ export async function downloadOrthancStudy(
 
   const downloadUrl = `${baseUrl}/orthanc/study/download?${params.toString()}`;
 
-  console.log('Attempting download with:', { orthancStudyUUID, baseUrl, userId, downloadUrl });
-
   try {
-    const response = await fetch(downloadUrl, {
+    const response = await reporterFetch(downloadUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -170,8 +190,6 @@ export async function downloadOrthancStudy(
     }
 
     const data = await response.json();
-    console.log('Server response:', data);
-
     if (!data.success) {
       throw new Error(data.error || 'Download failed');
     }

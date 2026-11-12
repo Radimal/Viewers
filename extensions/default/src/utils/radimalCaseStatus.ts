@@ -52,11 +52,15 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
   }
 
   const reporterOrigin = utils.orthancUtils.reporterOriginFor(window.location.origin);
-  const lookup = fetch(`${reporterOrigin}/case/${studyInstanceUID}`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  })
-    .then(response => (response.ok ? response.json() : null))
+  const lookup = utils.orthancUtils
+    .reporterFetch(`${reporterOrigin}/case/${encodeURIComponent(studyInstanceUID)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Unable to check report availability.');
+      return response.json();
+    })
     .then(caseData => {
       const result = Boolean(caseData?.cases?.[0]?.consultations?.[0]?.s3_url);
       caseStatusByStudy.set(studyInstanceUID, result);
