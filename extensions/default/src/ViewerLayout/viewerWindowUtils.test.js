@@ -12,7 +12,6 @@ import {
   readFamilyStudyPublishedSinceLoad,
   reconcileFamilyOnMount,
   stripCaseScopedParams,
-  vetOriginFor,
 } from './viewerWindowUtils';
 
 const primaryEntry = {
@@ -34,17 +33,6 @@ const secondaryEntry = {
 };
 
 describe('viewerWindowUtils', () => {
-  it.each([
-    'green-view-stage-2.radimal.ai',
-    'green-main-view.stage-1.radimal.ai',
-    'green-main-viewer.stage-1.radimal.ai',
-    'view-stage.radimal.ai',
-    'veg-view-stage.radimal.ai',
-    'ethos-view-stage.radimal.ai',
-  ])('uses staging Vet for family navigation on %s', host => {
-    expect(vetOriginFor(`https://${host}`)).toBe('https://radimal-vet-staging.onrender.com');
-  });
-
   let openSpy;
   let closeSpy;
 
@@ -221,7 +209,7 @@ describe('viewerWindowUtils', () => {
     it('honors a departure written after navigation start but before scripts ran', () => {
       // The observed field failure: refresh a monitor, switch the case before the new document's
       // JS evaluates. The note postdates the navigation (so the URL cannot reflect it) but
-      // predates module evaluation - a module-eval gate silently discarded exactly these.
+      // predates module evaluation — a module-eval gate silently discarded exactly these.
       localStorage.setItem(
         'familyDepartureTarget',
         JSON.stringify({ url: target, at: WINDOW_STARTED_AT - 1 })

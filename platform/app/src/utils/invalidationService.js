@@ -9,7 +9,7 @@ export const InvalidationService = {
         path: `/dicom-web/studies/${studyInstanceUID}/*`,
       };
 
-      const response = await utils.orthancUtils.reporterFetch(baseUrl, {
+      const response = await fetch(baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

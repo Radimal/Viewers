@@ -62,15 +62,15 @@ jobs:
 
       - name: Extract dist from built image
         run: |
-          docker pull "${{ env.ECR }}:sha-${{ github.sha }}"
-          CID=$(docker create "${{ env.ECR }}:sha-${{ github.sha }}")
+          docker pull "${{ env.ECR }}:${{ github.ref_name }}"
+          CID=$(docker create "${{ env.ECR }}:${{ github.ref_name }}")
           docker cp "$CID:/usr/share/nginx/html" ./dist
           docker rm "$CID"
 
       - name: Guard against unreplaced process.env in the bundle
         run: |
           # An unreplaced process.env.<X> read is a ReferenceError in the
-          # browser (no process global) - the app dies at load. Fails the
+          # browser (no process global) — the app dies at load. Fails the
           # build if any bundle carries one (add missing keys to
           # .webpack/webpack.base.js defineValues). Scans the .gz files (the
           # .js are empty placeholders, see compressDist.sh) and skips comment
@@ -116,7 +116,7 @@ jobs:
 
           # Every stack serves 3.13. The v3.10.* workflows sync only on a
           # manual run (s3_sync input), so they no longer clobber these.
-          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1 s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-veg-prod-1 s3://radimal-viewer-assets-green-stage-2; do
+          for BUCKET in s3://radimal-viewer-assets-stage-1 s3://radimal-viewer-assets-veg-stage-1 s3://radimal-viewer-assets-ethos-stage-1 s3://radimal-viewer-assets-ethos-prod-1 s3://radimal-viewer-assets-prod-1 s3://radimal-viewer-assets-veg-prod-1; do
             # Source maps stay in the docker image for debugging but are not
             # published to the CDN buckets (3.10 parity).
             # Flat copy at bucket root for serving via CloudFront, plus a
