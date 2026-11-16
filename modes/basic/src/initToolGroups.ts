@@ -222,6 +222,8 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager) {
         },
       },
       { toolName: toolNames.Bidirectional },
+      // Radimal: crosshairs pick the plane; Free Rotate turns the image within it.
+      { toolName: toolNames.PlanarRotate },
       { toolName: toolNames.DragProbe },
       { toolName: toolNames.Probe },
       { toolName: toolNames.EllipticalROI },

@@ -779,6 +779,37 @@ const commandsModule = ({
           toggleOneUpViewportGridStore
         );
 
+        // Radimal: setting up the re-created views resets their cameras, and an
+        // active Crosshairs answers each reset by resetting every MPR view,
+        // including this one, which stays mounted: its oblique was lost and
+        // the planes no longer met at 90°. Put its view back once the others
+        // have theirs.
+        const { cornerstoneViewportService } = servicesManager.services;
+        const keptPositionPresentation =
+          viewportOptions?.viewportType === 'volume'
+            ? cornerstoneViewportService?.getPresentations(activeViewportId)?.positionPresentation
+            : undefined;
+        const pending = new Set(
+          [...toggleOneUpViewportGridStore.viewports.keys()].filter(id => id !== activeViewportId)
+        );
+        if (keptPositionPresentation && pending.size) {
+          const { unsubscribe } = cornerstoneViewportService.subscribe(
+            cornerstoneViewportService.EVENTS.VIEWPORT_DATA_CHANGED,
+            ({ viewportId }) => {
+              pending.delete(viewportId);
+              if (!pending.size) {
+                unsubscribe();
+                cornerstoneViewportService.setPresentations(activeViewportId, {
+                  positionPresentation: keptPositionPresentation,
+                });
+              }
+            }
+          );
+          // ponytail: a restored viewport that never reports data (e.g. empty)
+          // leaves the kept view as cs3d set it; stop listening either way.
+          setTimeout(unsubscribe, 10000);
+        }
+
         // Restore the previous layout including the active viewport.
         viewportGridService.setLayout({
           numRows: toggleOneUpViewportGridStore.layout.numRows,
