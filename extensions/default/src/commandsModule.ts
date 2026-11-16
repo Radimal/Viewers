@@ -779,6 +779,46 @@ const commandsModule = ({
           toggleOneUpViewportGridStore
         );
 
+        // Radimal: setting up the re-created views resets their cameras, and an
+        // active Crosshairs answers each reset by resetting every MPR view,
+        // including this one, which stays mounted: its oblique was lost and
+        // the planes no longer met at 90°. A later view's reset can likewise
+        // wipe a view that already restored its own. Note each view as it
+        // reports its data, then put them all back once the last one has.
+        const { cornerstoneViewportService } = servicesManager.services;
+        const keptPositionPresentation =
+          viewportOptions?.viewportType === 'volume'
+            ? cornerstoneViewportService?.getPresentations(activeViewportId)?.positionPresentation
+            : undefined;
+        const pending = new Set(
+          [...toggleOneUpViewportGridStore.viewports.keys()].filter(id => id !== activeViewportId)
+        );
+        if (keptPositionPresentation && pending.size) {
+          const positions = new Map([[activeViewportId, keptPositionPresentation]]);
+          const { unsubscribe } = cornerstoneViewportService.subscribe(
+            cornerstoneViewportService.EVENTS.VIEWPORT_DATA_CHANGED,
+            ({ viewportId }) => {
+              if (!pending.delete(viewportId)) {
+                return;
+              }
+              const { positionPresentation } =
+                cornerstoneViewportService.getPresentations(viewportId) ?? {};
+              if (positionPresentation) {
+                positions.set(viewportId, positionPresentation);
+              }
+              if (!pending.size) {
+                unsubscribe();
+                positions.forEach((positionPresentation, id) =>
+                  cornerstoneViewportService.setPresentations(id, { positionPresentation })
+                );
+              }
+            }
+          );
+          // A restored viewport that never reports data (e.g. an empty one)
+          // leaves the views as cs3d set them; stop listening either way.
+          setTimeout(unsubscribe, 10000);
+        }
+
         // Restore the previous layout including the active viewport.
         viewportGridService.setLayout({
           numRows: toggleOneUpViewportGridStore.layout.numRows,
