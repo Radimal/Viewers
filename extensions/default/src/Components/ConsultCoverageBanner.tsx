@@ -16,15 +16,15 @@ function formatConsultTime(completedAt: number): string {
 }
 
 /** "Consultation 12:12 PM covers 4 of 7 series · 3 received after consultation" */
-function ConsultCoverageBanner({ coverage }: { coverage: ConsultCoverage }) {
+function ConsultCoverageBanner({ coverage, study }: { coverage: ConsultCoverage; study?: string }) {
   const { completedAt, covered, total, after } = coverage;
   return (
     <div
       data-cy="consult-coverage-banner"
       className="mx-2 my-1 rounded border border-[#f59e0b] bg-[#f59e0b]/10 px-2 py-1 text-[12px] leading-4 text-[#f59e0b]"
     >
-      Consultation {formatConsultTime(completedAt)} covers {covered.size} of {total} series ·{' '}
-      {after} received after consultation
+      {study && `${study}: `}Consultation {formatConsultTime(completedAt)} covers {covered.size} of{' '}
+      {total} series · {after} received after consultation
     </div>
   );
 }

@@ -8,11 +8,7 @@ import { defaultActionIcons } from './constants';
 import MoreDropdownMenu from '../../Components/MoreDropdownMenu';
 import RadimalCaseIndicator from '../../Components/RadimalCaseIndicator';
 import ConsultCoverageBanner, { CONSULT_AMBER_RING } from '../../Components/ConsultCoverageBanner';
-import {
-  ensureCaseStatus,
-  getLatestConsult,
-  refreshCaseStatus,
-} from '../../utils/radimalCaseStatus';
+import { ensureCaseStatus, getLatestConsult } from '../../utils/radimalCaseStatus';
 import { getConsultCoverage } from '../../utils/consultCoverage';
 import { CallbackCustomization } from 'platform/core/src/types';
 import { type TabsProps } from '@ohif/core/src/utils/createStudyBrowserTabs';
@@ -415,24 +411,33 @@ function PanelStudyBrowser({
   const imageSeriesKey = imageSeries
     .map(item => `${item.displaySetInstanceUID}:${item.numInstances}`)
     .join();
+  // SOPs each study had once its series first settled. Anything the viewer
+  // gets later came in while the case was open, so after the consult: it is
+  // never outlined, even when Reporter's list (read once, at open) lacks it.
+  // ponytail: a series that is still loading after a 2s lull at open counts
+  // as late (no outline, never a false one); hook into the live poll if that
+  // shows up in practice.
+  const sopsAtOpen = useRef(new Map<string, Set<string>>());
   useEffect(() => {
     let cancelled = false;
-    // Once the series settle, re-read Reporter's late-image list for a study
-    // with a consult: images that arrive while the case is open (live poll)
-    // must be checked against a list that already includes them, or they
-    // would be outlined as covered.
     const timer = setTimeout(async () => {
       const results = await Promise.all(
         StudyInstanceUIDs.map(async StudyInstanceUID => {
-          await (getLatestConsult(StudyInstanceUID)
-            ? refreshCaseStatus(StudyInstanceUID)
-            : ensureCaseStatus(StudyInstanceUID));
+          await ensureCaseStatus(StudyInstanceUID);
+          const series = imageSeries
+            .filter(item => item.StudyInstanceUID === StudyInstanceUID)
+            .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
+            .filter(Boolean);
+          if (series.length && !sopsAtOpen.current.has(StudyInstanceUID)) {
+            sopsAtOpen.current.set(
+              StudyInstanceUID,
+              new Set(series.flatMap(ds => (ds.instances ?? []).map(i => i.SOPInstanceUID)))
+            );
+          }
           const coverage = await getConsultCoverage(
-            imageSeries
-              .filter(item => item.StudyInstanceUID === StudyInstanceUID)
-              .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
-              .filter(Boolean),
-            getLatestConsult(StudyInstanceUID)
+            series,
+            getLatestConsult(StudyInstanceUID),
+            sopsAtOpen.current.get(StudyInstanceUID)
           );
           return coverage && { ...coverage, StudyInstanceUID };
         })
@@ -532,12 +537,21 @@ function PanelStudyBrowser({
         />
       </>
 
-      {coverages.map(coverage => (
-        <ConsultCoverageBanner
-          key={coverage.StudyInstanceUID}
-          coverage={coverage}
-        />
-      ))}
+      {coverages.map(coverage => {
+        // Several banners: say which study each is about.
+        const study = studyDisplayList.find(s => s.studyInstanceUid === coverage.StudyInstanceUID);
+        return (
+          <ConsultCoverageBanner
+            key={coverage.StudyInstanceUID}
+            coverage={coverage}
+            study={
+              coverages.length > 1 && study
+                ? [study.date, study.description].filter(Boolean).join(' ')
+                : undefined
+            }
+          />
+        );
+      })}
       <StudyBrowser
         tabs={tabs}
         servicesManager={servicesManager}

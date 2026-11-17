@@ -51,6 +51,18 @@ describe('getConsultCoverage', () => {
     expect(coverage).toMatchObject({ completedAt: 1000, total: 3, after: 2 });
   });
 
+  it('an image that came in after the study opened is never covered', async () => {
+    // Reporter's list (read at open) lacks '6'; the viewer only had 1-5 then.
+    const grown = [...displaySets, series('d', '6')];
+    const coverage = await getConsultCoverage(
+      grown,
+      consult([]),
+      new Set(['1', '2', '3', '4', '5'])
+    );
+    expect([...coverage.covered]).toEqual(['a', 'b', 'c']);
+    expect(coverage).toMatchObject({ total: 4, after: 1 });
+  });
+
   it('shows nothing when nothing arrived after, or there is no consult', async () => {
     expect(await getConsultCoverage(displaySets, consult([]))).toBe(null);
     expect(await getConsultCoverage(displaySets, consult([['z', '9']]))).toBe(null);

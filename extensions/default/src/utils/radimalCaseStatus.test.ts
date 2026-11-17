@@ -2,12 +2,7 @@ jest.mock('@ohif/core', () => ({
   utils: { orthancUtils: { reporterOriginFor: () => 'https://reporter.test' } },
 }));
 
-import {
-  ensureCaseStatus,
-  getLatestConsult,
-  latestCompletedConsult,
-  refreshCaseStatus,
-} from './radimalCaseStatus';
+import { ensureCaseStatus, getLatestConsult, latestCompletedConsult } from './radimalCaseStatus';
 
 const reply = late => ({
   ok: true,
@@ -23,19 +18,12 @@ const reply = late => ({
 });
 
 describe('radimalCaseStatus', () => {
-  it('refresh re-reads the late-image list that ensure caches', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce(reply(['a']))
-      .mockResolvedValueOnce(reply(['a', 'b']));
-
+  it('looks the case up once and keeps a known status', async () => {
+    global.fetch = jest.fn().mockResolvedValue(reply(['a']));
     expect(await ensureCaseStatus('1.2.3')).toBe(true);
-    await ensureCaseStatus('1.2.3');
+    expect(await ensureCaseStatus('1.2.3')).toBe(true);
     expect(global.fetch).toHaveBeenCalledTimes(1);
-
-    await refreshCaseStatus('1.2.3');
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect([...getLatestConsult('1.2.3').lateInstanceIds]).toEqual(['a', 'b']);
+    expect([...getLatestConsult('1.2.3').lateInstanceIds]).toEqual(['a']);
   });
 
   it('reads completed_at without an offset as UTC and tolerates odd replies', () => {

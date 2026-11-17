@@ -4,7 +4,8 @@ import type { LatestConsult } from './radimalCaseStatus';
  * Radimal: which series a completed consultation covered. Reporter's
  * GET /case lists the Orthanc IDs of images we first received after the
  * latest completed consult (medical_images.created_at). A series with any
- * of those is "received after"; the rest were covered.
+ * of those, or any image the viewer got after the study opened, is
+ * "received after"; the rest were covered.
  */
 
 const orthancIdBySOP = new Map<string, Promise<string>>();
@@ -44,16 +45,21 @@ export type ConsultCoverage = {
  */
 export async function getConsultCoverage(
   displaySets,
-  consult: LatestConsult | null | undefined
+  consult: LatestConsult | null | undefined,
+  sopsAtOpen?: Set<string>
 ): Promise<ConsultCoverage | null> {
-  if (!consult?.lateInstanceIds.size) {
+  if (!consult) {
     return null;
   }
   const covered = new Set<string>();
   let after = 0;
   for (const displaySet of displaySets) {
-    const ids = await Promise.all((displaySet.instances ?? []).map(orthancInstanceId));
-    if (ids.some(id => consult.lateInstanceIds.has(id))) {
+    const instances = displaySet.instances ?? [];
+    const ids = await Promise.all(instances.map(orthancInstanceId));
+    if (
+      ids.some(id => consult.lateInstanceIds.has(id)) ||
+      (sopsAtOpen && instances.some(i => !sopsAtOpen.has(i.SOPInstanceUID)))
+    ) {
       after++;
     } else {
       covered.add(displaySet.displaySetInstanceUID);

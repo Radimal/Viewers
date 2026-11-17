@@ -60,19 +60,6 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
     return pending;
   }
 
-  return fetchCase(studyInstanceUID);
-}
-
-/**
- * Re-read the study's case from Reporter, bypassing the cache, so the
- * received-after-consult list covers images that arrived while the study
- * was open. The cached status stays in place until the new one lands.
- */
-export function refreshCaseStatus(studyInstanceUID: string): Promise<boolean> {
-  return pendingLookups.get(studyInstanceUID) ?? fetchCase(studyInstanceUID);
-}
-
-function fetchCase(studyInstanceUID: string): Promise<boolean> {
   const reporterOrigin = utils.orthancUtils.reporterOriginFor(window.location.origin);
   const lookup = fetch(`${reporterOrigin}/case/${studyInstanceUID}`, {
     method: 'GET',
