@@ -13,6 +13,8 @@ import NavigationComponent from './components/NavigationComponent/NavigationComp
 import TrackingStatus from './components/TrackingStatus/TrackingStatus';
 import ViewportColorbarsContainer from './components/ViewportColorbar';
 import AdvancedRenderingControls from './components/AdvancedRenderingControls';
+import { findUnlinkedSyncablePair } from './utils/imageSliceSync/autoImageSliceSync';
+import { isImageSliceSyncOn } from './utils/imageSliceSync/toggleImageSliceSync';
 
 const getDisabledState = (disabledText?: string) => ({
   disabled: true,
@@ -556,6 +558,33 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
 
         return {
           className: utils.getToggledClassName(isEnabled),
+        };
+      },
+    },
+    {
+      // Radimal: the Image Slice Sync button. It is on while the manual sync
+      // links any viewport, the same state a click toggles
+      // (isImageSliceSyncOn); the generic synchronizer
+      // evaluator reads a viewport with only this one sync as off. Otherwise
+      // it hints when two open series could scroll together by position but
+      // auto sync left them unlinked, or says why a pair won't line up.
+      name: 'evaluate.cornerstone.imageSliceSync',
+      evaluate: () => {
+        const isOn = isImageSliceSyncOn(syncGroupService);
+        const found = !isOn && findUnlinkedSyncablePair({ servicesManager });
+        // Always send a tooltip: the toolbar keeps the last one otherwise.
+        if (!found) {
+          return {
+            className: utils.getToggledClassName(isOn),
+            tooltip: i18n.t('Buttons:Enable position synchronization on stack viewports'),
+          };
+        }
+        const [a, b] = found.descriptions.map(desc => desc || i18n.t('Buttons:Untitled series'));
+        return {
+          className:
+            utils.getToggledClassName(false) +
+            (found.reason === 'syncable' ? ' ring-1 ring-highlight' : ''),
+          tooltip: i18n.t(`Buttons:imageSliceSyncHint.${found.reason}`, { a, b }),
         };
       },
     },

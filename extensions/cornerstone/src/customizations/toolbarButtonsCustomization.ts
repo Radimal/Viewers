@@ -284,7 +284,7 @@ const toolbarButtons: Button[] = [
         },
       },
       evaluate: [
-        'evaluate.cornerstone.synchronizer',
+        'evaluate.cornerstone.imageSliceSync',
         {
           name: 'evaluate.viewport.supported',
           unsupportedViewportTypes: ['video', 'volume3d'],
