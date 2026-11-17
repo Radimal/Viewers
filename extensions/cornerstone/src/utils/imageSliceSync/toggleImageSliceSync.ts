@@ -15,20 +15,11 @@ export default function toggleImageSliceSync({
   const viewports =
     providedViewports || getReconstructableStackViewports(viewportGridService, displaySetService);
 
-  // Todo: right now we don't have a proper way to define specific
-  // viewports to add to synchronizers, and right now it is global or not
-  // after we do that, we should do fine grained control of the synchronizers
-  const someViewportHasSync = viewports.some(viewport => {
-    const syncStates = syncGroupService.getSynchronizersForViewport(
-      viewport.viewportOptions.viewportId
-    );
-
-    const imageSync = syncStates.find(syncState => syncState.id === syncId);
-
-    return !!imageSync;
-  });
-
-  if (someViewportHasSync) {
+  // Radimal: on/off is the synchronizer itself, not the viewports on screen
+  // now. A viewport that has since switched to a non-reconstructable series
+  // still holds the sync, and the button reads the same state
+  // (isImageSliceSyncOn), so it can't show on after a click turned it off.
+  if (isImageSliceSyncOn(syncGroupService, syncId)) {
     return disableSync(syncId, servicesManager);
   }
 
@@ -48,22 +39,28 @@ export default function toggleImageSliceSync({
   });
 }
 
+/** True while the manual image slice sync links any viewport. */
+export function isImageSliceSyncOn(syncGroupService, syncId = IMAGE_SLICE_SYNC_NAME): boolean {
+  const synchronizer = syncGroupService.getSynchronizer(syncId);
+  return (
+    !!synchronizer &&
+    !synchronizer.isDisabled() &&
+    synchronizer.getSourceViewports().length + synchronizer.getTargetViewports().length > 0
+  );
+}
+
+/** Remove every viewport the sync holds, whatever it shows now. */
 function disableSync(syncName, servicesManager: AppTypes.ServicesManager) {
-  const { syncGroupService, viewportGridService, displaySetService, cornerstoneViewportService } =
-    servicesManager.services;
-  const viewports = getReconstructableStackViewports(viewportGridService, displaySetService);
-  viewports.forEach(gridViewport => {
-    const { viewportId } = gridViewport.viewportOptions;
-    const viewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-    if (!viewport) {
-      return;
-    }
-    syncGroupService.removeViewportFromSyncGroup(
-      viewport.id,
-      viewport.getRenderingEngine().id,
-      syncName
-    );
-  });
+  const { syncGroupService } = servicesManager.services;
+  const synchronizer = syncGroupService.getSynchronizer(syncName);
+  if (!synchronizer) {
+    return;
+  }
+  const held = [...synchronizer.getSourceViewports(), ...synchronizer.getTargetViewports()];
+  new Map(held.map(vp => [`${vp.renderingEngineId}:${vp.viewportId}`, vp])).forEach(
+    ({ viewportId, renderingEngineId }) =>
+      syncGroupService.removeViewportFromSyncGroup(viewportId, renderingEngineId, syncName)
+  );
 }
 
 /**

@@ -14,6 +14,7 @@ import TrackingStatus from './components/TrackingStatus/TrackingStatus';
 import ViewportColorbarsContainer from './components/ViewportColorbar';
 import AdvancedRenderingControls from './components/AdvancedRenderingControls';
 import { findUnlinkedSyncablePair } from './utils/imageSliceSync/autoImageSliceSync';
+import { isImageSliceSyncOn } from './utils/imageSliceSync/toggleImageSliceSync';
 
 const getDisabledState = (disabledText?: string) => ({
   disabled: true,
@@ -562,18 +563,14 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
     },
     {
       // Radimal: the Image Slice Sync button. It is on while the manual sync
-      // links any viewport, matching what a click does (toggleImageSliceSync
-      // turns it off if any viewport has it); the generic synchronizer
+      // links any viewport, the same state a click toggles
+      // (isImageSliceSyncOn); the generic synchronizer
       // evaluator reads a viewport with only this one sync as off. Otherwise
       // it hints when two open series could scroll together by position but
       // auto sync left them unlinked, or says why a pair won't line up.
       name: 'evaluate.cornerstone.imageSliceSync',
       evaluate: () => {
-        const isOn = [...viewportGridService.getState().viewports.keys()].some(id =>
-          syncGroupService
-            .getSynchronizersForViewport(id)
-            ?.some(sync => sync.id === 'IMAGE_SLICE_SYNC' && !sync.isDisabled())
-        );
+        const isOn = isImageSliceSyncOn(syncGroupService);
         const found = !isOn && findUnlinkedSyncablePair({ servicesManager });
         // Always send a tooltip: the toolbar keeps the last one otherwise.
         if (!found) {
