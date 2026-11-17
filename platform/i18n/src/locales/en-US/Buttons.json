@@ -163,5 +163,10 @@
   "Window Level": "Window Level",
   "Window Level Region": "Window Level Region",
   "Zoom": "Zoom",
-  "Zoom-in": "Zoom-in"
+  "Zoom-in": "Zoom-in",
+  "Untitled series": "Untitled series",
+  "imageSliceSyncHint.syncable": "{{a}} and {{b}} cover the same anatomy. Click to sync all open series by position.",
+  "imageSliceSyncHint.differentAnatomy": "{{a}} and {{b}} don't cover the same anatomy, so syncing won't line them up.",
+  "imageSliceSyncHint.differentPlane": "{{a}} and {{b}} are in different planes, so they can't be synced by position.",
+  "imageSliceSyncHint.differentScan": "{{a}} and {{b}} are from different scans, so syncing may not line them up."
 }

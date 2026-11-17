@@ -1,6 +1,6 @@
 jest.mock('@cornerstonejs/core', () => ({ eventTarget: {}, Enums: { Events: {} } }));
 
-import { findUnlinkedSyncablePair } from './autoImageSliceSync';
+import { findUnlinkedSyncablePair, forceEnableImageSliceSync } from './autoImageSliceSync';
 
 const AXIAL = [1, 0, 0, 0, 1, 0];
 const CORONAL = [1, 0, 0, 0, 0, -1];
@@ -20,7 +20,7 @@ const series = (uid, desc, count, z0, spacing, extra = {}) => ({
   })),
 });
 
-const run = (displaySets, syncs = {}) =>
+const run = (displaySets, syncs = {}, viewportTypes = []) =>
   findUnlinkedSyncablePair({
     servicesManager: {
       services: {
@@ -31,7 +31,7 @@ const run = (displaySets, syncs = {}) =>
                 `vp${i}`,
                 {
                   displaySetInstanceUIDs: [ds.displaySetInstanceUID],
-                  viewportOptions: { viewportId: `vp${i}` },
+                  viewportOptions: { viewportId: `vp${i}`, viewportType: viewportTypes[i] },
                 },
               ])
             ),
@@ -82,5 +82,69 @@ describe('findUnlinkedSyncablePair', () => {
     expect(reason([thin, series('prior', 'PRIOR', 100, 0, 2.5, { StudyInstanceUID: 'p' })])).toBe(
       null
     );
+  });
+
+  it('treats a reversed series in the same plane as the same plane', () => {
+    const reversed = series('rev', 'REV', 100, 0, 2.5, {
+      ImageOrientationPatient: [-1, 0, 0, 0, 1, 0],
+    });
+    expect(reason([thin, reversed])).toBe('syncable');
+  });
+
+  it('says nothing when a frame of reference is missing', () => {
+    const noFor = s => ({
+      ...s,
+      instances: s.instances.map(i => ({ ...i, FrameOfReferenceUID: undefined })),
+    });
+    expect(reason([noFor(thin), noFor(thick)])).toBe(null);
+  });
+
+  it('ignores MPR and 3D viewports', () => {
+    expect(reason([thin, thick], {}, ['stack', 'volume'])).toBe(null);
+  });
+});
+
+describe('forceEnableImageSliceSync', () => {
+  it('regroups auto sync but keeps the manual IMAGE_SLICE_SYNC group', () => {
+    const removed = [];
+    const displaySets = [
+      { displaySetInstanceUID: 'a', isReconstructable: true, instances: [{}] },
+      { displaySetInstanceUID: 'b', isReconstructable: true, instances: [{}] },
+    ];
+    forceEnableImageSliceSync({
+      servicesManager: {
+        services: {
+          viewportGridService: {
+            getState: () => ({
+              viewports: new Map(
+                displaySets.map((ds, i) => [
+                  `vp${i}`,
+                  {
+                    displaySetInstanceUIDs: [ds.displaySetInstanceUID],
+                    viewportOptions: { viewportId: `vp${i}` },
+                  },
+                ])
+              ),
+            }),
+          },
+          displaySetService: {
+            getDisplaySetByUID: uid => displaySets.find(ds => ds.displaySetInstanceUID === uid),
+          },
+          cornerstoneViewportService: {
+            getCornerstoneViewport: () => ({ getRenderingEngine: () => ({ id: 're' }) }),
+          },
+          syncGroupService: {
+            getSynchronizersForViewport: () => [
+              { id: 'IMAGE_SLICE_SYNC' },
+              { id: 'IMAGE_SLICE_SYNC_GROUP_0' },
+            ],
+            removeViewportFromSyncGroup: (viewportId, engineId, syncId) => removed.push(syncId),
+            addViewportToSyncGroup: () => {},
+          },
+        },
+      },
+    });
+    expect(removed).toContain('IMAGE_SLICE_SYNC_GROUP_0');
+    expect(removed).not.toContain('IMAGE_SLICE_SYNC');
   });
 });
