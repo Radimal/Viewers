@@ -406,24 +406,37 @@ function PanelStudyBrowser({
       : study
   );
 
-  // Radimal: outline the series the latest completed consultation covered
-  // (acquired before it was completed), and say how many came in after.
-  // Only for the studies being read, and only once something came in after.
-  const [, setCaseStatusVersion] = useState(0);
+  // Radimal: outline the series the latest completed consultation covered,
+  // and say how many came in after (Reporter lists the late images). Only
+  // for the studies being read, and only once something came in after.
+  const [caseStatusVersion, setCaseStatusVersion] = useState(0);
+  const [coverages, setCoverages] = useState([]);
   useEffect(() => {
     StudyInstanceUIDs.forEach(uid => ensureCaseStatus(uid));
     return subscribeCaseStatus(() => setCaseStatusVersion(v => v + 1));
   }, [StudyInstanceUIDs.join()]);
-  const coverages = StudyInstanceUIDs.map(uid =>
-    getConsultCoverage(
-      displaySets
-        // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
-        .filter(item => item.StudyInstanceUID === uid && item.componentType !== 'thumbnailNoImage')
-        .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
-        .filter(Boolean),
-      getLatestConsult(uid)
-    )
-  ).filter(Boolean);
+  // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
+  const imageSeries = displaySets.filter(item => item.componentType !== 'thumbnailNoImage');
+  const imageSeriesKey = imageSeries
+    .map(item => `${item.displaySetInstanceUID}:${item.numInstances}`)
+    .join();
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      StudyInstanceUIDs.map(uid =>
+        getConsultCoverage(
+          imageSeries
+            .filter(item => item.StudyInstanceUID === uid)
+            .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
+            .filter(Boolean),
+          getLatestConsult(uid)
+        )
+      )
+    ).then(results => !cancelled && setCoverages(results.filter(Boolean)));
+    return () => {
+      cancelled = true;
+    };
+  }, [caseStatusVersion, imageSeriesKey, StudyInstanceUIDs.join()]);
   const outlinedDisplaySets = coverages.length
     ? displaySets.map(item =>
         coverages.some(coverage => coverage.covered.has(item.displaySetInstanceUID))

@@ -10,7 +10,7 @@ import { utils } from '@ohif/core';
 const caseStatusByStudy = new Map<string, boolean>();
 // Radimal: the latest completed consultation per study, for the Studies
 // panel's "covered by the consultation" outline. null = none completed.
-export type LatestConsult = { completedAt: number; timeZone: string };
+export type LatestConsult = { completedAt: number; lateInstanceIds: Set<string> };
 const latestConsultByStudy = new Map<string, LatestConsult | null>();
 const pendingLookups = new Map<string, Promise<boolean>>();
 const listeners = new Set<() => void>();
@@ -82,16 +82,21 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
   return lookup;
 }
 
-/** Latest completed_at across the study's cases, with that case's clinic timezone. */
+/**
+ * Latest completed_at across the study's cases, with the Orthanc IDs of
+ * images Reporter says arrived after each case's latest completed consult.
+ */
 export function latestCompletedConsult(cases): LatestConsult | null {
-  let latest: LatestConsult | null = null;
-  (cases ?? []).forEach(caseData =>
+  let completedAt = -Infinity;
+  const lateInstanceIds = new Set<string>();
+  (cases ?? []).forEach(caseData => {
     (caseData?.consultations ?? []).forEach(({ completed_at }) => {
-      const completedAt = Date.parse(completed_at);
-      if (Number.isFinite(completedAt) && (!latest || completedAt > latest.completedAt)) {
-        latest = { completedAt, timeZone: caseData.timezone || 'America/New_York' };
+      const time = Date.parse(completed_at);
+      if (Number.isFinite(time)) {
+        completedAt = Math.max(completedAt, time);
       }
-    })
-  );
-  return latest;
+    });
+    (caseData?.images_after_consult ?? []).forEach(id => lateInstanceIds.add(id));
+  });
+  return Number.isFinite(completedAt) ? { completedAt, lateInstanceIds } : null;
 }
