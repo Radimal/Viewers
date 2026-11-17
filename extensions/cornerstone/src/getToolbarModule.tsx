@@ -13,11 +13,19 @@ import NavigationComponent from './components/NavigationComponent/NavigationComp
 import TrackingStatus from './components/TrackingStatus/TrackingStatus';
 import ViewportColorbarsContainer from './components/ViewportColorbar';
 import AdvancedRenderingControls from './components/AdvancedRenderingControls';
+import { findUnlinkedSyncablePair } from './utils/imageSliceSync/autoImageSliceSync';
 
 const getDisabledState = (disabledText?: string) => ({
   disabled: true,
   disabledText: disabledText ?? i18n.t('Buttons:Not available on the current viewport'),
 });
+
+const SYNC_HINTS = {
+  syncable: '{{a}} and {{b}} cover the same anatomy. Click to scroll them together.',
+  differentAnatomy: "{{a}} and {{b}} don't cover the same anatomy, so syncing won't line them up.",
+  differentPlane: "{{a}} and {{b}} are in different planes, so they can't be synced by position.",
+  differentScan: '{{a}} and {{b}} are from different scans, so syncing may not line them up.',
+};
 
 export default function getToolbarModule({ servicesManager, extensionManager }: withAppTypes) {
   const {
@@ -556,6 +564,38 @@ export default function getToolbarModule({ servicesManager, extensionManager }: 
 
         return {
           className: utils.getToggledClassName(isEnabled),
+        };
+      },
+    },
+    {
+      // Radimal: the Image Slice Sync button. It is on while the manual sync
+      // links the active viewport (the generic synchronizer evaluator above
+      // reads a viewport with only this one sync as off). Otherwise it shows
+      // a hint when two open series could scroll together by position but
+      // auto sync left them unlinked.
+      name: 'evaluate.cornerstone.imageSliceSync',
+      evaluate: ({ viewportId }) => {
+        const isOn = syncGroupService
+          .getSynchronizersForViewport(viewportId)
+          ?.some(sync => sync.id === 'IMAGE_SLICE_SYNC' && !sync.isDisabled());
+        const found = !isOn && findUnlinkedSyncablePair({ servicesManager });
+        // Always send a tooltip: the toolbar keeps the last one otherwise.
+        if (!found) {
+          return {
+            className: utils.getToggledClassName(isOn),
+            tooltip: i18n.t('Buttons:Enable position synchronization on stack viewports'),
+          };
+        }
+        const [a, b] = found.descriptions.map(desc => desc || 'Untitled series');
+        return {
+          className:
+            utils.getToggledClassName(false) +
+            (found.reason === 'syncable' ? ' ring-1 ring-highlight' : ''),
+          tooltip: i18n.t(`Buttons:imageSliceSyncHint.${found.reason}`, {
+            a,
+            b,
+            defaultValue: SYNC_HINTS[found.reason],
+          }),
         };
       },
     },
