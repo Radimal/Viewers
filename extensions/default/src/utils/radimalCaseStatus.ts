@@ -8,6 +8,10 @@ import { utils } from '@ohif/core';
  */
 
 const caseStatusByStudy = new Map<string, boolean>();
+// Radimal: the latest completed consultation per study, for the Studies
+// panel's "covered by the consultation" outline. null = none completed.
+export type LatestConsult = { completedAt: number; timeZone: string };
+const latestConsultByStudy = new Map<string, LatestConsult | null>();
 const pendingLookups = new Map<string, Promise<boolean>>();
 const listeners = new Set<() => void>();
 
@@ -24,6 +28,11 @@ function notify() {
 /** Synchronous read: true/false when known, undefined while unknown. */
 export function hasCase(studyInstanceUID: string): boolean | undefined {
   return caseStatusByStudy.get(studyInstanceUID);
+}
+
+/** The latest completed consultation, null when none, undefined while unknown. */
+export function getLatestConsult(studyInstanceUID: string): LatestConsult | null | undefined {
+  return latestConsultByStudy.get(studyInstanceUID);
 }
 
 export function subscribeCaseStatus(listener: () => void): () => void {
@@ -60,6 +69,7 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
     .then(caseData => {
       const result = Boolean(caseData?.cases?.[0]?.consultations?.[0]?.s3_url);
       caseStatusByStudy.set(studyInstanceUID, result);
+      latestConsultByStudy.set(studyInstanceUID, latestCompletedConsult(caseData?.cases));
       notify();
       return result;
     })
@@ -70,4 +80,18 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
 
   pendingLookups.set(studyInstanceUID, lookup);
   return lookup;
+}
+
+/** Latest completed_at across the study's cases, with that case's clinic timezone. */
+export function latestCompletedConsult(cases): LatestConsult | null {
+  let latest: LatestConsult | null = null;
+  (cases ?? []).forEach(caseData =>
+    (caseData?.consultations ?? []).forEach(({ completed_at }) => {
+      const completedAt = Date.parse(completed_at);
+      if (Number.isFinite(completedAt) && (!latest || completedAt > latest.completedAt)) {
+        latest = { completedAt, timeZone: caseData.timezone || 'America/New_York' };
+      }
+    })
+  );
+  return latest;
 }

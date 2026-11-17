@@ -7,6 +7,13 @@ import { PanelStudyBrowserHeader } from './PanelStudyBrowserHeader';
 import { defaultActionIcons } from './constants';
 import MoreDropdownMenu from '../../Components/MoreDropdownMenu';
 import RadimalCaseIndicator from '../../Components/RadimalCaseIndicator';
+import ConsultCoverageBanner, { CONSULT_AMBER_RING } from '../../Components/ConsultCoverageBanner';
+import {
+  ensureCaseStatus,
+  getLatestConsult,
+  subscribeCaseStatus,
+} from '../../utils/radimalCaseStatus';
+import { getConsultCoverage } from '../../utils/consultCoverage';
 import { CallbackCustomization } from 'platform/core/src/types';
 import { type TabsProps } from '@ohif/core/src/utils/createStudyBrowserTabs';
 import { thumbnailNoImageModalities } from '@ohif/core/src/utils/thumbnailNoImageModalities';
@@ -399,7 +406,37 @@ function PanelStudyBrowser({
       : study
   );
 
-  const tabs = createStudyBrowserTabs(StudyInstanceUIDs, shownStudyDisplayList, displaySets);
+  // Radimal: outline the series the latest completed consultation covered
+  // (acquired before it was completed), and say how many came in after.
+  // Only for the studies being read, and only once something came in after.
+  const [, setCaseStatusVersion] = useState(0);
+  useEffect(() => {
+    StudyInstanceUIDs.forEach(uid => ensureCaseStatus(uid));
+    return subscribeCaseStatus(() => setCaseStatusVersion(v => v + 1));
+  }, [StudyInstanceUIDs.join()]);
+  const coverages = StudyInstanceUIDs.map(uid =>
+    getConsultCoverage(
+      displaySets
+        // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
+        .filter(item => item.StudyInstanceUID === uid && item.componentType !== 'thumbnailNoImage')
+        .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
+        .filter(Boolean),
+      getLatestConsult(uid)
+    )
+  ).filter(Boolean);
+  const outlinedDisplaySets = coverages.length
+    ? displaySets.map(item =>
+        coverages.some(coverage => coverage.covered.has(item.displaySetInstanceUID))
+          ? { ...item, className: CONSULT_AMBER_RING }
+          : item
+      )
+    : displaySets;
+
+  const tabs = createStudyBrowserTabs(
+    StudyInstanceUIDs,
+    shownStudyDisplayList,
+    outlinedDisplaySets
+  );
 
   // TODO: Should not fire this on "close"
   function _handleStudyClick(StudyInstanceUID) {
@@ -473,6 +510,12 @@ function PanelStudyBrowser({
         />
       </>
 
+      {coverages.map(coverage => (
+        <ConsultCoverageBanner
+          key={coverage.completedAt}
+          coverage={coverage}
+        />
+      ))}
       <StudyBrowser
         tabs={tabs}
         servicesManager={servicesManager}
