@@ -11,7 +11,7 @@ import ConsultCoverageBanner, { CONSULT_AMBER_RING } from '../../Components/Cons
 import {
   ensureCaseStatus,
   getLatestConsult,
-  subscribeCaseStatus,
+  refreshCaseStatus,
 } from '../../utils/radimalCaseStatus';
 import { getConsultCoverage } from '../../utils/consultCoverage';
 import { CallbackCustomization } from 'platform/core/src/types';
@@ -409,12 +409,7 @@ function PanelStudyBrowser({
   // Radimal: outline the series the latest completed consultation covered,
   // and say how many came in after (Reporter lists the late images). Only
   // for the studies being read, and only once something came in after.
-  const [caseStatusVersion, setCaseStatusVersion] = useState(0);
   const [coverages, setCoverages] = useState([]);
-  useEffect(() => {
-    StudyInstanceUIDs.forEach(uid => ensureCaseStatus(uid));
-    return subscribeCaseStatus(() => setCaseStatusVersion(v => v + 1));
-  }, [StudyInstanceUIDs.join()]);
   // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
   const imageSeries = displaySets.filter(item => item.componentType !== 'thumbnailNoImage');
   const imageSeriesKey = imageSeries
@@ -422,21 +417,35 @@ function PanelStudyBrowser({
     .join();
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      StudyInstanceUIDs.map(uid =>
-        getConsultCoverage(
-          imageSeries
-            .filter(item => item.StudyInstanceUID === uid)
-            .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
-            .filter(Boolean),
-          getLatestConsult(uid)
-        )
-      )
-    ).then(results => !cancelled && setCoverages(results.filter(Boolean)));
+    // Once the series settle, re-read Reporter's late-image list for a study
+    // with a consult: images that arrive while the case is open (live poll)
+    // must be checked against a list that already includes them, or they
+    // would be outlined as covered.
+    const timer = setTimeout(async () => {
+      const results = await Promise.all(
+        StudyInstanceUIDs.map(async StudyInstanceUID => {
+          await (getLatestConsult(StudyInstanceUID)
+            ? refreshCaseStatus(StudyInstanceUID)
+            : ensureCaseStatus(StudyInstanceUID));
+          const coverage = await getConsultCoverage(
+            imageSeries
+              .filter(item => item.StudyInstanceUID === StudyInstanceUID)
+              .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
+              .filter(Boolean),
+            getLatestConsult(StudyInstanceUID)
+          );
+          return coverage && { ...coverage, StudyInstanceUID };
+        })
+      );
+      if (!cancelled) {
+        setCoverages(results.filter(Boolean));
+      }
+    }, 2000);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [caseStatusVersion, imageSeriesKey, StudyInstanceUIDs.join()]);
+  }, [imageSeriesKey, StudyInstanceUIDs.join()]);
   const outlinedDisplaySets = coverages.length
     ? displaySets.map(item =>
         coverages.some(coverage => coverage.covered.has(item.displaySetInstanceUID))
@@ -525,7 +534,7 @@ function PanelStudyBrowser({
 
       {coverages.map(coverage => (
         <ConsultCoverageBanner
-          key={coverage.completedAt}
+          key={coverage.StudyInstanceUID}
           coverage={coverage}
         />
       ))}

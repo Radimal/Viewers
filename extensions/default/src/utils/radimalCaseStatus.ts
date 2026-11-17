@@ -60,6 +60,19 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
     return pending;
   }
 
+  return fetchCase(studyInstanceUID);
+}
+
+/**
+ * Re-read the study's case from Reporter, bypassing the cache, so the
+ * received-after-consult list covers images that arrived while the study
+ * was open. The cached status stays in place until the new one lands.
+ */
+export function refreshCaseStatus(studyInstanceUID: string): Promise<boolean> {
+  return pendingLookups.get(studyInstanceUID) ?? fetchCase(studyInstanceUID);
+}
+
+function fetchCase(studyInstanceUID: string): Promise<boolean> {
   const reporterOrigin = utils.orthancUtils.reporterOriginFor(window.location.origin);
   const lookup = fetch(`${reporterOrigin}/case/${studyInstanceUID}`, {
     method: 'GET',
@@ -89,14 +102,24 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
 export function latestCompletedConsult(cases): LatestConsult | null {
   let completedAt = -Infinity;
   const lateInstanceIds = new Set<string>();
-  (cases ?? []).forEach(caseData => {
-    (caseData?.consultations ?? []).forEach(({ completed_at }) => {
-      const time = Date.parse(completed_at);
+  // Never let an odd reply break the View Report lookup around it.
+  const list = value => (Array.isArray(value) ? value : []);
+  list(cases).forEach(caseData => {
+    list(caseData?.consultations).forEach(consultation => {
+      const time = parseUtc(consultation?.completed_at);
       if (Number.isFinite(time)) {
         completedAt = Math.max(completedAt, time);
       }
     });
-    (caseData?.images_after_consult ?? []).forEach(id => lateInstanceIds.add(id));
+    list(caseData?.images_after_consult).forEach(id => lateInstanceIds.add(id));
   });
   return Number.isFinite(completedAt) ? { completedAt, lateInstanceIds } : null;
+}
+
+/** An ISO timestamp as UTC ms; one without an offset is read as UTC, not browser-local. */
+function parseUtc(value): number {
+  if (typeof value !== 'string') {
+    return NaN;
+  }
+  return Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`);
 }
