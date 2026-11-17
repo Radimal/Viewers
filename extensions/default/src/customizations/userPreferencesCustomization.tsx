@@ -13,6 +13,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Checkbox
 
 const { availableLanguages, defaultLanguage, currentLanguage: currentLanguageFn } = i18n;
 
+// Radimal: the measurement colors, as swatches matching the report's Regions
+// of Interest picker (radimal-vet RegionOfInterest.tsx): pink (the default),
+// blue, green and yellow, plus a neon purple the report doesn't have.
+const MEASUREMENT_COLORS = [DEFAULT_ANNOTATION_COLOR, '#338ded', '#28a745', '#ffd54f', '#b026ff'];
+
 interface HotkeyDefinition {
   keys: string;
   label: string;
@@ -519,17 +524,40 @@ function UserPreferencesModalDefault({ hide }: { hide: () => void }) {
           {t('Measurements', { defaultValue: 'Measurements' })}
         </UserPreferencesModal.SubHeading>
         <UserPreferencesModal.HotkeysGrid>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-foreground text-base">
+          {/* Wider than one grid column; it is the only row here. */}
+          <div className="flex items-center gap-4 md:col-span-2">
+            <span className="text-foreground whitespace-nowrap text-base">
               {t('MeasurementColor', { defaultValue: 'Measurement Color' })}
             </span>
-            <input
-              type="color"
-              value={state.annotationColor ?? DEFAULT_ANNOTATION_COLOR}
-              onChange={e => setState(s => ({ ...s, annotationColor: e.target.value }))}
-              className="h-8 w-16 cursor-pointer rounded border-0 bg-transparent p-0"
-              aria-label="Measurement Color"
-            />
+            {/* A stored color from outside this set (picked with the old color
+                wheel) stays in use; then no swatch reads as active. */}
+            <div className="flex shrink-0 gap-2">
+              {MEASUREMENT_COLORS.map(swatch => {
+                const isActive =
+                  (state.annotationColor ?? DEFAULT_ANNOTATION_COLOR).toLowerCase() === swatch;
+                return (
+                  <button
+                    key={swatch}
+                    type="button"
+                    aria-label={`Measurement color ${swatch}`}
+                    aria-pressed={isActive}
+                    onClick={() =>
+                      setState(s => ({
+                        ...s,
+                        // The default is stored as "no choice" so reset and default agree.
+                        annotationColor: swatch === DEFAULT_ANNOTATION_COLOR ? null : swatch,
+                      }))
+                    }
+                    className={`h-[26px] w-[26px] cursor-pointer rounded-md border-0 p-0 ${
+                      isActive
+                        ? 'ring-muted-foreground ring-offset-muted ring-1 ring-offset-2'
+                        : 'ring-input ring-1 ring-inset'
+                    }`}
+                    style={{ background: swatch }}
+                  />
+                );
+              })}
+            </div>
           </div>
         </UserPreferencesModal.HotkeysGrid>
 
