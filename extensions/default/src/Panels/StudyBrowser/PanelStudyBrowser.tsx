@@ -403,7 +403,7 @@ function PanelStudyBrowser({
   );
 
   // Radimal: outline the series the latest completed consultation covered,
-  // and say how many came in after (Reporter lists the images it had by then). Only
+  // and say how many came in after (Reporter lists the images received after). Only
   // for the studies being read, and only once something came in after.
   const [coverages, setCoverages] = useState([]);
   // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
@@ -421,7 +421,15 @@ function PanelStudyBrowser({
             .filter(item => item.StudyInstanceUID === StudyInstanceUID)
             .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
             .filter(Boolean);
-          const coverage = await getConsultCoverage(series, getLatestConsult(StudyInstanceUID));
+          // Every instance the viewer holds for the study, to match Reporter's image count.
+          const viewerImageCount = (
+            DicomMetadataStore.getStudy(StudyInstanceUID)?.series ?? []
+          ).reduce((sum, { instances }) => sum + (instances?.length ?? 0), 0);
+          const coverage = await getConsultCoverage(
+            series,
+            getLatestConsult(StudyInstanceUID),
+            viewerImageCount
+          );
           return coverage && { ...coverage, StudyInstanceUID };
         })
       );

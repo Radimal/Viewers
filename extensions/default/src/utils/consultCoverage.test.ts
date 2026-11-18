@@ -34,35 +34,34 @@ describe('getConsultCoverage', () => {
     instances: sops.map(sop => instance(uid, sop)),
   });
   const displaySets = [series('a', '1', '2'), series('b', '3', '4'), series('c', '5')];
-  const consult = covered => ({
+  const consult = (late, imageCount = 5) => ({
     completedAt: 1000,
-    coveredInstanceIds: new Set(covered.map(([s, sop]) => orthancId(instance(s, sop)))),
+    imageCount,
+    lateInstanceIds: new Set(late.map(([s, sop]) => orthancId(instance(s, sop)))),
   });
 
-  it('covers a series only when Reporter had every image by the consult', async () => {
-    // b/4 came later; c/5 is unknown to Reporter (arrived while open, or not recorded yet).
+  it('a series with any image received after the consult is not covered', async () => {
     const coverage = await getConsultCoverage(
       displaySets,
       consult([
-        ['a', '1'],
-        ['a', '2'],
-        ['b', '3'],
-      ])
+        ['b', '4'],
+        ['c', '5'],
+      ]),
+      5
     );
     expect([...coverage.covered]).toEqual(['a']);
     expect(coverage).toMatchObject({ completedAt: 1000, total: 3, after: 2 });
   });
 
-  it('shows nothing when every series was covered, or there is no consult', async () => {
-    const all = consult([
-      ['a', '1'],
-      ['a', '2'],
-      ['b', '3'],
-      ['b', '4'],
-      ['c', '5'],
-    ]);
-    expect(await getConsultCoverage(displaySets, all)).toBe(null);
-    expect(await getConsultCoverage(displaySets, null)).toBe(null);
+  it("shows nothing when the viewer's image count differs from Reporter's", async () => {
+    // A 6th image Reporter hasn't recorded (still arriving, or reduced out of the consult).
+    expect(await getConsultCoverage(displaySets, consult([['c', '5']]), 6)).toBe(null);
+  });
+
+  it('shows nothing when nothing arrived after, or there is no consult', async () => {
+    expect(await getConsultCoverage(displaySets, consult([]), 5)).toBe(null);
+    expect(await getConsultCoverage(displaySets, consult([['z', '9']]), 5)).toBe(null);
+    expect(await getConsultCoverage(displaySets, null, 5)).toBe(null);
   });
 });
 
@@ -71,23 +70,22 @@ describe('parseConsultCoverage', () => {
     expect(
       parseConsultCoverage({
         completed_at: '2026-11-02T10:00:00+00:00',
-        covered_image_ids: ['x', 'y'],
+        image_count: 7,
+        late_image_ids: ['x'],
       })
     ).toEqual({
       completedAt: Date.parse('2026-11-02T10:00:00Z'),
-      coveredInstanceIds: new Set(['x', 'y']),
+      imageCount: 7,
+      lateInstanceIds: new Set(['x']),
     });
   });
 
   it('reads completed_at without an offset as UTC and is null for odd replies', () => {
-    expect(
-      parseConsultCoverage({ completed_at: '2026-11-02T10:00:00', covered_image_ids: [] })
-        .completedAt
-    ).toBe(Date.parse('2026-11-02T10:00:00Z'));
+    const ok = { completed_at: '2026-11-02T10:00:00', image_count: 1, late_image_ids: [] };
+    expect(parseConsultCoverage(ok).completedAt).toBe(Date.parse('2026-11-02T10:00:00Z'));
     expect(parseConsultCoverage(null)).toBe(null);
-    expect(parseConsultCoverage({ completed_at: null, covered_image_ids: [] })).toBe(null);
-    expect(
-      parseConsultCoverage({ completed_at: '2026-11-02T10:00:00Z', covered_image_ids: 'x' })
-    ).toBe(null);
+    expect(parseConsultCoverage({ ...ok, completed_at: null })).toBe(null);
+    expect(parseConsultCoverage({ ...ok, image_count: '1' })).toBe(null);
+    expect(parseConsultCoverage({ ...ok, late_image_ids: 'x' })).toBe(null);
   });
 });

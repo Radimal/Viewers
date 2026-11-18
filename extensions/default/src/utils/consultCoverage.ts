@@ -2,10 +2,9 @@ import type { LatestConsult } from './radimalCaseStatus';
 
 /**
  * Radimal: which series a completed consultation covered. Reporter's
- * GET /case lists the Orthanc IDs of images we had when the study's latest
- * consult completed (medical_images.created_at). A series is covered only if
- * every image is listed, so an image Reporter doesn't know of (arrived later,
- * still being recorded, or the list is missing) is never shown as read.
+ * GET /case gives the study's latest completed consult, how many images it
+ * has, and the Orthanc IDs of those received after the consult
+ * (medical_images.created_at). Series with none of those were covered.
  */
 
 const orthancIdBySOP = new Map<string, Promise<string>>();
@@ -40,21 +39,24 @@ export type ConsultCoverage = {
 
 /**
  * Coverage for one study's image series. null when there is nothing to show:
- * no completed consult, or nothing received after it (then every series was
- * read, and outlining them all would only be noise).
+ * no completed consult, nothing received after it (every series was read),
+ * or the viewer holds a different number of images than Reporter. Images
+ * Reporter hasn't recorded (still arriving, or reduced out of the consult)
+ * can't be placed, so nothing is outlined rather than something wrongly.
  */
 export async function getConsultCoverage(
   displaySets,
-  consult: LatestConsult | null | undefined
+  consult: LatestConsult | null | undefined,
+  viewerImageCount: number
 ): Promise<ConsultCoverage | null> {
-  if (!consult) {
+  if (!consult?.lateInstanceIds.size || viewerImageCount !== consult.imageCount) {
     return null;
   }
   const covered = new Set<string>();
   let after = 0;
   for (const displaySet of displaySets) {
     const ids = await Promise.all((displaySet.instances ?? []).map(orthancInstanceId));
-    if (!ids.length || ids.some(id => !consult.coveredInstanceIds.has(id))) {
+    if (ids.some(id => consult.lateInstanceIds.has(id))) {
       after++;
     } else {
       covered.add(displaySet.displaySetInstanceUID);

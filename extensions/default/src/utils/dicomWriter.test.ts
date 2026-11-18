@@ -161,9 +161,7 @@ function readFileMetaTags(arrayBuffer: ArrayBuffer) {
       p += 8 + length;
     }
 
-    tags.push(
-      `${group.toString(16).padStart(4, '0')}${element.toString(16).padStart(4, '0')}`
-    );
+    tags.push(`${group.toString(16).padStart(4, '0')}${element.toString(16).padStart(4, '0')}`);
   }
 
   // The declared group length covers the meta elements exactly — a garbage
