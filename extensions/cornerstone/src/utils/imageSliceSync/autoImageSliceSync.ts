@@ -239,9 +239,12 @@ export function findUnlinkedSyncablePair({ servicesManager }): {
       if (viewportType && viewportType !== 'stack') {
         return null;
       }
-      const displaySet = displaySetService.getDisplaySetByUID(
-        viewport.displaySetInstanceUIDs?.[0]
-      );
+      // Empty viewports have no UID, and getDisplaySetByUID throws on undefined.
+      const uid = viewport.displaySetInstanceUIDs?.[0];
+      if (!uid) {
+        return null;
+      }
+      const displaySet = displaySetService.getDisplaySetByUID(uid);
       const metadata = displaySet?.isReconstructable
         ? getViewportMetadata(viewport, displaySetService)
         : null;
