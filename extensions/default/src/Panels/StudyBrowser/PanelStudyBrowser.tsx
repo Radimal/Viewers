@@ -403,8 +403,9 @@ function PanelStudyBrowser({
   );
 
   // Radimal: outline the series the latest completed consultation covered,
-  // and say how many came in after (Reporter lists the images received after). Only
-  // for the studies being read, and only once something came in after.
+  // and say how many came in after (Reporter lists the series Orthanc had
+  // finished by then). Only for the studies being read, and only once
+  // something came in after.
   const [coverages, setCoverages] = useState([]);
   // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
   const imageSeries = displaySets.filter(item => item.componentType !== 'thumbnailNoImage');
@@ -413,33 +414,29 @@ function PanelStudyBrowser({
     .join();
   useEffect(() => {
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      const results = await Promise.all(
-        StudyInstanceUIDs.map(async StudyInstanceUID => {
-          await ensureCaseStatus(StudyInstanceUID);
-          const series = imageSeries
-            .filter(item => item.StudyInstanceUID === StudyInstanceUID)
-            .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
-            .filter(Boolean);
-          // Every instance the viewer holds for the study, to match Reporter's image count.
-          const viewerImageCount = (
-            DicomMetadataStore.getStudy(StudyInstanceUID)?.series ?? []
-          ).reduce((sum, { instances }) => sum + (instances?.length ?? 0), 0);
-          const coverage = await getConsultCoverage(
-            series,
-            getLatestConsult(StudyInstanceUID),
-            viewerImageCount
-          );
-          return coverage && { ...coverage, StudyInstanceUID };
-        })
-      );
+    Promise.all(
+      StudyInstanceUIDs.map(async StudyInstanceUID => {
+        await ensureCaseStatus(StudyInstanceUID);
+        const series = imageSeries
+          .filter(item => item.StudyInstanceUID === StudyInstanceUID)
+          .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
+          .filter(Boolean);
+        const coverage = getConsultCoverage(
+          series,
+          getLatestConsult(StudyInstanceUID),
+          SeriesInstanceUID =>
+            DicomMetadataStore.getSeries(StudyInstanceUID, SeriesInstanceUID)?.instances.length ??
+            Infinity
+        );
+        return coverage && { ...coverage, StudyInstanceUID };
+      })
+    ).then(results => {
       if (!cancelled) {
         setCoverages(results.filter(Boolean));
       }
-    }, 2000);
+    });
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [imageSeriesKey, StudyInstanceUIDs.join()]);
   const outlinedDisplaySets = coverages.length

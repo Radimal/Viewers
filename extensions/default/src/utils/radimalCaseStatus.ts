@@ -10,11 +10,7 @@ import { utils } from '@ohif/core';
 const caseStatusByStudy = new Map<string, boolean>();
 // Radimal: the latest completed consultation per study, for the Studies
 // panel's "covered by the consultation" outline. null = none completed.
-export type LatestConsult = {
-  completedAt: number;
-  imageCount: number;
-  lateInstanceIds: Set<string>;
-};
+export type LatestConsult = { completedAt: number; coveredSeries: Map<string, number> };
 const latestConsultByStudy = new Map<string, LatestConsult | null>();
 const pendingLookups = new Map<string, Promise<boolean>>();
 const listeners = new Set<() => void>();
@@ -87,16 +83,20 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
 }
 
 /**
- * Reporter's consult_coverage: the study's latest completed consult, how many
- * DICOM images Reporter has, and the Orthanc IDs of those received after the
- * consult. Never lets an odd reply break the View Report lookup around it.
+ * Reporter's consult_coverage: the study's latest completed consult and the
+ * series it covered (SeriesInstanceUID -> image count). Never lets an odd
+ * reply break the View Report lookup around it.
  */
 export function parseConsultCoverage(coverage): LatestConsult | null {
   const completedAt = parseUtc(coverage?.completed_at);
-  const { image_count: imageCount, late_image_ids: late } = coverage ?? {};
-  return Number.isFinite(completedAt) && Number.isInteger(imageCount) && Array.isArray(late)
-    ? { completedAt, imageCount, lateInstanceIds: new Set(late) }
-    : null;
+  const series = coverage?.covered_series;
+  if (!Number.isFinite(completedAt) || !series || typeof series !== 'object') {
+    return null;
+  }
+  const coveredSeries = new Map<string, number>(
+    Object.entries(series).filter((entry): entry is [string, number] => Number.isInteger(entry[1]))
+  );
+  return { completedAt, coveredSeries };
 }
 
 /** An ISO timestamp as UTC ms; one without an offset is read as UTC, not browser-local. */
