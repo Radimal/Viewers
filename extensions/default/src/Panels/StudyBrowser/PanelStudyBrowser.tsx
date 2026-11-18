@@ -7,6 +7,8 @@ import { PanelStudyBrowserHeader } from './PanelStudyBrowserHeader';
 import { defaultActionIcons } from './constants';
 import MoreDropdownMenu from '../../Components/MoreDropdownMenu';
 import RadimalCaseIndicator from '../../Components/RadimalCaseIndicator';
+import ConsultCoverageBanner, { CONSULT_AMBER_RING } from '../../Components/ConsultCoverageBanner';
+import { fetchConsultCoverage, getConsultCoverage } from '../../utils/consultCoverage';
 import { CallbackCustomization } from 'platform/core/src/types';
 import { type TabsProps } from '@ohif/core/src/utils/createStudyBrowserTabs';
 import { thumbnailNoImageModalities } from '@ohif/core/src/utils/thumbnailNoImageModalities';
@@ -399,7 +401,56 @@ function PanelStudyBrowser({
       : study
   );
 
-  const tabs = createStudyBrowserTabs(StudyInstanceUIDs, shownStudyDisplayList, displaySets);
+  // Radimal: outline the series the latest completed consultation covered,
+  // and say how many came in after (Reporter's coverage endpoint lists the
+  // series Orthanc had finished by then). Only for the studies being read,
+  // and only once something came in after.
+  const [coverages, setCoverages] = useState([]);
+  // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
+  const imageSeries = displaySets.filter(item => item.componentType !== 'thumbnailNoImage');
+  const imageSeriesKey = imageSeries
+    .map(item => `${item.displaySetInstanceUID}:${item.numInstances}`)
+    .join();
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      StudyInstanceUIDs.map(async StudyInstanceUID => {
+        const consult = await fetchConsultCoverage(StudyInstanceUID);
+        const series = imageSeries
+          .filter(item => item.StudyInstanceUID === StudyInstanceUID)
+          .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
+          .filter(Boolean);
+        const coverage = getConsultCoverage(
+          series,
+          consult,
+          SeriesInstanceUID =>
+            DicomMetadataStore.getSeries(StudyInstanceUID, SeriesInstanceUID)?.instances.length ??
+            Infinity
+        );
+        return coverage && { ...coverage, StudyInstanceUID };
+      })
+    ).then(results => {
+      if (!cancelled) {
+        setCoverages(results.filter(Boolean));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageSeriesKey, StudyInstanceUIDs.join()]);
+  const outlinedDisplaySets = coverages.length
+    ? displaySets.map(item =>
+        coverages.some(coverage => coverage.covered.has(item.displaySetInstanceUID))
+          ? { ...item, className: CONSULT_AMBER_RING }
+          : item
+      )
+    : displaySets;
+
+  const tabs = createStudyBrowserTabs(
+    StudyInstanceUIDs,
+    shownStudyDisplayList,
+    outlinedDisplaySets
+  );
 
   // TODO: Should not fire this on "close"
   function _handleStudyClick(StudyInstanceUID) {
@@ -473,6 +524,21 @@ function PanelStudyBrowser({
         />
       </>
 
+      {coverages.map(coverage => {
+        // Several banners: say which study each is about.
+        const study = studyDisplayList.find(s => s.studyInstanceUid === coverage.StudyInstanceUID);
+        return (
+          <ConsultCoverageBanner
+            key={coverage.StudyInstanceUID}
+            coverage={coverage}
+            study={
+              coverages.length > 1 && study
+                ? [study.date, study.description].filter(Boolean).join(' ')
+                : undefined
+            }
+          />
+        );
+      })}
       <StudyBrowser
         tabs={tabs}
         servicesManager={servicesManager}
