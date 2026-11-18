@@ -416,6 +416,26 @@ export function capturePostHogEvent(name: string, properties?: Record<string, un
   }
 }
 
+/**
+ * Reports to PostHog Error Tracking. Fed by the route ErrorBoundary's onError,
+ * which already sees render errors, window errors and unhandled rejections
+ * (minus transient image-request failures). capture_exceptions is deliberately
+ * left off: it would double-report those and add the transport noise back.
+ */
+export function capturePostHogException(
+  error: unknown,
+  properties?: Record<string, unknown>
+): void {
+  if (!isReady()) {
+    return;
+  }
+  try {
+    posthog.captureException(error, { ...BUILD_PROPS, ...properties });
+  } catch (e) {
+    console.warn('PostHog captureException failed', e);
+  }
+}
+
 export function resetPostHog(): void {
   if (!isReady()) {
     return;
