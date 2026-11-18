@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Header, Icons, useModal } from '@ohif/ui-next';
-import { useSystem } from '@ohif/core';
+import { useSystem, utils } from '@ohif/core';
 import { Toolbar } from '../Toolbar/Toolbar';
 import HeaderPatientInfo from './HeaderPatientInfo';
 import { PatientInfoVisibility } from './HeaderPatientInfo/HeaderPatientInfo';
@@ -135,7 +135,6 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
     'ohif.userPreferencesModal'
   ) as Types.MenuComponentCustomization;
 
-
   // Radimal: invalidate the CDN cache for the current study, then hard-reload
   // with the local caches cleared. Ported from the fork; endpoint comes from
   // orthancUtils.reporterOriginFor via InvalidationService.
@@ -185,7 +184,9 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
       console.error('Error invalidating cache:', error);
       uiNotificationService.show({
         title: 'Invalidation Failed',
-        message: `Failed to invalidate cache: ${error.message || 'Unknown error'}. Performing hard reload...`,
+        message: `Failed to invalidate cache: ${
+          error.message || 'Unknown error'
+        }. Performing hard reload...`,
         type: 'error',
         duration: 3000,
       });
@@ -213,6 +214,7 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
       : window.open(window.location.href, newId);
 
     if (newWin) {
+      utils.orthancUtils.registerReporterAuthChild(newWin);
       // Drop the consumed entry (it may carry a legacy timestamped id) and register the
       // canonical one; the new window's own heartbeat keeps it fresh from here.
       const remaining = windows.filter(win => win !== reusable && win.id !== newId);
