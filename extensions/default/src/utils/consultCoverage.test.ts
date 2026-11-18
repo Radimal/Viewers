@@ -1,7 +1,7 @@
 import { createHash, webcrypto } from 'crypto';
 import { TextEncoder } from 'util';
 import { getConsultCoverage, orthancInstanceId } from './consultCoverage';
-import { latestCompletedConsult } from './radimalCaseStatus';
+import { parseConsultCoverage } from './radimalCaseStatus';
 
 // jsdom has no Web Crypto or TextEncoder; browsers do (https and localhost).
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
@@ -34,60 +34,60 @@ describe('getConsultCoverage', () => {
     instances: sops.map(sop => instance(uid, sop)),
   });
   const displaySets = [series('a', '1', '2'), series('b', '3', '4'), series('c', '5')];
-  const consult = late => ({
+  const consult = covered => ({
     completedAt: 1000,
-    lateInstanceIds: new Set(late.map(([s, sop]) => orthancId(instance(s, sop)))),
+    coveredInstanceIds: new Set(covered.map(([s, sop]) => orthancId(instance(s, sop)))),
   });
 
-  it('a series with any image received after the consult is not covered', async () => {
+  it('covers a series only when Reporter had every image by the consult', async () => {
+    // b/4 came later; c/5 is unknown to Reporter (arrived while open, or not recorded yet).
     const coverage = await getConsultCoverage(
       displaySets,
       consult([
-        ['b', '4'],
-        ['c', '5'],
+        ['a', '1'],
+        ['a', '2'],
+        ['b', '3'],
       ])
     );
     expect([...coverage.covered]).toEqual(['a']);
     expect(coverage).toMatchObject({ completedAt: 1000, total: 3, after: 2 });
   });
 
-  it('an image that came in after the study opened is never covered', async () => {
-    // Reporter's list (read at open) lacks '6'; the viewer only had 1-5 then.
-    const grown = [...displaySets, series('d', '6')];
-    const coverage = await getConsultCoverage(
-      grown,
-      consult([]),
-      new Set(['1', '2', '3', '4', '5'])
-    );
-    expect([...coverage.covered]).toEqual(['a', 'b', 'c']);
-    expect(coverage).toMatchObject({ total: 4, after: 1 });
-  });
-
-  it('shows nothing when nothing arrived after, or there is no consult', async () => {
-    expect(await getConsultCoverage(displaySets, consult([]))).toBe(null);
-    expect(await getConsultCoverage(displaySets, consult([['z', '9']]))).toBe(null);
+  it('shows nothing when every series was covered, or there is no consult', async () => {
+    const all = consult([
+      ['a', '1'],
+      ['a', '2'],
+      ['b', '3'],
+      ['b', '4'],
+      ['c', '5'],
+    ]);
+    expect(await getConsultCoverage(displaySets, all)).toBe(null);
     expect(await getConsultCoverage(displaySets, null)).toBe(null);
   });
 });
 
-describe('latestCompletedConsult', () => {
-  it("takes the latest completed_at and every case's late images", () => {
-    const consult = latestCompletedConsult([
-      {
-        consultations: [{ completed_at: '2026-10-30T16:12:00+00:00' }],
-        images_after_consult: ['x'],
-      },
-      {
-        consultations: [{ completed_at: null }, { completed_at: '2026-11-02T10:00:00Z' }],
-        images_after_consult: ['y'],
-      },
-    ]);
-    expect(consult.completedAt).toBe(Date.parse('2026-11-02T10:00:00Z'));
-    expect([...consult.lateInstanceIds]).toEqual(['x', 'y']);
+describe('parseConsultCoverage', () => {
+  it("reads Reporter's consult_coverage", () => {
+    expect(
+      parseConsultCoverage({
+        completed_at: '2026-11-02T10:00:00+00:00',
+        covered_image_ids: ['x', 'y'],
+      })
+    ).toEqual({
+      completedAt: Date.parse('2026-11-02T10:00:00Z'),
+      coveredInstanceIds: new Set(['x', 'y']),
+    });
   });
 
-  it('is null without a completed consult', () => {
-    expect(latestCompletedConsult([{ consultations: [{ completed_at: null }] }])).toBe(null);
-    expect(latestCompletedConsult(undefined)).toBe(null);
+  it('reads completed_at without an offset as UTC and is null for odd replies', () => {
+    expect(
+      parseConsultCoverage({ completed_at: '2026-11-02T10:00:00', covered_image_ids: [] })
+        .completedAt
+    ).toBe(Date.parse('2026-11-02T10:00:00Z'));
+    expect(parseConsultCoverage(null)).toBe(null);
+    expect(parseConsultCoverage({ completed_at: null, covered_image_ids: [] })).toBe(null);
+    expect(
+      parseConsultCoverage({ completed_at: '2026-11-02T10:00:00Z', covered_image_ids: 'x' })
+    ).toBe(null);
   });
 });

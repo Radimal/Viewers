@@ -403,7 +403,7 @@ function PanelStudyBrowser({
   );
 
   // Radimal: outline the series the latest completed consultation covered,
-  // and say how many came in after (Reporter lists the late images). Only
+  // and say how many came in after (Reporter lists the images it had by then). Only
   // for the studies being read, and only once something came in after.
   const [coverages, setCoverages] = useState([]);
   // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
@@ -411,13 +411,6 @@ function PanelStudyBrowser({
   const imageSeriesKey = imageSeries
     .map(item => `${item.displaySetInstanceUID}:${item.numInstances}`)
     .join();
-  // SOPs each study had once its series first settled. Anything the viewer
-  // gets later came in while the case was open, so after the consult: it is
-  // never outlined, even when Reporter's list (read once, at open) lacks it.
-  // ponytail: a series that is still loading after a 2s lull at open counts
-  // as late (no outline, never a false one); hook into the live poll if that
-  // shows up in practice.
-  const sopsAtOpen = useRef(new Map<string, Set<string>>());
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -428,17 +421,7 @@ function PanelStudyBrowser({
             .filter(item => item.StudyInstanceUID === StudyInstanceUID)
             .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
             .filter(Boolean);
-          if (series.length && !sopsAtOpen.current.has(StudyInstanceUID)) {
-            sopsAtOpen.current.set(
-              StudyInstanceUID,
-              new Set(series.flatMap(ds => (ds.instances ?? []).map(i => i.SOPInstanceUID)))
-            );
-          }
-          const coverage = await getConsultCoverage(
-            series,
-            getLatestConsult(StudyInstanceUID),
-            sopsAtOpen.current.get(StudyInstanceUID)
-          );
+          const coverage = await getConsultCoverage(series, getLatestConsult(StudyInstanceUID));
           return coverage && { ...coverage, StudyInstanceUID };
         })
       );

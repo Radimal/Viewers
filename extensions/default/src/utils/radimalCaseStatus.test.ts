@@ -4,16 +4,12 @@ jest.mock('@ohif/core', () => ({
 
 import { ensureCaseStatus, getLatestConsult, latestCompletedConsult } from './radimalCaseStatus';
 
-const reply = late => ({
+const reply = covered => ({
   ok: true,
   json: () =>
     Promise.resolve({
-      cases: [
-        {
-          consultations: [{ s3_url: 'r.pdf', completed_at: '2026-11-02T10:00:00+00:00' }],
-          images_after_consult: late,
-        },
-      ],
+      cases: [{ consultations: [{ s3_url: 'r.pdf', completed_at: '2026-11-02T10:00:00+00:00' }] }],
+      consult_coverage: { completed_at: '2026-11-02T10:00:00+00:00', covered_image_ids: covered },
     }),
 });
 
@@ -23,23 +19,6 @@ describe('radimalCaseStatus', () => {
     expect(await ensureCaseStatus('1.2.3')).toBe(true);
     expect(await ensureCaseStatus('1.2.3')).toBe(true);
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect([...getLatestConsult('1.2.3').lateInstanceIds]).toEqual(['a']);
-  });
-
-  it('reads completed_at without an offset as UTC and tolerates odd replies', () => {
-    expect(
-      latestCompletedConsult([{ consultations: [{ completed_at: '2026-11-02T10:00:00' }] }])
-        .completedAt
-    ).toBe(Date.parse('2026-11-02T10:00:00Z'));
-    expect(
-      latestCompletedConsult([
-        {
-          consultations: [null, { completed_at: '2026-11-02T10:00:00Z' }],
-          images_after_consult: 'x',
-        },
-        null,
-      ])
-    ).toEqual({ completedAt: Date.parse('2026-11-02T10:00:00Z'), lateInstanceIds: new Set() });
-    expect(latestCompletedConsult({ not: 'an array' })).toBe(null);
+    expect([...getLatestConsult('1.2.3').coveredInstanceIds]).toEqual(['a']);
   });
 });

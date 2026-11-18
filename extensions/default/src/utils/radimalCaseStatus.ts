@@ -10,7 +10,7 @@ import { utils } from '@ohif/core';
 const caseStatusByStudy = new Map<string, boolean>();
 // Radimal: the latest completed consultation per study, for the Studies
 // panel's "covered by the consultation" outline. null = none completed.
-export type LatestConsult = { completedAt: number; lateInstanceIds: Set<string> };
+export type LatestConsult = { completedAt: number; coveredInstanceIds: Set<string> };
 const latestConsultByStudy = new Map<string, LatestConsult | null>();
 const pendingLookups = new Map<string, Promise<boolean>>();
 const listeners = new Set<() => void>();
@@ -69,7 +69,7 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
     .then(caseData => {
       const result = Boolean(caseData?.cases?.[0]?.consultations?.[0]?.s3_url);
       caseStatusByStudy.set(studyInstanceUID, result);
-      latestConsultByStudy.set(studyInstanceUID, latestCompletedConsult(caseData?.cases));
+      latestConsultByStudy.set(studyInstanceUID, parseConsultCoverage(caseData?.consult_coverage));
       notify();
       return result;
     })
@@ -83,24 +83,16 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
 }
 
 /**
- * Latest completed_at across the study's cases, with the Orthanc IDs of
- * images Reporter says arrived after each case's latest completed consult.
+ * Reporter's consult_coverage: the study's latest completed consult and the
+ * Orthanc IDs of images it had by then. Never lets an odd reply break the
+ * View Report lookup around it.
  */
-export function latestCompletedConsult(cases): LatestConsult | null {
-  let completedAt = -Infinity;
-  const lateInstanceIds = new Set<string>();
-  // Never let an odd reply break the View Report lookup around it.
-  const list = value => (Array.isArray(value) ? value : []);
-  list(cases).forEach(caseData => {
-    list(caseData?.consultations).forEach(consultation => {
-      const time = parseUtc(consultation?.completed_at);
-      if (Number.isFinite(time)) {
-        completedAt = Math.max(completedAt, time);
-      }
-    });
-    list(caseData?.images_after_consult).forEach(id => lateInstanceIds.add(id));
-  });
-  return Number.isFinite(completedAt) ? { completedAt, lateInstanceIds } : null;
+export function parseConsultCoverage(coverage): LatestConsult | null {
+  const completedAt = parseUtc(coverage?.completed_at);
+  const ids = coverage?.covered_image_ids;
+  return Number.isFinite(completedAt) && Array.isArray(ids)
+    ? { completedAt, coveredInstanceIds: new Set(ids) }
+    : null;
 }
 
 /** An ISO timestamp as UTC ms; one without an offset is read as UTC, not browser-local. */
