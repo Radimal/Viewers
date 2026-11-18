@@ -242,6 +242,17 @@ describe('_initPostHogUnsafe wiring', () => {
     });
   });
 
+  it('reports boundary errors as $exception with build identity and context', async () => {
+    const { mod, calls } = await initFresh({ commitHash: 'abc123def' });
+    mod.capturePostHogException(new Error('boom'), { context: 'Route viewer' });
+    const event = calls.find(c => c[0] === '$exception');
+    expect(event[1]).toMatchObject({
+      build_commit: 'abc123def',
+      context: 'Route viewer',
+      $exception_list: [expect.objectContaining({ value: 'boom' })],
+    });
+  });
+
   // The case above pins ONE event on the helper's own path. This one pins the
   // whole surface: every event this module emits during a real boot, plus a hide
   // and an extension event, must carry the baked commit.
