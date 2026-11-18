@@ -10,7 +10,11 @@ describe('getConsultCoverage', () => {
   // Images the viewer holds per series (all instances, as Orthanc counts them).
   const held = { a: 2, b: 3, c: 1 };
   const imagesInSeries = uid => held[uid];
-  const consult = covered => ({ completedAt: 1000, coveredSeries: new Map(covered) });
+  const consult = (covered, images = []) => ({
+    completedAt: 1000,
+    coveredSeries: new Map(covered),
+    coveredImages: new Map(images.map(([uid, sops]) => [uid, new Set(sops)])),
+  });
 
   it('outlines only listed series the viewer has no more images of', () => {
     const coverage = getConsultCoverage(
@@ -31,6 +35,19 @@ describe('getConsultCoverage', () => {
       'a1',
       'a2',
     ]);
+  });
+
+  it('judges an X-ray thumbnail by its own image when its series grew', () => {
+    const xray = (uid, sop) => ({
+      displaySetInstanceUID: uid,
+      SeriesInstanceUID: 'x',
+      instances: [{ SOPInstanceUID: sop }],
+    });
+    const thumbs = [xray('v1', 'sop-1'), xray('v2', 'sop-2'), xray('v3', 'sop-3')];
+    // The series grew (not in coveredSeries); Reporter had sop-1 and sop-2 by the consult.
+    const coverage = getConsultCoverage(thumbs, consult([], [['x', ['sop-1', 'sop-2']]]), () => 3);
+    expect([...coverage.covered]).toEqual(['v1', 'v2']);
+    expect(coverage).toMatchObject({ total: 3, after: 1 });
   });
 
   it('shows nothing when every series was covered, or there is no consult', () => {
@@ -54,7 +71,15 @@ describe('parseConsultCoverage', () => {
     ).toEqual({
       completedAt: Date.parse('2026-11-02T10:00:00Z'),
       coveredSeries: new Map([['x', 7]]),
+      coveredImages: new Map(),
     });
+    expect(
+      parseConsultCoverage({
+        completed_at: '2026-11-02T10:00:00Z',
+        covered_series: {},
+        covered_images: { x: ['a'], y: 'bad' },
+      }).coveredImages
+    ).toEqual(new Map([['x', new Set(['a'])]]));
   });
 
   it('reads completed_at without an offset as UTC and is null for odd replies', () => {

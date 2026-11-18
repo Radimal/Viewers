@@ -10,7 +10,11 @@ import { utils } from '@ohif/core';
 const caseStatusByStudy = new Map<string, boolean>();
 // Radimal: the latest completed consultation per study, for the Studies
 // panel's "covered by the consultation" outline. null = none completed.
-export type LatestConsult = { completedAt: number; coveredSeries: Map<string, number> };
+export type LatestConsult = {
+  completedAt: number;
+  coveredSeries: Map<string, number>;
+  coveredImages: Map<string, Set<string>>;
+};
 const latestConsultByStudy = new Map<string, LatestConsult | null>();
 const pendingLookups = new Map<string, Promise<boolean>>();
 const listeners = new Set<() => void>();
@@ -83,20 +87,28 @@ export function ensureCaseStatus(studyInstanceUID: string): Promise<boolean> {
 }
 
 /**
- * Reporter's consult_coverage: the study's latest completed consult and the
- * series it covered (SeriesInstanceUID -> image count). Never lets an odd
- * reply break the View Report lookup around it.
+ * Reporter's consult_coverage: the study's latest completed consult, the
+ * series it covered (SeriesInstanceUID -> image count), and for small series
+ * that grew since, the images it covered (SeriesInstanceUID ->
+ * SOPInstanceUIDs). Never lets an odd reply break the View Report lookup.
  */
 export function parseConsultCoverage(coverage): LatestConsult | null {
   const completedAt = parseUtc(coverage?.completed_at);
-  const series = coverage?.covered_series;
-  if (!Number.isFinite(completedAt) || !series || typeof series !== 'object') {
+  const isObject = value => value && typeof value === 'object' && !Array.isArray(value);
+  if (!Number.isFinite(completedAt) || !isObject(coverage.covered_series)) {
     return null;
   }
   const coveredSeries = new Map<string, number>(
-    Object.entries(series).filter((entry): entry is [string, number] => Number.isInteger(entry[1]))
+    Object.entries(coverage.covered_series).filter((entry): entry is [string, number] =>
+      Number.isInteger(entry[1])
+    )
   );
-  return { completedAt, coveredSeries };
+  const coveredImages = new Map<string, Set<string>>(
+    Object.entries(isObject(coverage.covered_images) ? coverage.covered_images : {})
+      .filter(([, sops]) => Array.isArray(sops))
+      .map(([uid, sops]) => [uid, new Set(sops as string[])])
+  );
+  return { completedAt, coveredSeries, coveredImages };
 }
 
 /** An ISO timestamp as UTC ms; one without an offset is read as UTC, not browser-local. */

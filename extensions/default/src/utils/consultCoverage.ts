@@ -3,7 +3,8 @@ import type { LatestConsult } from './radimalCaseStatus';
 /**
  * Radimal: which series a completed consultation covered. Reporter's
  * GET /case lists the series Orthanc had finished receiving by the study's
- * latest completed consult, with their image counts.
+ * latest completed consult, with their image counts, and for small series
+ * that grew since (X-rays, one thumbnail per image) the images it had.
  */
 
 export type ConsultCoverage = {
@@ -14,9 +15,11 @@ export type ConsultCoverage = {
 };
 
 /**
- * Coverage for one study's image series. A series is covered when Reporter
- * lists it and the viewer holds no more of its images than Reporter counted,
- * so a series that is new or grew since is never shown as read.
+ * Coverage for one study's image series (thumbnails). One is covered when
+ * Reporter lists its series and the viewer holds no more of the series'
+ * images than Reporter counted, or when Reporter lists every one of its
+ * images. So a series or image that is new or grew since is never shown as
+ * read.
  * imagesInSeries counts every instance held, hidden duplicates included,
  * as Orthanc does. null when there is nothing to show: no completed
  * consult, or every series covered.
@@ -31,10 +34,13 @@ export function getConsultCoverage(
   }
   const covered = new Set<string>(
     displaySets
-      .filter(
-        ({ SeriesInstanceUID }) =>
-          imagesInSeries(SeriesInstanceUID) <= consult.coveredSeries.get(SeriesInstanceUID)
-      )
+      .filter(({ SeriesInstanceUID, instances = [] }) => {
+        const images = consult.coveredImages.get(SeriesInstanceUID);
+        return (
+          imagesInSeries(SeriesInstanceUID) <= consult.coveredSeries.get(SeriesInstanceUID) ||
+          (instances.length > 0 && instances.every(i => images?.has(i.SOPInstanceUID)))
+        );
+      })
       .map(({ displaySetInstanceUID }) => displaySetInstanceUID)
   );
   const after = displaySets.length - covered.size;
