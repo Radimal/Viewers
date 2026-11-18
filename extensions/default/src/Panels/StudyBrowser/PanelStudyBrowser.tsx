@@ -8,8 +8,7 @@ import { defaultActionIcons } from './constants';
 import MoreDropdownMenu from '../../Components/MoreDropdownMenu';
 import RadimalCaseIndicator from '../../Components/RadimalCaseIndicator';
 import ConsultCoverageBanner, { CONSULT_AMBER_RING } from '../../Components/ConsultCoverageBanner';
-import { ensureCaseStatus, getLatestConsult } from '../../utils/radimalCaseStatus';
-import { getConsultCoverage } from '../../utils/consultCoverage';
+import { fetchConsultCoverage, getConsultCoverage } from '../../utils/consultCoverage';
 import { CallbackCustomization } from 'platform/core/src/types';
 import { type TabsProps } from '@ohif/core/src/utils/createStudyBrowserTabs';
 import { thumbnailNoImageModalities } from '@ohif/core/src/utils/thumbnailNoImageModalities';
@@ -403,9 +402,9 @@ function PanelStudyBrowser({
   );
 
   // Radimal: outline the series the latest completed consultation covered,
-  // and say how many came in after (Reporter lists the series Orthanc had
-  // finished by then). Only for the studies being read, and only once
-  // something came in after.
+  // and say how many came in after (Reporter's coverage endpoint lists the
+  // series Orthanc had finished by then). Only for the studies being read,
+  // and only once something came in after.
   const [coverages, setCoverages] = useState([]);
   // Image series only ("thumbnail", or "thumbnailTracked" in tracking modes).
   const imageSeries = displaySets.filter(item => item.componentType !== 'thumbnailNoImage');
@@ -416,14 +415,14 @@ function PanelStudyBrowser({
     let cancelled = false;
     Promise.all(
       StudyInstanceUIDs.map(async StudyInstanceUID => {
-        await ensureCaseStatus(StudyInstanceUID);
+        const consult = await fetchConsultCoverage(StudyInstanceUID);
         const series = imageSeries
           .filter(item => item.StudyInstanceUID === StudyInstanceUID)
           .map(item => displaySetService.getDisplaySetByUID(item.displaySetInstanceUID))
           .filter(Boolean);
         const coverage = getConsultCoverage(
           series,
-          getLatestConsult(StudyInstanceUID),
+          consult,
           SeriesInstanceUID =>
             DicomMetadataStore.getSeries(StudyInstanceUID, SeriesInstanceUID)?.instances.length ??
             Infinity

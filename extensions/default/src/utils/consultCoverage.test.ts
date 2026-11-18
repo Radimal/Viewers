@@ -1,5 +1,8 @@
-import { getConsultCoverage } from './consultCoverage';
-import { parseConsultCoverage } from './radimalCaseStatus';
+jest.mock('@ohif/core', () => ({
+  utils: { orthancUtils: { reporterOriginFor: () => 'https://reporter.test' } },
+}));
+
+import { fetchConsultCoverage, getConsultCoverage, parseConsultCoverage } from './consultCoverage';
 
 describe('getConsultCoverage', () => {
   const series = (uid, SeriesInstanceUID = uid) => ({
@@ -88,5 +91,26 @@ describe('parseConsultCoverage', () => {
     expect(parseConsultCoverage(null)).toBe(null);
     expect(parseConsultCoverage({ ...ok, completed_at: null })).toBe(null);
     expect(parseConsultCoverage({ ...ok, covered_series: null })).toBe(null);
+  });
+});
+
+describe('fetchConsultCoverage', () => {
+  const ok = { completed_at: '2026-11-02T10:00:00Z', covered_series: { s: 3 } };
+
+  it('fetches once per study from the coverage endpoint', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ consult_coverage: ok }) });
+    expect((await fetchConsultCoverage('1.2.3')).coveredSeries).toEqual(new Map([['s', 3]]));
+    await fetchConsultCoverage('1.2.3');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith('https://reporter.test/case/1.2.3/coverage');
+  });
+
+  it('is null on a failed lookup, and retries next time', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 });
+    expect(await fetchConsultCoverage('4.5.6')).toBe(null);
+    await fetchConsultCoverage('4.5.6');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });
