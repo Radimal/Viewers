@@ -38,7 +38,13 @@ const run = (displaySets, syncs = {}, viewportTypes = []) =>
           }),
         },
         displaySetService: {
-          getDisplaySetByUID: uid => displaySets.find(ds => ds.displaySetInstanceUID === uid),
+          // Like the real service: throws on a non-string UID.
+          getDisplaySetByUID: uid => {
+            if (typeof uid !== 'string') {
+              throw new Error('displaySetInstanceUid must be a string');
+            }
+            return displaySets.find(ds => ds.displaySetInstanceUID === uid);
+          },
         },
         syncGroupService: {
           getSynchronizersForViewport: id =>
@@ -97,6 +103,10 @@ describe('findUnlinkedSyncablePair', () => {
       instances: s.instances.map(i => ({ ...i, FrameOfReferenceUID: undefined })),
     });
     expect(reason([noFor(thin), noFor(thick)])).toBe(null);
+  });
+
+  it('skips empty viewports instead of throwing', () => {
+    expect(reason([thin, {}, thick])).toBe('syncable');
   });
 
   it('ignores MPR and 3D viewports', () => {
