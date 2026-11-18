@@ -24,12 +24,12 @@ import {
 describe('annotationColor', () => {
   beforeEach(() => localStorage.clear());
 
-  it('leaves the default yellow/green alone for readers who never picked a color', () => {
+  it('readers who never picked a color get pink in every state, not green when selected', () => {
     applyAnnotationColor();
-    expect(mockStyles.global.colorSelected).toBe('rgb(0, 220, 0)');
+    expect(mockStyles.global).toMatchObject({ color: '#fe01a1', colorSelected: '#fe01a1' });
   });
 
-  it('a pick colors every state and survives a reload; reset restores the defaults', () => {
+  it('a pick colors every state and survives a reload; reset restores the default', () => {
     saveAnnotationColor('#ff00ff');
     expect(mockStyles.global).toMatchObject({
       color: '#ff00ff',
@@ -42,10 +42,7 @@ describe('annotationColor', () => {
 
     saveAnnotationColor(null);
     expect(getAnnotationColor()).toBeNull();
-    expect(mockStyles.global).toMatchObject({
-      color: 'rgb(255, 255, 0)',
-      colorSelected: 'rgb(0, 220, 0)',
-    });
+    expect(mockStyles.global).toMatchObject({ color: '#fe01a1', colorSelected: '#fe01a1' });
   });
 
   it('another window saving or resetting the color updates this one', () => {
@@ -56,6 +53,6 @@ describe('annotationColor', () => {
 
     localStorage.removeItem('annotationColor');
     window.dispatchEvent(new StorageEvent('storage', { key: 'annotationColor' }));
-    expect(mockStyles.global.colorSelected).toBe('rgb(0, 220, 0)');
+    expect(mockStyles.global.colorSelected).toBe('#fe01a1');
   });
 });
