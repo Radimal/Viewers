@@ -260,15 +260,25 @@ function ViewerLayout({
         openerGoneTicks = 0;
       }
 
-      // Heartbeat: the primary reports presence, geometry, current study, and fade state to the
-      // radimal-vet opener on every tick — even when nothing changed — so the opener can tell
-      // the viewer is open without probing for it (probing via window.open would create one).
+      // Heartbeat: the primary reports presence, geometry, current study, fade state and page
+      // visibility to the radimal-vet opener on every tick — even when nothing changed — so the
+      // opener can tell the viewer is open without probing for it (probing via window.open would
+      // create one).
       // Runs before the localStorage bookkeeping so nothing can starve it.
       if (window.name === VIEWER_WINDOW_NAME && window.opener && !window.opener.closed) {
         const origin = getVetOrigin();
         if (origin) {
           const studyUid = new URLSearchParams(window.location.search).get('StudyInstanceUIDs');
-          window.opener.postMessage({ ...windowData, studyUid, faded: fadeRef.current }, origin);
+          // `visible` lets the opener start timing a read only once the viewer is actually shown.
+          window.opener.postMessage(
+            {
+              ...windowData,
+              studyUid,
+              faded: fadeRef.current,
+              visible: document.visibilityState === 'visible',
+            },
+            origin
+          );
         }
       }
 
