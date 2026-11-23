@@ -57,6 +57,7 @@
     "@ohif/i18n": "workspace:*",
     "@ohif/ui": "workspace:*",
     "@ohif/ui-next": "workspace:*",
+    "@sentry/react": "^10.78.0",
     "@svgr/webpack": "8.1.0",
     "@types/react": "18.3.23",
     "classnames": "2.5.1",

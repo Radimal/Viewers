@@ -18,6 +18,7 @@ import PropTypes from 'prop-types';
 import { routerBasename } from '../utils/publicUrl';
 import { useAppConfig } from '@state';
 import { history } from '../utils/history';
+import Sentry from '../utils/sentry';
 
 const NotFoundServer = ({
   message = 'Unable to query for studies at this time. Check your data source configuration or network connection',
@@ -155,6 +156,12 @@ const createRoutes = ({
       <ErrorBoundary
         context={`Route ${route.path}`}
         showErrorDetails={showErrorDetails}
+        onError={(error, componentStack, context) =>
+          Sentry.captureException(error, {
+            tags: { boundary: context },
+            contexts: componentStack ? { react: { componentStack } } : undefined,
+          })
+        }
       >
         <route.children
           {...rest}

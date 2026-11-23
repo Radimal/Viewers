@@ -1,6 +1,8 @@
 /**
  * Entry point for development and production PWA builds.
  */
+// First, so Sentry is initialized before any other app module runs.
+import './utils/sentry';
 import './chunk-error-handler';
 import 'regenerator-runtime/runtime';
 import { createRoot } from 'react-dom/client';
