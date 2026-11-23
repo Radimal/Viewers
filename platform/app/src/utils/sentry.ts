@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/react';
 import { isLocalEnvironment, normalizeCommit } from './updateDetection';
 
-// TODO: DSN of the viewer's Sentry project. Public by design, as in radimal-vet's src/utils/sentry.ts.
-const SENTRY_DSN = '';
+// radimal/radimal-viewer. Public by design, as in radimal-vet's src/utils/sentry.ts.
+const SENTRY_DSN = 'https://24eff3d1a2bafe1f7591ba38552641c7@o558129.ingest.us.sentry.io/4512482715697152';
 
 const commit = process.env.COMMIT_HASH;
 
