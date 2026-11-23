@@ -13,10 +13,13 @@ describe('getConsultCoverage', () => {
   // Images the viewer holds per series (all instances, as Orthanc counts them).
   const held = { a: 2, b: 3, c: 1 };
   const imagesInSeries = uid => held[uid];
-  const consult = (covered, images = []) => ({
+  const bySeries = images => new Map(images.map(([uid, sops]) => [uid, new Set(sops)]));
+  const consult = (covered, images = [], leftOutSeries = [], leftOutImages = []) => ({
     completedAt: 1000,
     coveredSeries: new Map(covered),
-    coveredImages: new Map(images.map(([uid, sops]) => [uid, new Set(sops)])),
+    coveredImages: bySeries(images),
+    leftOutSeries: new Set(leftOutSeries),
+    leftOutImages: bySeries(leftOutImages),
   });
 
   it('outlines only listed series the viewer has no more images of', () => {
@@ -53,6 +56,23 @@ describe('getConsultCoverage', () => {
     expect(coverage).toMatchObject({ total: 3, after: 1 });
   });
 
+  it('does not count what the consult left out as received after', () => {
+    const xray = (uid, sop) => ({
+      displaySetInstanceUID: uid,
+      SeriesInstanceUID: 'x',
+      instances: [{ SOPInstanceUID: sop }],
+    });
+    const sets = [...displaySets, xray('v1', 'sop-1'), xray('v2', 'sop-2')];
+    // c is DNR; sop-2 was reduced out; b is the only late one.
+    const coverage = getConsultCoverage(
+      sets,
+      consult([['a', 2]], [['x', ['sop-1']]], ['c'], [['x', ['sop-2']]]),
+      uid => held[uid] ?? 2
+    );
+    expect([...coverage.covered]).toEqual(['a', 'v1']);
+    expect(coverage).toMatchObject({ total: 3, after: 1 });
+  });
+
   it('shows nothing when every series was covered, or there is no consult', () => {
     const all = consult([
       ['a', 2],
@@ -75,6 +95,19 @@ describe('parseConsultCoverage', () => {
       completedAt: Date.parse('2026-11-02T10:00:00Z'),
       coveredSeries: new Map([['x', 7]]),
       coveredImages: new Map(),
+      leftOutSeries: new Set(),
+      leftOutImages: new Map(),
+    });
+    expect(
+      parseConsultCoverage({
+        completed_at: '2026-11-02T10:00:00Z',
+        covered_series: {},
+        left_out_series: ['d'],
+        left_out_images: { x: ['b'] },
+      })
+    ).toMatchObject({
+      leftOutSeries: new Set(['d']),
+      leftOutImages: new Map([['x', new Set(['b'])]]),
     });
     expect(
       parseConsultCoverage({
