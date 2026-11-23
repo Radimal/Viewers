@@ -82,7 +82,8 @@ export type ConsultCoverage = {
   completedAt: number;
   covered: Set<string>;
   total: number;
-  after: number;
+  /** Thumbnails received after the consultation. */
+  after: Set<string>;
 };
 
 /**
@@ -119,6 +120,10 @@ export function getConsultCoverage(
       )
       .map(({ displaySetInstanceUID }) => displaySetInstanceUID)
   );
-  const after = counted.length - covered.size;
-  return after ? { completedAt: consult.completedAt, covered, total: counted.length, after } : null;
+  const after = new Set<string>(
+    counted.map(ds => ds.displaySetInstanceUID).filter(uid => !covered.has(uid))
+  );
+  return after.size
+    ? { completedAt: consult.completedAt, covered, total: counted.length, after }
+    : null;
 }

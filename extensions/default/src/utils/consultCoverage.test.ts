@@ -32,7 +32,7 @@ describe('getConsultCoverage', () => {
       imagesInSeries
     );
     expect([...coverage.covered]).toEqual(['a']);
-    expect(coverage).toMatchObject({ completedAt: 1000, total: 3, after: 2 });
+    expect(coverage).toMatchObject({ completedAt: 1000, total: 3, after: new Set(['b', 'c']) });
   });
 
   it('outlines every display set of a covered series', () => {
@@ -53,7 +53,7 @@ describe('getConsultCoverage', () => {
     // The series grew (not in coveredSeries); Reporter had sop-1 and sop-2 by the consult.
     const coverage = getConsultCoverage(thumbs, consult([], [['x', ['sop-1', 'sop-2']]]), () => 3);
     expect([...coverage.covered]).toEqual(['v1', 'v2']);
-    expect(coverage).toMatchObject({ total: 3, after: 1 });
+    expect(coverage).toMatchObject({ total: 3, after: new Set(['v3']) });
   });
 
   it('does not count what the consult left out as received after', () => {
@@ -70,7 +70,7 @@ describe('getConsultCoverage', () => {
       uid => held[uid] ?? 2
     );
     expect([...coverage.covered]).toEqual(['a', 'v1']);
-    expect(coverage).toMatchObject({ total: 3, after: 1 });
+    expect(coverage).toMatchObject({ total: 3, after: new Set(['b']) });
   });
 
   it('shows nothing when every series was covered, or there is no consult', () => {

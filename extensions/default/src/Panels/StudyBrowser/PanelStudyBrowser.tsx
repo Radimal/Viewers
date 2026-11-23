@@ -401,8 +401,8 @@ function PanelStudyBrowser({
       : study
   );
 
-  // Radimal: outline the series the latest completed consultation covered,
-  // and say how many came in after (Reporter's coverage endpoint lists the
+  // Radimal: outline the series that came in after the latest completed
+  // consultation, and say how many it covered (Reporter's coverage endpoint lists the
   // series Orthanc had finished by then). Only for the studies being read,
   // and only once something came in after.
   const [coverages, setCoverages] = useState([]);
@@ -440,7 +440,7 @@ function PanelStudyBrowser({
   }, [imageSeriesKey, StudyInstanceUIDs.join()]);
   const outlinedDisplaySets = coverages.length
     ? displaySets.map(item =>
-        coverages.some(coverage => coverage.covered.has(item.displaySetInstanceUID))
+        coverages.some(coverage => coverage.after.has(item.displaySetInstanceUID))
           ? { ...item, className: CONSULT_AMBER_RING }
           : item
       )
