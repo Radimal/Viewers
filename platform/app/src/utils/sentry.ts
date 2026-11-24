@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/react';
+import { isTransportRejection } from '@ohif/ui-next';
 import { isLocalEnvironment, normalizeCommit } from './updateDetection';
 
 // radimal/radimal-viewer. Public by design, as in radimal-vet's src/utils/sentry.ts.
@@ -13,10 +14,10 @@ Sentry.init({
   environment: window.location.hostname,
   // Off for local and test builds, the same rule update detection uses.
   enabled: !isLocalEnvironment(commit, window.location.hostname),
-  // Errors are reported from the route ErrorBoundary (routes/index.tsx), which already listens to
-  // window errors and unhandled rejections and skips transient Orthanc 504/409 image requests.
-  // Sentry's own global handlers would report every one of those a second time.
-  integrations: defaults => defaults.filter(integration => integration.name !== 'GlobalHandlers'),
+  // Sentry's global handlers report every uncaught error and rejection right away, including
+  // crashes outside the route ErrorBoundary (modals, dialogs, UpdateBanner). Transient Orthanc
+  // 504/409 image requests are retried, so they are skipped here, as the boundary skips them.
+  beforeSend: (event, hint) => (isTransportRejection(hint.originalException) ? null : event),
   ignoreErrors: [
     // PostHog's lazy recorder script got blocked or stubbed (ad blocker/proxy). Recording is skipped and the app is unaffected.
     'Called on script loaded before session recording is available',

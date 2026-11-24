@@ -1,5 +1,11 @@
+/**
+ * @jest-environment-options {"url": "https://viewer.example"}
+ */
 const mockInit = jest.fn();
 jest.mock('@sentry/react', () => ({ init: mockInit }));
+jest.mock('@ohif/ui-next', () => ({
+  isTransportRejection: reason => typeof reason?.status === 'number',
+}));
 
 const loadWithCommit = commit => {
   process.env.COMMIT_HASH = commit;
@@ -12,14 +18,17 @@ afterEach(() => {
 });
 
 describe('sentry init', () => {
-  it('is off for local builds', () => {
+  it('is off for local builds and on for deployed ones', () => {
     expect(loadWithCommit('local').enabled).toBe(false);
+    const options = loadWithCommit('abc123');
+    expect(options.enabled).toBe(true);
+    expect(options.release).toBe('abc123');
   });
 
-  it('drops the global handlers so boundary-reported errors are not sent twice', () => {
-    const options = loadWithCommit('abc123');
-    const kept = options.integrations([{ name: 'GlobalHandlers' }, { name: 'Breadcrumbs' }]);
-    expect(kept).toEqual([{ name: 'Breadcrumbs' }]);
-    expect(options.release).toBe('abc123');
+  it('drops transient image request failures', () => {
+    const { beforeSend } = loadWithCommit('abc123');
+    const event = { message: 'x' };
+    expect(beforeSend(event, { originalException: { status: 504 } })).toBeNull();
+    expect(beforeSend(event, { originalException: new Error('boom') })).toBe(event);
   });
 });
