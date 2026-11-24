@@ -26,4 +26,18 @@ Sentry.init({
   ],
 });
 
+// Lets extensions (which can't import @ohif/app) report a non-crash event, the way
+// window.__capturePostHogEvent does for PostHog. Each message groups as one issue, and its
+// details are tags so they can be searched and charted (e.g. openViewerWindows).
+(
+  window as unknown as {
+    __captureSentryMessage?: (message: string, details: Record<string, unknown>) => void;
+  }
+).__captureSentryMessage = (message, details) =>
+  Sentry.captureMessage(message, {
+    level: 'warning',
+    fingerprint: [message],
+    tags: details as Record<string, string | number | boolean | undefined>,
+  });
+
 export default Sentry;
