@@ -1,3 +1,5 @@
 import { ErrorBoundary } from './ErrorBoundary';
 
-export { ErrorBoundary };
+import { isTransportRejection } from './isTransportRejection';
+
+export { ErrorBoundary, isTransportRejection };

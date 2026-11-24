@@ -1569,6 +1569,9 @@ importers:
       '@ohif/ui-next':
         specifier: workspace:*
         version: link:../ui-next
+      '@sentry/react':
+        specifier: ^11.16.0
+        version: 11.16.0(react-router@6.30.3(react@18.3.1))(react@18.3.1)
       '@svgr/webpack':
         specifier: 8.1.0
         version: 8.1.0(supports-color@8.1.1)(typescript@5.5.4)
@@ -5418,6 +5421,44 @@ packages:
         optional: true
       zen-observable:
         optional: true
+
+  '@sentry/browser-utils@11.16.0':
+    resolution: {integrity: sha512-MUTnIZ7LjLEsx5br+xQsoybztbN1cV3bEXp6AEf/Pawz1avUb07J9nKuOyMVPWksqDpoIIkFJ8GyQvxllWQ+7Q==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/browser@11.16.0':
+    resolution: {integrity: sha512-pl6Q4PGOiEebtr8aOyjslgmSoI5dG9VtGZZwPxApryydy/ravsdD0UxfQ/OSiOBRm1nUv106uxd6haypSGWc4w==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/conventions@0.34.0':
+    resolution: {integrity: sha512-sGYLaq/zyRTOCoadW3Z66q6WHp16stnwezGK45B50mGO6QUTl/ttzsPpy+oxZlj2pKARyOohZ1pX9grdpMxo2Q==}
+    engines: {node: '>=14'}
+
+  '@sentry/core@11.16.0':
+    resolution: {integrity: sha512-hu7gw///rDLwVYKmkAgztXUx0sFkpxG1zDwnuHBYCXqHRaEwzEJ/ntBZfAmLbjOSIsg5dcM07AI09KSicFeXBw==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/feedback@11.16.0':
+    resolution: {integrity: sha512-0+p7DRQqCLrqHG/PWOCSfSKJGJQUeRqm00pijJSI431Jkm0GEGoCWeLBpr4zdb0KQ+D1Ybof+cjkByA7Jqp2ig==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/react@11.16.0':
+    resolution: {integrity: sha512-QMS986vIg1cWCZTkJMftvPmLXdMMw2M/7pYSJX7dWiBZy+IvS7ZhNMBAlnOh6p1VTe19LazDOqFa/wjdwgqTKQ==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+    peerDependencies:
+      react: 17.x || 18.x || 19.x
+      react-router: 6.x || 7.x || 8.x
+    peerDependenciesMeta:
+      react-router:
+        optional: true
+
+  '@sentry/replay-canvas@11.16.0':
+    resolution: {integrity: sha512-EIdOIKKQO6TpqgPF4Sj6+Pu3b3uArti3101o4LCw1fOIoeVSH/6UpE4nkh0LfBw5Ri2A+inYuSAeoyjjI5JPOg==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
+
+  '@sentry/replay@11.16.0':
+    resolution: {integrity: sha512-oDdQjitHHhPcGXTOLWOaQAY1wsCiWVr2SELFQpxs4EZgb3o+uLGWq3DivpJOBjSH5njN13AQu9SMRBtGOjlgOw==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
 
   '@sideway/address@4.1.5':
     resolution: {integrity: sha512-IqO/DUQHUkPeixNQ8n0JA6102hT9CmaljNTPmQ1u8MEhBo/R4Q8eKLN/vGZxuebwOroDB4cbpjheD4+/sKFK4Q==}
@@ -13328,6 +13369,9 @@ packages:
   web-vitals@6.0.0:
     resolution: {integrity: sha512-Guaibvy/+uNtL6Bsu4jmMJGzuSl91oeRH5iO9pPRbYftnFUr3yqT1TUNX/OE4o9HexuEMU3Kb/Wg7iKhlffZUA==}
 
+  web-vitals@6.2.3:
+    resolution: {integrity: sha512-Dmy+vdO1UPMqXiAtZSNayhl4f794Bxfd94W4HIj2HlYtczEQfEOon969memlcpcHrTuOKLa5baFjX7WbgmOq+A==}
+
   web-worker@1.5.0:
     resolution: {integrity: sha512-RiMReJrTAiA+mBjGONMnjVDP2u3p9R1vkcGz6gDIrOMT3oGuYwX2WRMYI9ipkphSuE5XKEhydbhNEJh4NY9mlw==}
 
@@ -18004,6 +18048,50 @@ snapshots:
       rxjs: 6.6.7
     transitivePeerDependencies:
       - zenObservable
+
+  '@sentry/browser-utils@11.16.0':
+    dependencies:
+      '@sentry/conventions': 0.34.0
+      '@sentry/core': 11.16.0
+      web-vitals: 6.2.3
+
+  '@sentry/browser@11.16.0':
+    dependencies:
+      '@sentry/browser-utils': 11.16.0
+      '@sentry/conventions': 0.34.0
+      '@sentry/core': 11.16.0
+      '@sentry/feedback': 11.16.0
+      '@sentry/replay': 11.16.0
+      '@sentry/replay-canvas': 11.16.0
+
+  '@sentry/conventions@0.34.0': {}
+
+  '@sentry/core@11.16.0':
+    dependencies:
+      '@sentry/conventions': 0.34.0
+
+  '@sentry/feedback@11.16.0':
+    dependencies:
+      '@sentry/core': 11.16.0
+
+  '@sentry/react@11.16.0(react-router@6.30.3(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@sentry/browser': 11.16.0
+      '@sentry/conventions': 0.34.0
+      '@sentry/core': 11.16.0
+      react: 18.3.1
+    optionalDependencies:
+      react-router: 6.30.3(react@18.3.1)
+
+  '@sentry/replay-canvas@11.16.0':
+    dependencies:
+      '@sentry/core': 11.16.0
+      '@sentry/replay': 11.16.0
+
+  '@sentry/replay@11.16.0':
+    dependencies:
+      '@sentry/browser-utils': 11.16.0
+      '@sentry/core': 11.16.0
 
   '@sideway/address@4.1.5':
     dependencies:
@@ -27458,6 +27546,8 @@ snapshots:
   web-vitals@5.3.0: {}
 
   web-vitals@6.0.0: {}
+
+  web-vitals@6.2.3: {}
 
   web-worker@1.5.0: {}
 

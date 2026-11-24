@@ -18,6 +18,7 @@ import PropTypes from 'prop-types';
 import { routerBasename } from '../utils/publicUrl';
 import { useAppConfig } from '@state';
 import { history } from '../utils/history';
+import Sentry from '../utils/sentry';
 
 const NotFoundServer = ({
   message = 'Unable to query for studies at this time. Check your data source configuration or network connection',
@@ -155,6 +156,16 @@ const createRoutes = ({
       <ErrorBoundary
         context={`Route ${route.path}`}
         showErrorDetails={showErrorDetails}
+        // Only React render errors (they have a component stack): React does not rethrow those
+        // to the window, so Sentry's global handlers never see them. Window errors and
+        // rejections are already reported by those handlers.
+        onError={(error, componentStack, context) =>
+          componentStack &&
+          Sentry.captureException(error, {
+            tags: { boundary: context },
+            contexts: { react: { componentStack } },
+          })
+        }
       >
         <route.children
           {...rest}
