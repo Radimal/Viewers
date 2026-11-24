@@ -61,6 +61,9 @@ const defineValues = {
   'process.env.LOCIZE_API_KEY': JSON.stringify(process.env.LOCIZE_API_KEY || ''),
   'process.env.REACT_APP_I18N_DEBUG': JSON.stringify(process.env.REACT_APP_I18N_DEBUG || ''),
   'process.env.TEST_ENV': JSON.stringify(process.env.TEST_ENV || ''),
+  /* @sentry/core getVercelEnv() reads these for its default environment; we set our own. */
+  'process.env.VERCEL_TARGET_ENV': JSON.stringify(''),
+  'process.env.VERCEL_ENV': JSON.stringify(''),
 };
 
 // Only redefine updated values.  This avoids warning messages in the logs
