@@ -1,3 +1,51 @@
+diff --git a/dist/esm/stateManagement/annotation/AnnotationRenderingEngine.js b/dist/esm/stateManagement/annotation/AnnotationRenderingEngine.js
+index d32fa9e748526b0d57819b48139b4d6b69f11957..73c6cfafe21e79d468d88a8c34c6ecdffafd9a30 100644
+--- a/dist/esm/stateManagement/annotation/AnnotationRenderingEngine.js
++++ b/dist/esm/stateManagement/annotation/AnnotationRenderingEngine.js
+@@ -10,20 +10,32 @@ class AnnotationRenderingEngine {
+         this._animationFrameHandle = null;
+         this._renderFlaggedViewports = () => {
+             this._throwIfDestroyed();
+-            const elements = Array.from(this._viewportElements.values());
+-            for (let i = 0; i < elements.length; i++) {
+-                const element = elements[i];
+-                if (this._needsRender.has(element)) {
+-                    this._triggerRender(element);
+-                    this._needsRender.delete(element);
+-                    if (this._needsRender.size === 0) {
+-                        break;
++            // Radimal: if one tool's renderAnnotation throws, the error still propagates (so it
++            // is reported), but the frame flags are reset and the failing viewport is unflagged.
++            // Without this, _animationFrameSet stayed true and no measurement drew again in the
++            // window until a viewport was removed, while right-click still found them.
++            try {
++                const elements = Array.from(this._viewportElements.values());
++                for (let i = 0; i < elements.length; i++) {
++                    const element = elements[i];
++                    if (this._needsRender.has(element)) {
++                        try {
++                            this._triggerRender(element);
++                        }
++                        finally {
++                            this._needsRender.delete(element);
++                        }
++                        if (this._needsRender.size === 0) {
++                            break;
++                        }
+                     }
+                 }
+             }
+-            this._animationFrameSet = false;
+-            this._animationFrameHandle = null;
+-            this._render();
++            finally {
++                this._animationFrameSet = false;
++                this._animationFrameHandle = null;
++                this._render();
++            }
+         };
+         this._viewportElements = new Map();
+     }
 diff --git a/dist/esm/tools/MagnifyTool.js b/dist/esm/tools/MagnifyTool.js
 index 62b1d6b95996744b9ad11521623123b49d1888b3..fede5a1af45787a8007ba8a46135e9b29c9dcf02 100644
 --- a/dist/esm/tools/MagnifyTool.js
@@ -15,6 +63,47 @@ index 62b1d6b95996744b9ad11521623123b49d1888b3..fede5a1af45787a8007ba8a46135e9b2
              const updatedPosition = [
                  position[0] + deltaPointsWorld[0],
                  position[1] + deltaPointsWorld[1],
+diff --git a/dist/esm/utilities/getAnnotationNearPoint.js b/dist/esm/utilities/getAnnotationNearPoint.js
+index df5c6be10fb302ed5d2add06047bf9fd1cfc3324..690ef6070cf1437dad3af0c064cd5dc0389950ee 100644
+--- a/dist/esm/utilities/getAnnotationNearPoint.js
++++ b/dist/esm/utilities/getAnnotationNearPoint.js
+@@ -1,6 +1,13 @@
+ import { getEnabledElement } from '@cornerstonejs/core';
+ import { getAnnotations } from '../stateManagement/annotation/annotationState.js';
+ import * as ToolGroupManager from '../store/ToolGroupManager/index.js';
++import { isAnnotationVisible } from '../stateManagement/annotation/annotationVisibility.js';
++import { ToolModes } from '../enums/index.js';
++// Radimal: only what drawing shows. AnnotationRenderingEngine draws tools in these modes,
++// each tool filters with filterInteractableAnnotationsForElement, and hidden annotations
++// are skipped. Right-click used to find measurements that weren't drawn (hidden, on another
++// MPR slice, or from a disabled tool), so a reader could act on one they couldn't see.
++const DRAWN_TOOL_MODES = [ToolModes.Active, ToolModes.Passive, ToolModes.Enabled];
+ function getAnnotationNearPoint(element, canvasPoint, proximity = 5) {
+     const enabledElement = getEnabledElement(element);
+     if (!enabledElement) {
+@@ -25,14 +32,17 @@ function getAnnotationNearPointOnEnabledElement(enabledElement, point, proximity
+ }
+ function findAnnotationNearPointByTool(tool, enabledElement, point, proximity) {
+     const { viewport } = enabledElement;
+-    const annotations = getAnnotations(tool.constructor.toolName, viewport?.element);
+-    const currentId = viewport?.getCurrentImageId?.();
++    if (!tool.isPointNearTool || !DRAWN_TOOL_MODES.includes(tool.mode)) {
++        return null;
++    }
++    let annotations = getAnnotations(tool.constructor.toolName, viewport?.element);
++    if (annotations?.length && tool.filterInteractableAnnotationsForElement) {
++        annotations = tool.filterInteractableAnnotationsForElement(viewport.element, annotations);
++    }
+     if (annotations?.length) {
+         const { element } = enabledElement.viewport;
+         for (const annotation of annotations) {
+-            const referencedImageId = annotation.metadata?.referencedImageId;
+-            if ((currentId && referencedImageId && currentId !== referencedImageId) ||
+-                !tool.isPointNearTool) {
++            if (!isAnnotationVisible(annotation.annotationUID)) {
+                 continue;
+             }
+             if (tool.isPointNearTool(element, annotation, point, proximity, '') ||
 diff --git a/dist/esm/utilities/getCalibratedUnits.js b/dist/esm/utilities/getCalibratedUnits.js
 index e777b443e0801ed3713a5544972cfec3eed1de57..736a55479c30c59247763b2382fdf24b6042a7b2 100644
 --- a/dist/esm/utilities/getCalibratedUnits.js
