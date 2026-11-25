@@ -41,6 +41,7 @@ import initDoubleClick from './initDoubleClick';
 import setupAutoImageSliceSync from './utils/imageSliceSync/autoImageSliceSync';
 import initViewTiming from './utils/initViewTiming';
 import reportWebGLContextLoss from './utils/reportWebGLContextLoss';
+import recoverFromWebGLContextLoss from './utils/recoverFromWebGLContextLoss';
 import { colormaps } from './utils/colormaps';
 import { SegmentationRepresentations } from '@cornerstonejs/tools/enums';
 import { useLutPresentationStore } from './stores/useLutPresentationStore';
@@ -83,6 +84,7 @@ export default async function init({
     debug: { statsOverlay },
   });
   reportWebGLContextLoss();
+  recoverFromWebGLContextLoss();
 
   // Some GPUs (e.g. Mali on Android TVs/tablets) have WebGL2 but can neither
   // store 16-bit data natively (EXT_texture_norm16) nor smooth 32-bit float
