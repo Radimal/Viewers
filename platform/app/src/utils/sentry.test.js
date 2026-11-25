@@ -3,7 +3,12 @@
  */
 const mockInit = jest.fn();
 const mockCaptureEvent = jest.fn();
-jest.mock('@sentry/react', () => ({ init: mockInit, captureEvent: mockCaptureEvent }));
+const mockSetTag = jest.fn();
+jest.mock('@sentry/react', () => ({
+  init: mockInit,
+  captureEvent: mockCaptureEvent,
+  setTag: mockSetTag,
+}));
 jest.mock('@ohif/ui-next', () => ({
   isTransportRejection: reason => typeof reason?.status === 'number',
 }));
@@ -31,6 +36,17 @@ describe('sentry init', () => {
     const event = { message: 'x' };
     expect(beforeSend(event, { originalException: { status: 504 } })).toBeNull();
     expect(beforeSend(event, { originalException: new Error('boom') })).toBe(event);
+  });
+
+  it("tags events with the machine's RAM when the browser reports it", () => {
+    Object.defineProperty(navigator, 'deviceMemory', { value: 4, configurable: true });
+    loadWithCommit('abc123');
+    expect(mockSetTag).toHaveBeenCalledWith('deviceMemory', 4);
+
+    mockSetTag.mockClear();
+    delete navigator.deviceMemory;
+    loadWithCommit('abc123');
+    expect(mockSetTag).not.toHaveBeenCalled();
   });
 
   it('lets extensions report a warning grouped by its message', () => {

@@ -28,6 +28,14 @@ Sentry.init({
   ],
 });
 
+// RAM in GB as Chrome/Edge report it (0.25 to 8, capped at 8; absent in Safari/Firefox). Tags every
+// event, so out-of-memory decode failures and WebGL context losses can be split by machine size
+// before deciding whether to shrink the image cache on small machines.
+const { deviceMemory } = navigator as Navigator & { deviceMemory?: number };
+if (deviceMemory) {
+  Sentry.setTag('deviceMemory', deviceMemory);
+}
+
 // Lets extensions (which can't import @ohif/app) report a non-crash event, the way
 // window.__capturePostHogEvent does for PostHog. Each message groups as one issue, and its
 // details are tags so they can be searched and charted (e.g. openViewerWindows).

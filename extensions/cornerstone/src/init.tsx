@@ -174,8 +174,13 @@ export default async function init({
   // per-session; when the param is absent, appConfig.genericViewports.enabled wins.
   setNextViewportsEnabled(resolveNextViewportsEnabled(genericViewportsConfig.enabled));
 
-  // For debugging large datasets, otherwise prefer the defaults
-  const { maxCacheSize } = appConfig;
+  // Radimal: Safari/WebKit (every iOS browser too) hard-reloads a tab well below cornerstone's
+  // 3 GB default ("reloaded because it was using significant memory"), which can take the
+  // linked report tab down with it. Cap WebKit at 1 GB here rather than in config: production's
+  // app-config.js comes from radimal-terraform and replaces config/default.js, so 3.10's cap
+  // there never reached readers. appConfig.maxCacheSize still overrides.
+  const isWebKit = navigator.vendor === 'Apple Computer, Inc.';
+  const maxCacheSize = appConfig.maxCacheSize ?? (isWebKit ? 1024 * 1024 * 1024 : undefined);
   if (maxCacheSize) {
     cornerstone.cache.setMaxCacheSize(maxCacheSize);
   }
