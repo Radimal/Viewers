@@ -7,6 +7,10 @@ const SENTRY_DSN = 'https://24eff3d1a2bafe1f7591ba38552641c7@o558129.ingest.us.s
 
 const commit = process.env.COMMIT_HASH;
 
+// Only errors that say outright that memory ran out. A codec's WebAssembly Aborted() or the image
+// worker's "Unserializable return value" often follow, but can also have other causes.
+const OUT_OF_MEMORY = /Array buffer allocation failed|out of memory/i;
+
 Sentry.init({
   dsn: SENTRY_DSN,
   release: normalizeCommit(commit),
@@ -17,7 +21,19 @@ Sentry.init({
   // Sentry's global handlers report every uncaught error and rejection right away, including
   // crashes outside the route ErrorBoundary (modals, dialogs, UpdateBanner). Transient Orthanc
   // 504/409 image requests are retried, so they are skipped here, as the boundary skips them.
-  beforeSend: (event, hint) => (isTransportRejection(hint.originalException) ? null : event),
+  beforeSend: (event, hint) => {
+    if (isTransportRejection(hint.originalException)) {
+      return null;
+    }
+    // The browser running out of memory fails wherever it next allocates (decode, thumbnail,
+    // render frame), so one reader's crash opened a separate issue per stack. Group them as one
+    // "out of memory" issue; the deviceMemory tag then shows which machines hit it.
+    const message = (hint.originalException as Error | undefined)?.message ?? '';
+    if (OUT_OF_MEMORY.test(message)) {
+      event.fingerprint = ['out-of-memory'];
+    }
+    return event;
+  },
   ignoreErrors: [
     // PostHog's lazy recorder script got blocked or stubbed (ad blocker/proxy). Recording is skipped and the app is unaffected.
     'Called on script loaded before session recording is available',

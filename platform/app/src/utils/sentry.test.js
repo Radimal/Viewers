@@ -38,6 +38,18 @@ describe('sentry init', () => {
     expect(beforeSend(event, { originalException: new Error('boom') })).toBe(event);
   });
 
+  it('groups out-of-memory errors from any stack as one issue', () => {
+    const { beforeSend } = loadWithCommit('abc123');
+    const oom = message => beforeSend({}, { originalException: new RangeError(message) });
+    expect(oom('Array buffer allocation failed').fingerprint).toEqual(['out-of-memory']);
+    expect(
+      oom(
+        "Failed to execute 'getImageData' on 'CanvasRenderingContext2D': Out of memory at ImageData creation"
+      ).fingerprint
+    ).toEqual(['out-of-memory']);
+    expect(beforeSend({}, { originalException: new Error('boom') }).fingerprint).toBeUndefined();
+  });
+
   it("tags events with the machine's RAM when the browser reports it", () => {
     Object.defineProperty(navigator, 'deviceMemory', { value: 4, configurable: true });
     loadWithCommit('abc123');
