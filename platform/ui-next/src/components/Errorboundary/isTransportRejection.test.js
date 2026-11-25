@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { isTransportRejection } from './isTransportRejection';
+import { isFrameStatusError, isTransportRejection } from './isTransportRejection';
 
 // The route error boundary must not blank the viewer over a failed image /
 // bulkdata request: Orthanc answers 504/409 for frames it is still writing
@@ -31,5 +31,27 @@ describe('isTransportRejection', () => {
     expect(isTransportRejection(new Error('Invalid VOI LUT function'))).toBe(false);
     expect(isTransportRejection(undefined)).toBe(false);
     expect(isTransportRejection('request failed')).toBe(false);
+  });
+});
+
+describe('isFrameStatusError', () => {
+  const frameError = status =>
+    new Error(
+      `Couldn't retrieve https://cdn.example/dicom-web/studies/1/series/2/instances/3/frames/1 got status ${status}`
+    );
+
+  it('recognizes a frame that came back with an HTTP error (no toast)', () => {
+    expect(isFrameStatusError(frameError(502))).toBe(true);
+    expect(isFrameStatusError(frameError(404))).toBe(true);
+  });
+
+  it('is not a transport rejection, so Sentry still reports it', () => {
+    expect(isTransportRejection(frameError(502))).toBe(false);
+  });
+
+  it('does not match other errors', () => {
+    expect(isFrameStatusError(new Error('Invalid VOI LUT function'))).toBe(false);
+    expect(isFrameStatusError(new TypeError('network error'))).toBe(false);
+    expect(isFrameStatusError("Couldn't retrieve x got status 502")).toBe(false);
   });
 });

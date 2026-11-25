@@ -26,3 +26,17 @@ export function isTransportRejection(reason: unknown): boolean {
   const r = reason as { status?: unknown; responseURL?: unknown } | null;
   return typeof r?.status === 'number' && typeof r?.responseURL === 'string';
 }
+
+// cs3d's streaming frame loader (streamRequest.js) throws this for a non-200 frame and
+// leaves it unhandled. Orthanc's intermittent 502s land here (about 4 reader sessions a day).
+const FRAME_STATUS_ERROR = /^Couldn't retrieve \S+ got status \d+$/;
+
+/**
+ * True for a single image frame that came back with an HTTP error. Like a transport
+ * failure, it must not raise the route's "Something went wrong" toast. Unlike one, it
+ * still goes to Sentry (sentry.ts only drops isTransportRejection), because those
+ * reports are our only signal when Orthanc starts failing frames.
+ */
+export function isFrameStatusError(reason: unknown): boolean {
+  return reason instanceof Error && FRAME_STATUS_ERROR.test(reason.message);
+}
