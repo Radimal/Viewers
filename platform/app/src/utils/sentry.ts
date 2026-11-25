@@ -23,18 +23,23 @@ Sentry.init({
     'Called on script loaded before session recording is available',
     // Cancelled fetches. Browser noise with no stack.
     'AbortError',
+    // Microsoft's Outlook/Defender Safe Links bot opening an emailed viewer link, not a real reader.
+    'Object Not Found Matching Id',
   ],
 });
 
 // Lets extensions (which can't import @ohif/app) report a non-crash event, the way
 // window.__capturePostHogEvent does for PostHog. Each message groups as one issue, and its
 // details are tags so they can be searched and charted (e.g. openViewerWindows).
+// captureEvent, not captureMessage: the SDK gives a message a synthetic stack trace, and
+// Sentry then titled the issue after its top frame ("window.__captureSentryMessage").
 (
   window as unknown as {
     __captureSentryMessage?: (message: string, details: Record<string, unknown>) => void;
   }
 ).__captureSentryMessage = (message, details) =>
-  Sentry.captureMessage(message, {
+  Sentry.captureEvent({
+    message,
     level: 'warning',
     fingerprint: [message],
     tags: details as Record<string, string | number | boolean | undefined>,
