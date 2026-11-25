@@ -18,10 +18,13 @@ describe('isTransportRejection', () => {
 
   it("recognizes a fetch stream cut off mid-download (Chrome's TypeError: network error)", () => {
     expect(isTransportRejection(new TypeError('network error'))).toBe(true);
+    expect(isTransportRejection(new TypeError('Error in body stream'))).toBe(true); // Firefox
   });
 
   it('does NOT swallow real errors', () => {
     expect(isTransportRejection(new TypeError('Failed to fetch'))).toBe(false);
+    // Safari uses 'Load failed' for a request that never connected too, so it escalates.
+    expect(isTransportRejection(new TypeError('Load failed'))).toBe(false);
     expect(
       isTransportRejection(new TypeError("Cannot read properties of undefined (reading 'x')"))
     ).toBe(false);
