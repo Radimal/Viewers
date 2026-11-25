@@ -2,8 +2,8 @@
  * @jest-environment-options {"url": "https://viewer.example"}
  */
 const mockInit = jest.fn();
-const mockCaptureMessage = jest.fn();
-jest.mock('@sentry/react', () => ({ init: mockInit, captureMessage: mockCaptureMessage }));
+const mockCaptureEvent = jest.fn();
+jest.mock('@sentry/react', () => ({ init: mockInit, captureEvent: mockCaptureEvent }));
 jest.mock('@ohif/ui-next', () => ({
   isTransportRejection: reason => typeof reason?.status === 'number',
 }));
@@ -36,7 +36,8 @@ describe('sentry init', () => {
   it('lets extensions report a warning grouped by its message', () => {
     loadWithCommit('abc123');
     window.__captureSentryMessage('WebGL context lost', { contextIndex: 2 });
-    expect(mockCaptureMessage).toHaveBeenCalledWith('WebGL context lost', {
+    expect(mockCaptureEvent).toHaveBeenCalledWith({
+      message: 'WebGL context lost',
       level: 'warning',
       fingerprint: ['WebGL context lost'],
       tags: { contextIndex: 2 },
