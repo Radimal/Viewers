@@ -16,7 +16,15 @@ describe('isTransportRejection', () => {
     expect(isTransportRejection({ status: 504, responseURL: 'https://x/frames/1' })).toBe(true);
   });
 
+  it("recognizes a fetch stream cut off mid-download (Chrome's TypeError: network error)", () => {
+    expect(isTransportRejection(new TypeError('network error'))).toBe(true);
+  });
+
   it('does NOT swallow real errors', () => {
+    expect(isTransportRejection(new TypeError('Failed to fetch'))).toBe(false);
+    expect(
+      isTransportRejection(new TypeError("Cannot read properties of undefined (reading 'x')"))
+    ).toBe(false);
     expect(isTransportRejection(new Error('Invalid VOI LUT function'))).toBe(false);
     expect(isTransportRejection(undefined)).toBe(false);
     expect(isTransportRejection('request failed')).toBe(false);
