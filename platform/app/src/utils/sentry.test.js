@@ -3,7 +3,12 @@
  */
 const mockInit = jest.fn();
 const mockCaptureEvent = jest.fn();
-jest.mock('@sentry/react', () => ({ init: mockInit, captureEvent: mockCaptureEvent }));
+const mockSetTag = jest.fn();
+jest.mock('@sentry/react', () => ({
+  init: mockInit,
+  captureEvent: mockCaptureEvent,
+  setTag: mockSetTag,
+}));
 jest.mock('@ohif/ui-next', () => ({
   isTransportRejection: reason => typeof reason?.status === 'number',
 }));
@@ -31,6 +36,29 @@ describe('sentry init', () => {
     const event = { message: 'x' };
     expect(beforeSend(event, { originalException: { status: 504 } })).toBeNull();
     expect(beforeSend(event, { originalException: new Error('boom') })).toBe(event);
+  });
+
+  it('groups out-of-memory errors from any stack as one issue', () => {
+    const { beforeSend } = loadWithCommit('abc123');
+    const oom = message => beforeSend({}, { originalException: new RangeError(message) });
+    expect(oom('Array buffer allocation failed').fingerprint).toEqual(['out-of-memory']);
+    expect(
+      oom(
+        "Failed to execute 'getImageData' on 'CanvasRenderingContext2D': Out of memory at ImageData creation"
+      ).fingerprint
+    ).toEqual(['out-of-memory']);
+    expect(beforeSend({}, { originalException: new Error('boom') }).fingerprint).toBeUndefined();
+  });
+
+  it("tags events with the machine's RAM when the browser reports it", () => {
+    Object.defineProperty(navigator, 'deviceMemory', { value: 4, configurable: true });
+    loadWithCommit('abc123');
+    expect(mockSetTag).toHaveBeenCalledWith('deviceMemory', 4);
+
+    mockSetTag.mockClear();
+    delete navigator.deviceMemory;
+    loadWithCommit('abc123');
+    expect(mockSetTag).not.toHaveBeenCalled();
   });
 
   it('lets extensions report a warning grouped by its message', () => {
