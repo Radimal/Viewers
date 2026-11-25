@@ -1,3 +1,17 @@
+diff --git a/dist/esm/RenderingEngine/ContextPoolRenderingEngine.js b/dist/esm/RenderingEngine/ContextPoolRenderingEngine.js
+index 03f05c95c5dbc2c4c0f5867077a8ef024a04827d..e719a495d634d8c7b7c8e6e99250766153dff15f 100644
+--- a/dist/esm/RenderingEngine/ContextPoolRenderingEngine.js
++++ b/dist/esm/RenderingEngine/ContextPoolRenderingEngine.js
+@@ -66,6 +66,9 @@ class ContextPoolRenderingEngine extends BaseRenderingEngine {
+             const contexts = contextPool.getAllContexts();
+             contextIndex = this._viewports.size % contexts.length;
+         }
++        // Radimal patch: skip contexts the browser has lost. Volumes all still share
++        // one context (the first live one), so MPR views keep sharing one texture.
++        contextIndex = contextPool.getLiveContextIndex(contextIndex);
+         contextPool.assignViewportToContext(viewportId, contextIndex);
+         contextPool.updateViewportSize(viewportId, canvas.width, canvas.height);
+         const contextData = contextPool.getContextByIndex(contextIndex);
 diff --git a/dist/esm/RenderingEngine/StackViewport.js b/dist/esm/RenderingEngine/StackViewport.js
 index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..1ec69e4fec317ad2a9a3d62d4e143e0903a30f0b 100644
 --- a/dist/esm/RenderingEngine/StackViewport.js
@@ -122,3 +136,79 @@ index 975dc74f483b6ba5346b9dbcc98091a4f9f98400..1ec69e4fec317ad2a9a3d62d4e143e09
              ...this._calibrationEvent,
          };
          if (!this.suppressEvents) {
+diff --git a/dist/esm/RenderingEngine/WebGLContextPool.js b/dist/esm/RenderingEngine/WebGLContextPool.js
+index 9c3c2afc3214801155d88a8b58b7b8d760b09f5d..4f94b7e241aee3251f79d2a4f86c3facd27d0360 100644
+--- a/dist/esm/RenderingEngine/WebGLContextPool.js
++++ b/dist/esm/RenderingEngine/WebGLContextPool.js
+@@ -7,10 +7,17 @@ class WebGLContextPool {
+         this.viewportToContext = new Map();
+         this.viewportSizes = new Map();
+         this.contextMaxSizes = new Map();
++        // Radimal patch: remember contexts the browser has taken away, so viewports
++        // re-enabled after a loss land on a live one instead of the dead canvas.
++        this.lostContexts = new Set();
+         for (let i = 0; i < count; i++) {
+             const offscreenMultiRenderWindow = vtkOffscreenMultiRenderWindow.newInstance();
+             const container = document.createElement('div');
+             offscreenMultiRenderWindow.setContainer(container);
++            offscreenMultiRenderWindow
++                .getOpenGLRenderWindow?.()
++                ?.getCanvas?.()
++                ?.addEventListener('webglcontextlost', () => this.lostContexts.add(i));
+             attachWebGLContextEvents(offscreenMultiRenderWindow, renderingEngineId, i);
+             this.contexts.push(offscreenMultiRenderWindow);
+             this.offScreenCanvasContainers.push(container);
+@@ -25,6 +32,23 @@ class WebGLContextPool {
+         }
+         return null;
+     }
++    // Radimal patch: the first live context at or after `preferred`, wrapping round.
++    // Never creates a context: past Chrome's per-process limit a new one would evict
++    // another (maybe in a second viewer window), which would then evict one of ours.
++    // If every context is lost, keep `preferred`; nothing better exists.
++    getLiveContextIndex(preferred) {
++        const count = this.contexts.length;
++        for (let step = 0; step < count; step++) {
++            const index = (preferred + step) % count;
++            if (!this.lostContexts.has(index)) {
++                return index;
++            }
++        }
++        return preferred;
++    }
++    isContextLost(contextIndex) {
++        return this.lostContexts.has(contextIndex);
++    }
+     assignViewportToContext(viewportId, contextIndex) {
+         this.viewportToContext.set(viewportId, contextIndex);
+     }
+diff --git a/dist/esm/RenderingEngine/vtkClasses/vtkStreamingOpenGLTexture.js b/dist/esm/RenderingEngine/vtkClasses/vtkStreamingOpenGLTexture.js
+index d5fa05d858b63f07060a9511b3e1af8fdc5b8d8d..9f7c861335dc21367656b4b14b2863dd3dcffdce 100644
+--- a/dist/esm/RenderingEngine/vtkClasses/vtkStreamingOpenGLTexture.js
++++ b/dist/esm/RenderingEngine/vtkClasses/vtkStreamingOpenGLTexture.js
+@@ -51,6 +51,25 @@ function vtkStreamingOpenGLTexture(publicAPI, model) {
+         }
+         return (publicAPI.hasUpdatedFrames() && updateTextureImagesUsingVoxelManager());
+     };
++    // Radimal patch: a volume's texture is shared by every viewport showing it. When its WebGL
++    // context is lost and the viewports remount on another context, vtk's setter keeps the old
++    // GL handle (its release is a no-op without a window) and only streams frames flagged as
++    // changed, so the volume drew as a flat grey box. Drop the dead handle and the size, so the
++    // mapper reallocates on the new context, and flag every frame for re-upload. Only when the
++    // old context is lost: a live texture is never re-uploaded.
++    const superSetOpenGLRenderWindow = publicAPI.setOpenGLRenderWindow;
++    publicAPI.setOpenGLRenderWindow = (renWin) => {
++        if (renWin &&
++            renWin !== model._openGLRenderWindow &&
++            model.context?.isContextLost?.()) {
++            model.handle = 0;
++            model.width = null;
++            model.height = null;
++            model.depth = null;
++            publicAPI.modified();
++        }
++        superSetOpenGLRenderWindow(renWin);
++    };
+     const superModified = publicAPI.modified;
+     publicAPI.setUpdatedFrame = (frameIndex) => {
+         model.updatedFrames[frameIndex] = true;

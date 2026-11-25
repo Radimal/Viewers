@@ -79,6 +79,7 @@ import { useMeasurementTracking } from './hooks/useMeasurementTracking';
 import { setUpSegmentationEventHandlers } from './utils/setUpSegmentationEventHandlers';
 import { setUpAnnotationEventHandlers } from './utils/setUpAnnotationEventHandlers';
 import update from 'immutability-helper';
+import { useWebGLRecoveryKey } from './utils/recoverFromWebGLContextLoss';
 export * from './components';
 
 const { imageRetrieveMetadataProvider } = cornerstone.utilities;
@@ -88,9 +89,15 @@ const Component = React.lazy(() => {
 });
 
 const OHIFCornerstoneViewport = props => {
+  // Every cornerstone viewport (plain, tracked, SEG, RT, SR, PMAP) renders through here. A new
+  // key remounts the viewport onto a live WebGL context after the browser takes its context away.
+  const recoveryKey = useWebGLRecoveryKey(props.viewportOptions?.viewportId ?? props.viewportId);
   return (
     <React.Suspense fallback={<div>Loading...</div>}>
-      <Component {...props} />
+      <Component
+        key={recoveryKey}
+        {...props}
+      />
     </React.Suspense>
   );
 };
