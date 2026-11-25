@@ -212,14 +212,10 @@ export class LegacyViewportBackend implements IViewportBackend {
       viewReference: isVolume3DViewportType(csViewport) ? null : vp.getViewReference(),
       // rotation/flip included so user rotate/flip survives display-set
       // swaps, layout changes and resize (setViewPresentation consumes them).
-      // Rotation only for stacks: a volume's getRotation() is measured from its
-      // initial view-up, so tilted MPR crosshairs read as a rotation, and writing
-      // it back on every resize turned the image (and snapped 3D back). Volumes
-      // keep their camera across resize without it.
       viewPresentation: vp.getViewPresentation({
         pan: true,
         zoom: true,
-        rotation: isStackViewportType(csViewport),
+        rotation: true,
         flipHorizontal: true,
         flipVertical: true,
       }),

@@ -1658,6 +1658,10 @@ class CornerstoneViewportService
         // a larger issue regarding the definition of slice index with slab thickness.
         // We need to revisit this to make it more robust and understandable.
         delete presentation.viewReference?.sliceIndex;
+        // resize() keeps each camera, rotation included, so don't re-apply rotation here.
+        // For MPR, getRotation() reads tilted crosshairs as a rotation, and re-applying it
+        // turned the image on every resize. Series switches still restore rotation.
+        delete presentation.viewPresentation?.rotation;
         this.beforeResizePositionPresentations.set(viewportId, presentation);
       });
 
