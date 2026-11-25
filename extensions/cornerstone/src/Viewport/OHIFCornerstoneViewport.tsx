@@ -16,6 +16,7 @@ import OHIFViewportActionCorners from '../components/OHIFViewportActionCorners';
 import { getViewportPresentations } from '../utils/presentations/getViewportPresentations';
 import { loadRotationFlip, saveRotationFlip } from '../utils/presentations/rotationFlipStorage';
 import { autoTrimBorders } from '../utils/autoTrimBorders';
+import { isStackViewportType } from '../utils/getLegacyViewportType';
 import { useSystem } from '@ohif/core';
 import { useSynchronizersStore } from '../stores/useSynchronizersStore';
 import ActiveViewportBehavior from '../utils/ActiveViewportBehavior';
@@ -216,7 +217,9 @@ const OHIFCornerstoneViewport = React.memo(
     const persistRotationFlip = useCallback(
       currentDisplaySets => {
         const csViewport = cornerstoneViewportService.getCornerstoneViewport(viewportId);
-        if (!csViewport) {
+        // Stacks only: an MPR's rotation is really its crosshair tilt, and saving it
+        // would turn the same series when it next loads as a plain stack.
+        if (!csViewport || !isStackViewportType(csViewport)) {
           return;
         }
         try {
@@ -351,11 +354,11 @@ const OHIFCornerstoneViewport = React.memo(
 
         const presentations = getViewportPresentations(viewportId, viewportOptions);
 
-        // No in-session state for this viewport+series yet (fresh load or
+        // No in-session state for this stack viewport+series yet (fresh load or
         // reload): seed rotation/flip from the per-series localStorage
         // mirror. setPositionPresentation applies viewPresentation and
         // skips the null viewReference.
-        if (!presentations.positionPresentation) {
+        if (!presentations.positionPresentation && viewportOptions.viewportType === STACK) {
           const rotationFlip = loadRotationFlip(displaySets);
           if (rotationFlip) {
             presentations.positionPresentation = {

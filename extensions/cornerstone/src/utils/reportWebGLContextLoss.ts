@@ -6,7 +6,7 @@ import { eventTarget, Enums, getRenderingEngine } from '@cornerstonejs/core';
 // or freezes until F5. This reports each loss to Sentry with what was open, so we can measure
 // how often it happens and whether a fix lowers it.
 
-// ponytail: capped per page load; one bad window (Leah's peaked at 23) would otherwise flood Sentry.
+// ponytail: capped per page load; one bad window (the worst seen peaked at 23) would otherwise flood Sentry.
 const MAX_REPORTS_PER_PAGE = 5;
 
 type SentryHook = (message: string, context: Record<string, unknown>) => void;
